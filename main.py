@@ -10,6 +10,7 @@ from linebot.v3.messaging import (
     Configuration,
     ApiClient,
     MessagingApi,
+    MessagingApiBlob,  # ←★ここを追加！
     PushMessageRequest,
     TextMessage,
     ImageMessage
@@ -135,8 +136,7 @@ async def process_image_and_reply(message_id: str, user_id: str):
     try:
         # A. LINEから画像バイナリを取得
         with ApiClient(configuration) as api_client:
-            messaging_api_blob = linebot.v3.messaging.MessagingApiBlob(api_client)
-            image_bytes = messaging_api_blob.get_message_content(message_id)
+            messaging_api_blob = MessagingApiBlob(api_client)  # ←★ここを修正！            image_bytes = messaging_api_blob.get_message_content(message_id)
 
         # B. GPT-4o-miniで解析
         base64_img = base64.b64encode(image_bytes).decode('utf-8')
