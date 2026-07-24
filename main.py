@@ -2,7 +2,6 @@ import os
 import io
 import re
 import sys
-import glob
 import asyncio
 import base64
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
@@ -15,12 +14,15 @@ from linebot.v3.messaging import (
     MessagingApiBlob,
     PushMessageRequest,
     TextMessage,
-    ImageMessage
+    ImageMessage,
+    QuickReply,
+    QuickReplyItem,
+    PostbackAction
 )
-from linebot.v3.webhooks import MessageEvent, ImageMessageContent
+from linebot.v3.webhooks import MessageEvent, ImageMessageContent, TextMessageContent, PostbackEvent
 from openai import OpenAI
 from supabase import create_client, Client
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ExifTags
 
 # -------------------------------------------------------------
 # 1. 環境変数の取得
@@ -39,10 +41,9 @@ supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
 # -------------------------------------------------------------
-# 日本語フォント直接検索（import を使わず site-packages からファイル探索）
+# 日本語フォント直接検索
 # -------------------------------------------------------------
 def locate_japanese_font() -> str:
-    """Pythonのライブラリ検索パスから直接 1MB 以上の TTF ファイルを探す"""
     for path in sys.path:
         if os.path.exists(path):
             for root, _, files in os.walk(path):
@@ -50,9 +51,7 @@ def locate_japanese_font() -> str:
                     if file.endswith(".ttf"):
                         full_path = os.path.join(root, file)
                         try:
-                            # 1MB 以上の完全な日本語フォント（IPAexゴシック等）を検出
                             if os.path.getsize(full_path) > 1000000:
-                                print(f"✅ 日本語フォント直接検出成功: {full_path} ({os.path.getsize(full_path)} bytes)", flush=True)
                                 return full_path
                         except Exception:
                             pass
@@ -68,14 +67,53 @@ def get_font(size: int):
     if CACHED_FONT_PATH:
         try:
             return ImageFont.truetype(CACHED_FONT_PATH, size)
-        except Exception as e:
-            print(f"❌ フォント読み込みエラー ({CACHED_FONT_PATH}): {e}", flush=True)
-
-    print("⚠️ 標準フォントへフォールバックします", flush=True)
+        except Exception:
+            pass
     return ImageFont.load_default()
 
 # -------------------------------------------------------------
-# 2. カード画像生成関数
+# EXIF（撮影メタデータ）抽出関数
+# -------------------------------------------------------------
+def extract_exif(image_bytes: bytes) -> str:
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        exif_data = img._getexif()
+        if not exif_data:
+            return "EXIF情報: なし (SNS保存画像またはメタデータ非保持)"
+
+        exif_dict = {ExifTags.TAGS.get(k, k): v for k, v in exif_data.items()}
+        
+        make = exif_dict.get("Make", "不明")
+        model = exif_dict.get("Model", "不明")
+        f_number = exif_dict.get("FNumber", "不明")
+        iso = exif_dict.get("ISOSpeedRatings", "不明")
+        exposure_time = exif_dict.get("ExposureTime", "不明")
+        focal_length = exif_dict.get("FocalLength", "不明")
+
+        return f"カメラ: {make} {model} / 焦点距離: {focal_length}mm / F値: f/{f_number} / ISO: {iso} / シャッタースピード: {exposure_time}秒"
+    except Exception:
+        return "EXIF情報: 読み込み不可"
+
+# -------------------------------------------------------------
+# ユーザー設定取得・更新（Supabase）
+# -------------------------------------------------------------
+def get_user_mode(user_id: str) -> str:
+    try:
+        res = supabase_client.table("user_settings").select("mode").eq("user_id", user_id).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0].get("mode", "detail")
+    except Exception as e:
+        print(f"⚠️ 設定取得エラー: {e}")
+    return "detail"  # デフォルトは詳細分析
+
+def set_user_mode(user_id: str, mode: str):
+    try:
+        supabase_client.table("user_settings").upsert({"user_id": user_id, "mode": mode}).execute()
+    except Exception as e:
+        print(f"❌ 設定保存エラー: {e}")
+
+# -------------------------------------------------------------
+# カード画像生成関数
 # -------------------------------------------------------------
 def parse_gpt_output(gpt_text: str) -> dict:
     data = {
@@ -189,16 +227,21 @@ def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
     return output_buffer.getvalue()
 
 # -------------------------------------------------------------
-# 3. 非同期（バックグラウンド）解析処理
+# 非同期解析処理（モード別分岐プロンプト）
 # -------------------------------------------------------------
 async def process_image_and_reply(message_id: str, user_id: str):
     try:
+        mode = get_user_mode(user_id)
+
         with ApiClient(configuration) as api_client:
             messaging_api_blob = MessagingApiBlob(api_client)
             image_bytes = messaging_api_blob.get_message_content(message_id)
 
         base64_img = base64.b64encode(image_bytes).decode('utf-8')
-        prompt = """写真の美と物語を評価する写真評論家として講評を作成してください。
+
+        if mode == "simple":
+            # 簡易分析用プロンプト（4項目）
+            prompt = """写真の美と物語を評価する写真評論家として簡潔に講評を作成してください。
 
 ■TITLE: 15文字以内のタイトル
 ■SUMMARY: 25文字以内のキャッチコピー
@@ -214,6 +257,31 @@ async def process_image_and_reply(message_id: str, user_id: str):
 ## 【3. 光と色彩】
 ## 【4. アドバイス】
 """
+        else:
+            # 詳細分析用プロンプト（EXIF活用・7項目深掘り）
+            exif_info = extract_exif(image_bytes)
+            prompt = f"""写真の美と物語を徹底分析するプロの写真評論家として深掘りした講評を作成してください。
+
+【撮影環境データ】: {exif_info}
+
+■TITLE: 15文字以内のタイトル
+■SUMMARY: 25文字以内のキャッチコピー
+■SCORES:
+・構図・構成 : ★★★★☆ (4/5)
+・光・色彩   : ★★★★★ (5/5)
+・ストーリー : ★★★★☆ (4/5)
+・技術・露出 : ★★★★☆ (4/5)
+・独自・世界観: ★★★★☆ (4/5)
+
+## 【1. 情景・空気感とストーリー性】
+## 【2. 視線誘導と構成の美学】
+## 【3. 光の強弱・色彩と印象解析】
+## 【4. EXIFデータの技術的役割と表現効果】
+## 【5. 撮影者のためのステップアップ・アドバイス】
+## 【6. フォトブック＆SNSでの役割提案】
+## 【7. 自動タグ】
+"""
+
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -222,7 +290,7 @@ async def process_image_and_reply(message_id: str, user_id: str):
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}", "detail": "high"}}
                 ]}
             ],
-            max_tokens=1500
+            max_tokens=2000
         )
         gpt_text = response.choices[0].message.content
 
@@ -261,7 +329,7 @@ async def process_image_and_reply(message_id: str, user_id: str):
         except Exception: pass
 
 # -------------------------------------------------------------
-# 4. Webhook エンドポイント（LINEからの受信用）
+# 4. Webhook エンドポイント
 # -------------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
@@ -275,11 +343,49 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
+        # 画像受信時
         if isinstance(event, MessageEvent) and isinstance(event.message, ImageMessageContent):
             background_tasks.add_task(
                 process_image_and_reply,
                 event.message.id,
                 event.source.user_id
             )
+
+        # テキスト受信時（設定メニュー呼び出し）
+        elif isinstance(event, MessageEvent) and isinstance(event.message, TextMessageContent):
+            text = event.message.text.strip()
+            if text in ["設定", "モード", "メニュー", "ヘルプ"]:
+                current_mode = get_user_mode(event.source.user_id)
+                mode_label = "【詳細分析】" if current_mode == "detail" else "【簡易分析】"
+                
+                with ApiClient(configuration) as api_client:
+                    line_api = MessagingApi(api_client)
+                    line_api.push_message(PushMessageRequest(
+                        to=event.source.user_id,
+                        messages=[
+                            TextMessage(
+                                text=f"現在のモード: {mode_label}\n変更したい分析モードを選択してください。",
+                                quick_reply=QuickReply(items=[
+                                    QuickReplyItem(action=PostbackAction(label="⚡ 簡易分析", data="mode=simple", display_text="簡易分析に設定")),
+                                    QuickReplyItem(action=PostbackAction(label="🔍 詳細分析", data="mode=detail", display_text="詳細分析に設定"))
+                                ])
+                            )
+                        ]
+                    ))
+
+        # ポストバック受信時（ボタンのタップ処理）
+        elif isinstance(event, PostbackEvent):
+            data = event.postback.data
+            if data.startswith("mode="):
+                new_mode = data.split("=")[1]
+                set_user_mode(event.source.user_id, new_mode)
+                
+                label = "【簡易分析】" if new_mode == "simple" else "【詳細分析】"
+                with ApiClient(configuration) as api_client:
+                    line_api = MessagingApi(api_client)
+                    line_api.push_message(PushMessageRequest(
+                        to=event.source.user_id,
+                        messages=[TextMessage(text=f"分析モードを {label} に変更しました！\n次回送信いただく写真から適用されます。")]
+                    ))
 
     return "OK"
