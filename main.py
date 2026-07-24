@@ -3,7 +3,6 @@ import io
 import re
 import asyncio
 import base64
-import urllib.request
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -38,43 +37,22 @@ supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
 # -------------------------------------------------------------
-# 日本語フォント取得・破損検知・自動ダウンロード機能
+# 日本語フォント管理（同階層ローカルファイル読み込み）
 # -------------------------------------------------------------
-FONT_PATH = "NotoSansJP-Bold.ttf"
-# jsDelivr経由の確実に動作するNoto Sans JPフォント直リンク
-FONT_URL = "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-jp@latest/japanese-700-normal.ttf"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FONT_PATH = os.path.join(BASE_DIR, "NotoSansJP-Bold.ttf")
 
 def get_font(size: int):
-    # 1. 壊れたファイル（100KB未満のHTMLエラーページ等）が存在する場合は自動削除
+    """プロジェクト直下の NotoSansJP-Bold.ttf を安全に読み込む"""
     if os.path.exists(FONT_PATH):
-        if os.path.getsize(FONT_PATH) < 100000:
-            print("⚠️ 破損したフォントファイルを検出したため削除します。")
-            try:
-                os.remove(FONT_PATH)
-            except Exception as e:
-                print(f"削除エラー: {e}")
-
-    # 2. 正常なフォントが存在しない場合はダウンロード
-    if not os.path.exists(FONT_PATH):
         try:
-            print("📥 日本語フォント(Noto Sans JP)をダウンロード中...")
-            req = urllib.request.Request(
-                FONT_URL, 
-                headers={'User-Agent': 'Mozilla/5.0'}
-            )
-            with urllib.request.urlopen(req) as response, open(FONT_PATH, 'wb') as out_file:
-                out_file.write(response.read())
-            print(f"✅ フォントダウンロード成功: {os.path.getsize(FONT_PATH)} bytes")
+            return ImageFont.truetype(FONT_PATH, size)
         except Exception as e:
-            print(f"❌ フォントダウンロード失敗: {e}")
-            return ImageFont.load_default()
-
-    # 3. フォントの適用
-    try:
-        return ImageFont.truetype(FONT_PATH, size)
-    except Exception as e:
-        print(f"❌ フォント読み込み失敗: {e}")
-        return ImageFont.load_default()
+            print(f"❌ フォント読み込み例外 ({FONT_PATH}): {e}", flush=True)
+    else:
+        print(f"⚠️ フォントファイルが存在しません: {FONT_PATH}", flush=True)
+    
+    return ImageFont.load_default()
 
 # -------------------------------------------------------------
 # 2. カード画像生成関数
@@ -113,9 +91,9 @@ def parse_gpt_output(gpt_text: str) -> dict:
                 try: data["scores"][display_key] = float(val_str)
                 except ValueError: pass
 
-    highlight_match = re.search(r'【1\..*?】\s*(.+?)(?=\n|。)', gpt_text)
+    highlight_match = re.search(r'【1\..*?】[\s\r\n]*([^\r\n]+?)(?=\n|。|$)', gpt_text)
     if not highlight_match:
-        highlight_match = re.search(r'情景とストーリー】\s*(.+?)(?=\n|。)', gpt_text)
+        highlight_match = re.search(r'情景とストーリー】[\s\r\n]*([^\r\n]+?)(?=\n|。|$)', gpt_text)
     if highlight_match:
         data["highlight"] = highlight_match.group(1).strip() + "。"
 
@@ -132,7 +110,6 @@ def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
     canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), BG_COLOR)
     draw = ImageDraw.Draw(canvas)
 
-    # 日本語フォントの設定
     f_title = get_font(36)
     f_sub = get_font(22)
     f_body = get_font(22)
@@ -177,7 +154,14 @@ def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
     ty += 140
     draw.line([(80, ty), (CANVAS_W - 80, ty)], fill=BORDER_COLOR, width=1)
     ty += 25
-    draw.text((80, ty), "【Point】 " + analysis_data.get("highlight", ""), font=f_body, fill=(228, 228, 231))
+
+    point_text = "【Point】 " + analysis_data.get("highlight", "")
+    line_len = 36
+    wrapped_lines = [point_text[i:i+line_len] for i in range(0, len(point_text), line_len)]
+    for line in wrapped_lines[:2]:
+        draw.text((80, ty), line, font=f_body, fill=(228, 228, 231))
+        ty += 32
+
     draw.text((CANVAS_W - 240, CANVAS_H - 50), "Photo Critique AI", font=f_small, fill=(115, 115, 128))
 
     output_buffer = io.BytesIO()
@@ -189,12 +173,10 @@ def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
 # -------------------------------------------------------------
 async def process_image_and_reply(message_id: str, user_id: str):
     try:
-        # A. LINEから画像バイナリを取得
         with ApiClient(configuration) as api_client:
             messaging_api_blob = MessagingApiBlob(api_client)
             image_bytes = messaging_api_blob.get_message_content(message_id)
 
-        # B. GPT-4o-miniで解析
         base64_img = base64.b64encode(image_bytes).decode('utf-8')
         prompt = """写真の美と物語を評価する写真評論家として講評を作成してください。
 
@@ -224,10 +206,8 @@ async def process_image_and_reply(message_id: str, user_id: str):
         )
         gpt_text = response.choices[0].message.content
 
-        # C. 講評カード画像生成
         card_bytes = generate_card_image(image_bytes, gpt_text)
 
-        # D. Supabase Storage へアップロード
         file_path = f"{message_id}.jpg"
         supabase_client.storage.from_("cards").upload(
             file_path,
@@ -236,7 +216,6 @@ async def process_image_and_reply(message_id: str, user_id: str):
         )
         public_url = supabase_client.storage.from_("cards").get_public_url(file_path)
 
-        # E. LINEへPushメッセージで返信（テキスト講評＋カード画像）
         with ApiClient(configuration) as api_client:
             line_api = MessagingApi(api_client)
             push_request = PushMessageRequest(
@@ -250,7 +229,7 @@ async def process_image_and_reply(message_id: str, user_id: str):
 
     except Exception as e:
         import traceback
-        print(f"❌ エラー発生の詳細:")
+        print(f"❌ エラー発生の詳細:", flush=True)
         traceback.print_exc()
         try:
             with ApiClient(configuration) as api_client:
