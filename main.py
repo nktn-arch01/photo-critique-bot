@@ -3,6 +3,7 @@ import io
 import re
 import asyncio
 import base64
+import urllib.request
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -37,6 +38,25 @@ supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
 # -------------------------------------------------------------
+# 日本語フォント自動取得関数
+# -------------------------------------------------------------
+FONT_PATH = "NotoSansJP-Bold.ttf"
+FONT_URL = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Bold.ttf"
+
+def get_font(size: int):
+    if not os.path.exists(FONT_PATH):
+        try:
+            print("日本語フォントをダウンロード中...")
+            urllib.request.urlretrieve(FONT_URL, FONT_PATH)
+        except Exception as e:
+            print(f"フォントのダウンロードに失敗しました: {e}")
+            return ImageFont.load_default()
+    try:
+        return ImageFont.truetype(FONT_PATH, size)
+    except Exception:
+        return ImageFont.load_default()
+
+# -------------------------------------------------------------
 # 2. カード画像生成関数
 # -------------------------------------------------------------
 def parse_gpt_output(gpt_text: str) -> dict:
@@ -46,25 +66,40 @@ def parse_gpt_output(gpt_text: str) -> dict:
         "scores": {"構図": 3.0, "光・色彩": 3.0, "ストーリー": 3.0, "技術・露出": 3.0, "独自性": 3.0},
         "highlight": "光と影のグラデーションが印象的な作品。"
     }
-    title_match = re.search(r'■TITLE\s*[:：]?\s*(.+)', gpt_text)
+
+    # TITLE抽出 (■TITLE や ## TITLE など柔軟に対応)
+    title_match = re.search(r'(?:■|#+)?\s*TITLE\s*[:：]?\s*(.+)', gpt_text, re.IGNORECASE)
     if title_match:
         data["title"] = title_match.group(1).strip()
 
-    summary_match = re.search(r'■SUMMARY\s*[:：]?\s*(.+)', gpt_text)
+    # SUMMARY抽出
+    summary_match = re.search(r'(?:■|#+)?\s*SUMMARY\s*[:：]?\s*(.+)', gpt_text, re.IGNORECASE)
     if summary_match:
         data["summary"] = summary_match.group(1).strip()
 
-    for key in data["scores"].keys():
-        match = re.search(rf'{key}\s*[:：]?\s*([★☆\d\.]+)', gpt_text)
+    # スコア抽出
+    score_keys_map = {
+        "構図": ["構図", "構成"],
+        "光・色彩": ["光", "色彩"],
+        "ストーリー": ["ストーリー"],
+        "技術・露出": ["技術", "露出"],
+        "独自性": ["独自", "世界観"]
+    }
+    for display_key, keywords in score_keys_map.items():
+        pattern = rf'(?:{"|".join(keywords)})\s*[:：]?\s*([★☆\d\.]+)'
+        match = re.search(pattern, gpt_text)
         if match:
             val_str = match.group(1)
             if '★' in val_str or '☆' in val_str:
-                data["scores"][key] = float(val_str.count('★'))
+                data["scores"][display_key] = float(val_str.count('★'))
             else:
-                try: data["scores"][key] = float(val_str)
+                try: data["scores"][display_key] = float(val_str)
                 except ValueError: pass
 
+    # ハイライト（Point）抽出
     highlight_match = re.search(r'【1\..*?】\s*(.+?)(?=\n|。)', gpt_text)
+    if not highlight_match:
+        highlight_match = re.search(r'情景とストーリー】\s*(.+?)(?=\n|。)', gpt_text)
     if highlight_match:
         data["highlight"] = highlight_match.group(1).strip() + "。"
 
@@ -81,7 +116,11 @@ def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
     canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), BG_COLOR)
     draw = ImageDraw.Draw(canvas)
 
-    f_title = f_sub = f_body = f_small = ImageFont.load_default()
+    # フォントサイズの設定（日本語対応）
+    f_title = get_font(36)
+    f_sub = get_font(22)
+    f_body = get_font(22)
+    f_small = get_font(18)
 
     MAX_PHOTO_W, MAX_PHOTO_H = 920, 620
     FRAME_TOP = 60
@@ -97,9 +136,9 @@ def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
     draw.rectangle([photo_x - 2, photo_y - 2, photo_x + actual_w + 1, photo_y + actual_h + 1], outline=BORDER_COLOR, width=1)
     canvas.paste(photo_copy, (photo_x, photo_y))
 
-    ty = 730
+    ty = 720
     draw.text((80, ty), analysis_data.get("title", "無題"), font=f_title, fill=TEXT_WHITE)
-    ty += 50
+    ty += 55
     draw.text((80, ty), analysis_data.get("summary", ""), font=f_sub, fill=TEXT_MUTED)
     ty += 45
     draw.line([(80, ty), (CANVAS_W - 80, ty)], fill=BORDER_COLOR, width=1)
@@ -113,11 +152,11 @@ def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
         x = 80 + (col * col_w)
         y = ty + (row * 42)
         draw.text((x, y), label, font=f_body, fill=TEXT_MUTED)
-        dot_x = x + 130
+        dot_x = x + 160
         for i in range(5):
             fill_c = TEXT_WHITE if i < int(score) else BORDER_COLOR
             draw.ellipse([dot_x + (i * 22), y + 6, dot_x + (i * 22) + 12, y + 18], fill=fill_c)
-        draw.text((dot_x + 125, y), f"{score:.1f}", font=f_body, fill=TEXT_WHITE)
+        draw.text((dot_x + 125, y - 2), f"{score:.1f}", font=f_body, fill=TEXT_WHITE)
 
     ty += 140
     draw.line([(80, ty), (CANVAS_W - 80, ty)], fill=BORDER_COLOR, width=1)
