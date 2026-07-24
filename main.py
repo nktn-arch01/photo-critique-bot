@@ -10,7 +10,7 @@ from linebot.v3.messaging import (
     Configuration,
     ApiClient,
     MessagingApi,
-    MessagingApiBlob,  # ←★ここを追加！
+    MessagingApiBlob,
     PushMessageRequest,
     TextMessage,
     ImageMessage
@@ -136,7 +136,8 @@ async def process_image_and_reply(message_id: str, user_id: str):
     try:
         # A. LINEから画像バイナリを取得
         with ApiClient(configuration) as api_client:
-            messaging_api_blob = MessagingApiBlob(api_client)  # ←★ここを修正！            image_bytes = messaging_api_blob.get_message_content(message_id)
+            messaging_api_blob = MessagingApiBlob(api_client)
+            image_bytes = messaging_api_blob.get_message_content(message_id)
 
         # B. GPT-4o-miniで解析
         base64_img = base64.b64encode(image_bytes).decode('utf-8')
@@ -172,7 +173,7 @@ async def process_image_and_reply(message_id: str, user_id: str):
         card_bytes = generate_card_image(image_bytes, gpt_text)
 
         # D. Supabase Storage へアップロード
-        file_path = f"cards/{message_id}.jpg"
+        file_path = f"{message_id}.jpg"
         supabase_client.storage.from_("cards").upload(
             file_path,
             card_bytes,
@@ -195,7 +196,7 @@ async def process_image_and_reply(message_id: str, user_id: str):
     except Exception as e:
         import traceback
         print(f"❌ エラー発生の詳細:")
-        traceback.print_exc()  # 詳細なエラー箇所をログに出力
+        traceback.print_exc()
         try:
             with ApiClient(configuration) as api_client:
                 line_api = MessagingApi(api_client)
@@ -221,7 +222,6 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
 
     for event in events:
         if isinstance(event, MessageEvent) and isinstance(event.message, ImageMessageContent):
-            # LINEの5秒タイムアウトを回避するため、即座に200 OKを返し、裏で重い処理を実行する
             background_tasks.add_task(
                 process_image_and_reply,
                 event.message.id,
