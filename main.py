@@ -193,7 +193,9 @@ async def process_image_and_reply(message_id: str, user_id: str):
             line_api.push_message(push_request)
 
     except Exception as e:
-        print(f"❌ エラー発生: {e}")
+        import traceback
+        print(f"❌ エラー発生の詳細:")
+        traceback.print_exc()  # 詳細なエラー箇所をログに出力
         try:
             with ApiClient(configuration) as api_client:
                 line_api = MessagingApi(api_client)
