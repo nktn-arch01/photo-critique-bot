@@ -3,6 +3,7 @@ import io
 import re
 import asyncio
 import base64
+import urllib.request
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -37,17 +38,43 @@ supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
 # -------------------------------------------------------------
-# 日本語フォント取得関数（同階層のフォントファイルを読み込み）
+# 日本語フォント取得・破損検知・自動ダウンロード機能
 # -------------------------------------------------------------
 FONT_PATH = "NotoSansJP-Bold.ttf"
+# jsDelivr経由の確実に動作するNoto Sans JPフォント直リンク
+FONT_URL = "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-jp@latest/japanese-700-normal.ttf"
 
 def get_font(size: int):
+    # 1. 壊れたファイル（100KB未満のHTMLエラーページ等）が存在する場合は自動削除
     if os.path.exists(FONT_PATH):
+        if os.path.getsize(FONT_PATH) < 100000:
+            print("⚠️ 破損したフォントファイルを検出したため削除します。")
+            try:
+                os.remove(FONT_PATH)
+            except Exception as e:
+                print(f"削除エラー: {e}")
+
+    # 2. 正常なフォントが存在しない場合はダウンロード
+    if not os.path.exists(FONT_PATH):
         try:
-            return ImageFont.truetype(FONT_PATH, size)
+            print("📥 日本語フォント(Noto Sans JP)をダウンロード中...")
+            req = urllib.request.Request(
+                FONT_URL, 
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            with urllib.request.urlopen(req) as response, open(FONT_PATH, 'wb') as out_file:
+                out_file.write(response.read())
+            print(f"✅ フォントダウンロード成功: {os.path.getsize(FONT_PATH)} bytes")
         except Exception as e:
-            print(f"フォント読み込みエラー: {e}")
-    return ImageFont.load_default()
+            print(f"❌ フォントダウンロード失敗: {e}")
+            return ImageFont.load_default()
+
+    # 3. フォントの適用
+    try:
+        return ImageFont.truetype(FONT_PATH, size)
+    except Exception as e:
+        print(f"❌ フォント読み込み失敗: {e}")
+        return ImageFont.load_default()
 
 # -------------------------------------------------------------
 # 2. カード画像生成関数
@@ -105,7 +132,7 @@ def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
     canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), BG_COLOR)
     draw = ImageDraw.Draw(canvas)
 
-    # 日本語フォントサイズの設定
+    # 日本語フォントの設定
     f_title = get_font(36)
     f_sub = get_font(22)
     f_body = get_font(22)
