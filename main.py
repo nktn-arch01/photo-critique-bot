@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import sys
 import glob
 import asyncio
 import base64
@@ -38,20 +39,23 @@ supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
 # -------------------------------------------------------------
-# 確実な日本語フォント取得（japanize-matplotlib パッケージ内から直接探索）
+# 日本語フォント直接検索（import を使わず site-packages からファイル探索）
 # -------------------------------------------------------------
 def locate_japanese_font() -> str:
-    """pipでインストールされた japanize_matplotlib 内の完全なIPAexGothic(.ttf)を探す"""
-    try:
-        import japanize_matplotlib
-        pkg_dir = os.path.dirname(japanize_matplotlib.__file__)
-        ttf_files = glob.glob(os.path.join(pkg_dir, "**", "*.ttf"), recursive=True)
-        for ttf in ttf_files:
-            if os.path.exists(ttf) and os.path.getsize(ttf) > 1000000:  # 1MB以上の本物フォント
-                print(f"✅ 日本語フォント検出成功: {ttf} ({os.path.getsize(ttf)} bytes)", flush=True)
-                return ttf
-    except Exception as e:
-        print(f"⚠️ japanize_matplotlib 検索例外: {e}", flush=True)
+    """Pythonのライブラリ検索パスから直接 1MB 以上の TTF ファイルを探す"""
+    for path in sys.path:
+        if os.path.exists(path):
+            for root, _, files in os.walk(path):
+                for file in files:
+                    if file.endswith(".ttf"):
+                        full_path = os.path.join(root, file)
+                        try:
+                            # 1MB 以上の完全な日本語フォント（IPAexゴシック等）を検出
+                            if os.path.getsize(full_path) > 1000000:
+                                print(f"✅ 日本語フォント直接検出成功: {full_path} ({os.path.getsize(full_path)} bytes)", flush=True)
+                                return full_path
+                        except Exception:
+                            pass
     return None
 
 CACHED_FONT_PATH = locate_japanese_font()
