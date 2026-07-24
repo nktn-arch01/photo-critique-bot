@@ -2,6 +2,7 @@ fastapi
 uvicorn
 line-bot-sdk
 openai
-pillow
 supabase
-python-multipart
+pillow
+requests
+japanize-matplotlib

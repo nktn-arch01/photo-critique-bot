@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import glob
 import asyncio
 import base64
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
@@ -37,21 +38,36 @@ supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
 # -------------------------------------------------------------
-# 日本語フォント管理（同階層ローカルファイル読み込み）
+# 確実な日本語フォント取得（japanize-matplotlib パッケージ内から直接探索）
 # -------------------------------------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FONT_PATH = os.path.join(BASE_DIR, "NotoSansJP-Bold.ttf")
+def locate_japanese_font() -> str:
+    """pipでインストールされた japanize_matplotlib 内の完全なIPAexGothic(.ttf)を探す"""
+    try:
+        import japanize_matplotlib
+        pkg_dir = os.path.dirname(japanize_matplotlib.__file__)
+        ttf_files = glob.glob(os.path.join(pkg_dir, "**", "*.ttf"), recursive=True)
+        for ttf in ttf_files:
+            if os.path.exists(ttf) and os.path.getsize(ttf) > 1000000:  # 1MB以上の本物フォント
+                print(f"✅ 日本語フォント検出成功: {ttf} ({os.path.getsize(ttf)} bytes)", flush=True)
+                return ttf
+    except Exception as e:
+        print(f"⚠️ japanize_matplotlib 検索例外: {e}", flush=True)
+    return None
+
+CACHED_FONT_PATH = locate_japanese_font()
 
 def get_font(size: int):
-    """プロジェクト直下の NotoSansJP-Bold.ttf を安全に読み込む"""
-    if os.path.exists(FONT_PATH):
+    global CACHED_FONT_PATH
+    if not CACHED_FONT_PATH or not os.path.exists(CACHED_FONT_PATH):
+        CACHED_FONT_PATH = locate_japanese_font()
+
+    if CACHED_FONT_PATH:
         try:
-            return ImageFont.truetype(FONT_PATH, size)
+            return ImageFont.truetype(CACHED_FONT_PATH, size)
         except Exception as e:
-            print(f"❌ フォント読み込み例外 ({FONT_PATH}): {e}", flush=True)
-    else:
-        print(f"⚠️ フォントファイルが存在しません: {FONT_PATH}", flush=True)
-    
+            print(f"❌ フォント読み込みエラー ({CACHED_FONT_PATH}): {e}", flush=True)
+
+    print("⚠️ 標準フォントへフォールバックします", flush=True)
     return ImageFont.load_default()
 
 # -------------------------------------------------------------
