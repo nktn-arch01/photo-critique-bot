@@ -102,7 +102,7 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-@app.post("/callback")
+@app.post("/webhook")
 async def callback(request: Request, background_tasks: BackgroundTasks, x_line_signature: str = Header(None)):
     """
     LINE Webhook 受信エンドポイント
