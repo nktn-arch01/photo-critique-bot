@@ -1,0 +1,1 @@
+[ERROR] P7201882_DxO.jpg: [Errno 13] Permission denied: '/Volumes/ExternalSSD'

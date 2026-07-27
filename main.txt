@@ -1,0 +1,391 @@
+import os
+import io
+import re
+import sys
+import asyncio
+import base64
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
+from linebot.v3 import WebhookHandler
+from linebot.v3.exceptions import InvalidSignatureError
+from linebot.v3.messaging import (
+    Configuration,
+    ApiClient,
+    MessagingApi,
+    MessagingApiBlob,
+    PushMessageRequest,
+    TextMessage,
+    ImageMessage,
+    QuickReply,
+    QuickReplyItem,
+    PostbackAction
+)
+from linebot.v3.webhooks import MessageEvent, ImageMessageContent, TextMessageContent, PostbackEvent
+from openai import OpenAI
+from supabase import create_client, Client
+from PIL import Image, ImageDraw, ImageFont, ExifTags
+
+# -------------------------------------------------------------
+# 1. 環境変数の取得
+# -------------------------------------------------------------
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
+configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
+supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+app = FastAPI()
+
+# -------------------------------------------------------------
+# 日本語フォント直接検索
+# -------------------------------------------------------------
+def locate_japanese_font() -> str:
+    for path in sys.path:
+        if os.path.exists(path):
+            for root, _, files in os.walk(path):
+                for file in files:
+                    if file.endswith(".ttf"):
+                        full_path = os.path.join(root, file)
+                        try:
+                            if os.path.getsize(full_path) > 1000000:
+                                return full_path
+                        except Exception:
+                            pass
+    return None
+
+CACHED_FONT_PATH = locate_japanese_font()
+
+def get_font(size: int):
+    global CACHED_FONT_PATH
+    if not CACHED_FONT_PATH or not os.path.exists(CACHED_FONT_PATH):
+        CACHED_FONT_PATH = locate_japanese_font()
+
+    if CACHED_FONT_PATH:
+        try:
+            return ImageFont.truetype(CACHED_FONT_PATH, size)
+        except Exception:
+            pass
+    return ImageFont.load_default()
+
+# -------------------------------------------------------------
+# EXIF（撮影メタデータ）抽出関数
+# -------------------------------------------------------------
+def extract_exif(image_bytes: bytes) -> str:
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        exif_data = img._getexif()
+        if not exif_data:
+            return "EXIF情報: なし (SNS保存画像またはメタデータ非保持)"
+
+        exif_dict = {ExifTags.TAGS.get(k, k): v for k, v in exif_data.items()}
+        
+        make = exif_dict.get("Make", "不明")
+        model = exif_dict.get("Model", "不明")
+        f_number = exif_dict.get("FNumber", "不明")
+        iso = exif_dict.get("ISOSpeedRatings", "不明")
+        exposure_time = exif_dict.get("ExposureTime", "不明")
+        focal_length = exif_dict.get("FocalLength", "不明")
+
+        return f"カメラ: {make} {model} / 焦点距離: {focal_length}mm / F値: f/{f_number} / ISO: {iso} / シャッタースピード: {exposure_time}秒"
+    except Exception:
+        return "EXIF情報: 読み込み不可"
+
+# -------------------------------------------------------------
+# ユーザー設定取得・更新（Supabase）
+# -------------------------------------------------------------
+def get_user_mode(user_id: str) -> str:
+    try:
+        res = supabase_client.table("user_settings").select("mode").eq("user_id", user_id).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0].get("mode", "detail")
+    except Exception as e:
+        print(f"⚠️ 設定取得エラー: {e}")
+    return "detail"  # デフォルトは詳細分析
+
+def set_user_mode(user_id: str, mode: str):
+    try:
+        supabase_client.table("user_settings").upsert({"user_id": user_id, "mode": mode}).execute()
+    except Exception as e:
+        print(f"❌ 設定保存エラー: {e}")
+
+# -------------------------------------------------------------
+# カード画像生成関数
+# -------------------------------------------------------------
+def parse_gpt_output(gpt_text: str) -> dict:
+    data = {
+        "title": "無題",
+        "summary": "",
+        "scores": {"構図": 3.0, "光・色彩": 3.0, "ストーリー": 3.0, "技術・露出": 3.0, "独自性": 3.0},
+        "highlight": "光と影のグラデーションが印象的な作品。"
+    }
+
+    title_match = re.search(r'(?:■|#+)?\s*TITLE\s*[:：]?\s*(.+)', gpt_text, re.IGNORECASE)
+    if title_match:
+        data["title"] = title_match.group(1).strip()
+
+    summary_match = re.search(r'(?:■|#+)?\s*SUMMARY\s*[:：]?\s*(.+)', gpt_text, re.IGNORECASE)
+    if summary_match:
+        data["summary"] = summary_match.group(1).strip()
+
+    score_keys_map = {
+        "構図": ["構図", "構成"],
+        "光・色彩": ["光", "色彩"],
+        "ストーリー": ["ストーリー"],
+        "技術・露出": ["技術", "露出"],
+        "独自性": ["独自", "世界観"]
+    }
+    for display_key, keywords in score_keys_map.items():
+        pattern = rf'(?:{"|".join(keywords)})\s*[:：]?\s*([★☆\d\.]+)'
+        match = re.search(pattern, gpt_text)
+        if match:
+            val_str = match.group(1)
+            if '★' in val_str or '☆' in val_str:
+                data["scores"][display_key] = float(val_str.count('★'))
+            else:
+                try: data["scores"][display_key] = float(val_str)
+                except ValueError: pass
+
+    highlight_match = re.search(r'【1\..*?】[\s\r\n]*([^\r\n]+?)(?=\n|。|$)', gpt_text)
+    if not highlight_match:
+        highlight_match = re.search(r'情景とストーリー】[\s\r\n]*([^\r\n]+?)(?=\n|。|$)', gpt_text)
+    if highlight_match:
+        data["highlight"] = highlight_match.group(1).strip() + "。"
+
+    return data
+
+def generate_card_image(image_bytes: bytes, gpt_text: str) -> bytes:
+    analysis_data = parse_gpt_output(gpt_text)
+    CANVAS_W, CANVAS_H = 1080, 1350
+    BG_COLOR = (18, 18, 20)
+    BORDER_COLOR = (63, 63, 70)
+    TEXT_WHITE = (255, 255, 255)
+    TEXT_MUTED = (161, 161, 170)
+
+    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), BG_COLOR)
+    draw = ImageDraw.Draw(canvas)
+
+    f_title = get_font(36)
+    f_sub = get_font(22)
+    f_body = get_font(22)
+    f_small = get_font(18)
+
+    MAX_PHOTO_W, MAX_PHOTO_H = 920, 620
+    FRAME_TOP = 60
+
+    orig = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    photo_copy = orig.copy()
+    photo_copy.thumbnail((MAX_PHOTO_W, MAX_PHOTO_H), Image.Resampling.LANCZOS)
+    
+    actual_w, actual_h = photo_copy.size
+    photo_x = (CANVAS_W - actual_w) // 2
+    photo_y = FRAME_TOP + (MAX_PHOTO_H - actual_h) // 2
+
+    draw.rectangle([photo_x - 2, photo_y - 2, photo_x + actual_w + 1, photo_y + actual_h + 1], outline=BORDER_COLOR, width=1)
+    canvas.paste(photo_copy, (photo_x, photo_y))
+
+    ty = 720
+    draw.text((80, ty), analysis_data.get("title", "無題"), font=f_title, fill=TEXT_WHITE)
+    ty += 55
+    draw.text((80, ty), analysis_data.get("summary", ""), font=f_sub, fill=TEXT_MUTED)
+    ty += 45
+    draw.line([(80, ty), (CANVAS_W - 80, ty)], fill=BORDER_COLOR, width=1)
+    ty += 35
+
+    scores = analysis_data.get("scores", {})
+    col_w = 460
+    for idx, (label, score) in enumerate(scores.items()):
+        col = idx % 2
+        row = idx // 2
+        x = 80 + (col * col_w)
+        y = ty + (row * 42)
+        draw.text((x, y), label, font=f_body, fill=TEXT_MUTED)
+        dot_x = x + 160
+        for i in range(5):
+            fill_c = TEXT_WHITE if i < int(score) else BORDER_COLOR
+            draw.ellipse([dot_x + (i * 22), y + 6, dot_x + (i * 22) + 12, y + 18], fill=fill_c)
+        draw.text((dot_x + 125, y - 2), f"{score:.1f}", font=f_body, fill=TEXT_WHITE)
+
+    ty += 140
+    draw.line([(80, ty), (CANVAS_W - 80, ty)], fill=BORDER_COLOR, width=1)
+    ty += 25
+
+    point_text = "【Point】 " + analysis_data.get("highlight", "")
+    line_len = 36
+    wrapped_lines = [point_text[i:i+line_len] for i in range(0, len(point_text), line_len)]
+    for line in wrapped_lines[:2]:
+        draw.text((80, ty), line, font=f_body, fill=(228, 228, 231))
+        ty += 32
+
+    draw.text((CANVAS_W - 240, CANVAS_H - 50), "Photo Critique AI", font=f_small, fill=(115, 115, 128))
+
+    output_buffer = io.BytesIO()
+    canvas.save(output_buffer, format="JPEG", quality=90)
+    return output_buffer.getvalue()
+
+# -------------------------------------------------------------
+# 非同期解析処理（モード別分岐プロンプト）
+# -------------------------------------------------------------
+async def process_image_and_reply(message_id: str, user_id: str):
+    try:
+        mode = get_user_mode(user_id)
+
+        with ApiClient(configuration) as api_client:
+            messaging_api_blob = MessagingApiBlob(api_client)
+            image_bytes = messaging_api_blob.get_message_content(message_id)
+
+        base64_img = base64.b64encode(image_bytes).decode('utf-8')
+
+        if mode == "simple":
+            # 簡易分析用プロンプト（4項目）
+            prompt = """写真の美と物語を評価する写真評論家として簡潔に講評を作成してください。
+
+■TITLE: 15文字以内のタイトル
+■SUMMARY: 25文字以内のキャッチコピー
+■SCORES:
+・構図・構成 : ★★★★☆ (4/5)
+・光・色彩   : ★★★★★ (5/5)
+・ストーリー : ★★★★☆ (4/5)
+・技術・露出 : ★★★★☆ (4/5)
+・独自・世界観: ★★★★☆ (4/5)
+
+## 【1. 情景とストーリー】
+## 【2. 視線誘導と構成】
+## 【3. 光と色彩】
+## 【4. アドバイス】
+"""
+        else:
+            # 詳細分析用プロンプト（EXIF活用・7項目深掘り）
+            exif_info = extract_exif(image_bytes)
+            prompt = f"""写真の美と物語を徹底分析するプロの写真評論家として深掘りした講評を作成してください。
+
+【撮影環境データ】: {exif_info}
+
+■TITLE: 15文字以内のタイトル
+■SUMMARY: 25文字以内のキャッチコピー
+■SCORES:
+・構図・構成 : ★★★★☆ (4/5)
+・光・色彩   : ★★★★★ (5/5)
+・ストーリー : ★★★★☆ (4/5)
+・技術・露出 : ★★★★☆ (4/5)
+・独自・世界観: ★★★★☆ (4/5)
+
+## 【1. 情景・空気感とストーリー性】
+## 【2. 視線誘導と構成の美学】
+## 【3. 光の強弱・色彩と印象解析】
+## 【4. EXIFデータの技術的役割と表現効果】
+## 【5. 撮影者のためのステップアップ・アドバイス】
+## 【6. フォトブック＆SNSでの役割提案】
+## 【7. 自動タグ】
+"""
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}", "detail": "high"}}
+                ]}
+            ],
+            max_tokens=2000
+        )
+        gpt_text = response.choices[0].message.content
+
+        card_bytes = generate_card_image(image_bytes, gpt_text)
+
+        file_path = f"{message_id}.jpg"
+        supabase_client.storage.from_("cards").upload(
+            file_path,
+            card_bytes,
+            file_options={"content-type": "image/jpeg", "x-upsert": "true"}
+        )
+        public_url = supabase_client.storage.from_("cards").get_public_url(file_path)
+
+        with ApiClient(configuration) as api_client:
+            line_api = MessagingApi(api_client)
+            push_request = PushMessageRequest(
+                to=user_id,
+                messages=[
+                    TextMessage(text=gpt_text),
+                    ImageMessage(original_content_url=public_url, preview_image_url=public_url)
+                ]
+            )
+            line_api.push_message(push_request)
+
+    except Exception as e:
+        import traceback
+        print(f"❌ エラー発生の詳細:", flush=True)
+        traceback.print_exc()
+        try:
+            with ApiClient(configuration) as api_client:
+                line_api = MessagingApi(api_client)
+                line_api.push_message(PushMessageRequest(
+                    to=user_id,
+                    messages=[TextMessage(text="申し訳ありません。画像の解析中にエラーが発生しました。")]
+                ))
+        except Exception: pass
+
+# -------------------------------------------------------------
+# 4. Webhook エンドポイント
+# -------------------------------------------------------------
+@app.post("/webhook")
+async def webhook(request: Request, background_tasks: BackgroundTasks):
+    signature = request.headers.get("X-Line-Signature", "")
+    body = await request.body()
+    body_str = body.decode("utf-8")
+
+    try:
+        events = handler.parser.parse(body_str, signature)
+    except InvalidSignatureError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    for event in events:
+        # 画像受信時
+        if isinstance(event, MessageEvent) and isinstance(event.message, ImageMessageContent):
+            background_tasks.add_task(
+                process_image_and_reply,
+                event.message.id,
+                event.source.user_id
+            )
+
+        # テキスト受信時（設定メニュー呼び出し）
+        elif isinstance(event, MessageEvent) and isinstance(event.message, TextMessageContent):
+            text = event.message.text.strip()
+            if text in ["設定", "モード", "メニュー", "ヘルプ"]:
+                current_mode = get_user_mode(event.source.user_id)
+                mode_label = "【詳細分析】" if current_mode == "detail" else "【簡易分析】"
+                
+                with ApiClient(configuration) as api_client:
+                    line_api = MessagingApi(api_client)
+                    line_api.push_message(PushMessageRequest(
+                        to=event.source.user_id,
+                        messages=[
+                            TextMessage(
+                                text=f"現在のモード: {mode_label}\n変更したい分析モードを選択してください。",
+                                quick_reply=QuickReply(items=[
+                                    QuickReplyItem(action=PostbackAction(label="⚡ 簡易分析", data="mode=simple", display_text="簡易分析に設定")),
+                                    QuickReplyItem(action=PostbackAction(label="🔍 詳細分析", data="mode=detail", display_text="詳細分析に設定"))
+                                ])
+                            )
+                        ]
+                    ))
+
+        # ポストバック受信時（ボタンのタップ処理）
+        elif isinstance(event, PostbackEvent):
+            data = event.postback.data
+            if data.startswith("mode="):
+                new_mode = data.split("=")[1]
+                set_user_mode(event.source.user_id, new_mode)
+                
+                label = "【簡易分析】" if new_mode == "simple" else "【詳細分析】"
+                with ApiClient(configuration) as api_client:
+                    line_api = MessagingApi(api_client)
+                    line_api.push_message(PushMessageRequest(
+                        to=event.source.user_id,
+                        messages=[TextMessage(text=f"分析モードを {label} に変更しました！\n次回送信いただく写真から適用されます。")]
+                    ))
+
+    return "OK"

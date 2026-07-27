@@ -1,0 +1,17 @@
+Sidecar = {
+    Date = "2026-07-20T05:47:30Z",
+    Settings = {
+        [1] = {
+            Rank = 4,
+            PresetName = "1 - DxO Standard",
+            Headline = "メタルモーターサイクル",
+            Caption = [[バイクのメカニカルな造形美と金属の質感を強調したい]],
+            Category = "乗り物・スナップ",
+            SupplementalCategories = { "モーターサイクル", "近接撮影" },
+            SubjectCode = "VEHICLE_MOTOR",
+            Keywords = { "バイク", "エンジン", "金属", "質感" },
+            Byline = "Lumina Photographer",
+            Copyright = "© 2026 Lumina Notes All Rights Reserved"
+        }
+    }
+}

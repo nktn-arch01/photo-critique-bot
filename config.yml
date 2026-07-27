@@ -1,0 +1,20 @@
+# photo_ai 設定ファイル
+
+# 1. ストレージルート設定 (任意ストレージ / 外付けHDD / NASなど)
+storage:
+  base_dir: "/Volumes/ExternalSSD/DxO folder" # 実際に運用するルートフォルダのパス
+
+# 2. Google ドライブ同期設定 (年間ログ用)
+google_drive:
+  enabled: true
+  sync_dir: "~/Google Drive/マイドライブ/写真分析" # 年間ログの書き出し先
+
+# 3. AI解析設定
+ai:
+  model: "gpt-4o-mini"
+  max_retry: 2 # 安全フィルター判定時の自動リトライ回数
+
+# 4. 出力設定
+output:
+  card_suffix: "_card"
+  card_format: "png"
