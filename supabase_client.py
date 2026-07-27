@@ -48,8 +48,8 @@ class SupabaseManager:
         if not self.client or not card_path.exists():
             return ""
 
-        bucket_name = "critique-cards"
-        destination_path = f"cards/{file_name}"
+        bucket_name = "cards"
+        destination_path = file_name
 
         try:
             with open(card_path, "rb") as f:
