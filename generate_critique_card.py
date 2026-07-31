@@ -1,6 +1,5 @@
 import re
 import textwrap
-import urllib.request
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -33,25 +32,13 @@ def parse_critique_text(critique_text: str) -> dict:
 
 def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
     """
-    日本語フォントを読み込む。
-    サーバー内に無い場合は Google Fonts から自動ダウンロードして適用。
+    リポジトリ同梱の fonts/NotoSansJP-Regular.ttf を優先読み込み
     """
     fonts_dir = Path(__file__).parent / "fonts"
-    font_path = fonts_dir / "NotoSansJP-Regular.ttf"
-
-    # フォントが存在しない場合は初回のみ自動ダウンロード
-    if not font_path.exists():
-        try:
-            fonts_dir.mkdir(parents=True, exist_ok=True)
-            print("[Font] Downloading NotoSansJP-Regular.ttf from Google Fonts...")
-            url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Regular.ttf"
-            urllib.request.urlretrieve(url, font_path)
-            print("[Font] Download completed successfully!")
-        except Exception as e:
-            print(f"[Font Download Error] {e}")
+    bundled_font = fonts_dir / "NotoSansJP-Regular.ttf"
 
     font_candidates = [
-        font_path,
+        bundled_font,
         Path(__file__).parent / "NotoSansJP-Regular.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
@@ -64,10 +51,12 @@ def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
         p = Path(fp)
         if p.exists():
             try:
+                print(f"[Font Load Success] Loaded: {p}", flush=True)
                 return ImageFont.truetype(str(p), size)
-            except Exception:
-                continue
+            except Exception as e:
+                print(f"[Font Load Error] {p}: {e}", flush=True)
 
+    print("[Font Warning] Falling back to default font", flush=True)
     return ImageFont.load_default()
 
 
@@ -100,7 +89,7 @@ def create_critique_card(image_path: Path, critique_text: str, output_card_path:
             paste_y = 30 + (target_h - new_h) // 2
             card.paste(resized_img, (paste_x, paste_y))
     except Exception as e:
-        print(f"[Card Image Error] {e}")
+        print(f"[Card Image Error] {e}", flush=True)
 
     y_offset = 520
     draw.line([(40, y_offset), (1040, y_offset)], fill=(60, 64, 72), width=2)

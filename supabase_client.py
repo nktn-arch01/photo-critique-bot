@@ -28,19 +28,18 @@ class SupabaseManager:
             return "compact"
 
         try:
-            res = self.client.table("user_settings").select("output_mode").eq("line_user_id", line_user_id).execute()
+            # 実際のDBカラム名 user_id と mode を指定
+            res = self.client.table("user_settings").select("mode").eq("user_id", line_user_id).execute()
             if res.data and len(res.data) > 0:
-                return res.data[0].get("output_mode", "compact")
-        except Exception:
-            pass
+                mode_val = res.data[0].get("mode", "compact")
+                # simple や compact は要約モード、full や detail は全文モード
+                return "full" if mode_val in ["full", "detail"] else "compact"
+        except Exception as e:
+            print(f"[Supabase get_user_mode Error] {e}", flush=True)
 
         return "compact"
 
     def upload_card_image(self, card_path: Path, file_name: str, bucket_name: str = "critique-cards") -> str:
-        """
-        評価カード画像を Supabase Storage にアップロードし、公開URLを返す
-        ※ デフォルトバケットをテスト用の 'critique-cards' に設定 (本番切り替え時は 'cards' に指定)
-        """
         if not self.client or not card_path.exists():
             return ""
 
@@ -55,9 +54,10 @@ class SupabaseManager:
                 )
             
             public_url = self.client.storage.from_(bucket_name).get_public_url(destination_path)
+            print(f"[Supabase Storage Success] URL: {public_url}", flush=True)
             return public_url
         except Exception as e:
-            print(f"[Supabase Storage Error] {e}")
+            print(f"[Supabase Storage Error] {e}", flush=True)
             return ""
 
     def save_critique_log(
@@ -68,6 +68,7 @@ class SupabaseManager:
         card_image_url: str = ""
     ) -> bool:
         if not self.client:
+            print("[Supabase DB Error] Client not initialized", flush=True)
             return False
 
         title_m = re.search(r'■TITLE:\s*(.+)', critique_text)
@@ -91,8 +92,9 @@ class SupabaseManager:
         }
 
         try:
-            self.client.table("critique_logs").insert(payload).execute()
+            res = self.client.table("critique_logs").insert(payload).execute()
+            print(f"[Supabase DB Success] Log saved for user: {line_user_id}", flush=True)
             return True
         except Exception as e:
-            print(f"[Supabase DB Error] {e}")
+            print(f"[Supabase DB Error] {e}", flush=True)
             return False
