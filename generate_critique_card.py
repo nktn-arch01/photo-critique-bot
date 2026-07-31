@@ -1,5 +1,6 @@
 import re
 import textwrap
+import urllib.request
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -31,15 +32,32 @@ def parse_critique_text(critique_text: str) -> dict:
 
 
 def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
+    """
+    日本語フォントを読み込む。
+    サーバー内に無い場合は Google Fonts から自動ダウンロードして適用。
+    """
+    fonts_dir = Path(__file__).parent / "fonts"
+    font_path = fonts_dir / "NotoSansJP-Regular.ttf"
+
+    # フォントが存在しない場合は初回のみ自動ダウンロード
+    if not font_path.exists():
+        try:
+            fonts_dir.mkdir(parents=True, exist_ok=True)
+            print("[Font] Downloading NotoSansJP-Regular.ttf from Google Fonts...")
+            url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Regular.ttf"
+            urllib.request.urlretrieve(url, font_path)
+            print("[Font] Download completed successfully!")
+        except Exception as e:
+            print(f"[Font Download Error] {e}")
+
     font_candidates = [
-        Path(__file__).parent / "fonts" / "NotoSansJP-Regular.ttf",
-        Path(__file__).parent / "fonts" / "NotoSansJP-Medium.ttf",
+        font_path,
+        Path(__file__).parent / "NotoSansJP-Regular.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
         "/System/Library/Fonts/Hiragino Sans GB.ttc",
         "/System/Library/Fonts/CJK/PingFang.ttc",
-        "/System/Library/Fonts/Helvetica.ttc"
     ]
 
     for fp in font_candidates:
@@ -81,7 +99,8 @@ def create_critique_card(image_path: Path, critique_text: str, output_card_path:
             paste_x = (W - new_w) // 2
             paste_y = 30 + (target_h - new_h) // 2
             card.paste(resized_img, (paste_x, paste_y))
-    except Exception: pass
+    except Exception as e:
+        print(f"[Card Image Error] {e}")
 
     y_offset = 520
     draw.line([(40, y_offset), (1040, y_offset)], fill=(60, 64, 72), width=2)
@@ -105,7 +124,6 @@ def create_critique_card(image_path: Path, critique_text: str, output_card_path:
     draw.line([(40, y_offset), (1040, y_offset)], fill=(60, 64, 72), width=1)
     y_offset += 20
 
-    # 要約フック文の描画（【Point】の固定ラベルを排出）
     wrapped_lines = textwrap.wrap(parsed["point_text"], width=46)
     for line in wrapped_lines[:3]:
         draw.text((40, y_offset), line, font=font_body, fill=(220, 225, 235))
