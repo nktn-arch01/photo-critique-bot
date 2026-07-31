@@ -1,3 +1,23 @@
+"""
+==============================================================================
+【写真分析評価カード生成モジュール】
+==============================================================================
+[重要設計セオリー / ARCHITECTURAL DECISION RECORD]
+
+1. 日本語フォント同梱の絶対ルール:
+   - 日本語フォント (fonts/NotoSansJP-Regular.ttf) は、必ずリポジトリ内に
+     バイナリファイルとして直接同梱 (git commit) してクラウドへ送信すること。
+   - 理由: サーバー起動時・実行時の動的ダウンロード (urllib/curl) は、
+     Renderのネットワーク制限やUser-Agent拒否、HTMLエラーページの返却リスクがあり、
+     Pillowの標準英数フォントに落下して文字化け（豆腐化）を引き起こす。
+   - Git同梱方式がネットワーク依存リスクを100%排除できる唯一かつ最良の解である。
+
+2. Supabase 連携セオリー:
+   - バックエンド処理は SUPABASE_SERVICE_ROLE_KEY を使用し、
+     critique_logs テーブルへの書き込み権限を担保すること。
+==============================================================================
+"""
+
 import re
 import textwrap
 from pathlib import Path
@@ -51,8 +71,9 @@ def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
         p = Path(fp)
         if p.exists():
             try:
+                font_obj = ImageFont.truetype(str(p), size)
                 print(f"[Font Load Success] Loaded: {p}", flush=True)
-                return ImageFont.truetype(str(p), size)
+                return font_obj
             except Exception as e:
                 print(f"[Font Load Error] {p}: {e}", flush=True)
 
