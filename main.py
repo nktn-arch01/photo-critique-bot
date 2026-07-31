@@ -7,7 +7,8 @@ from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Header
 from linebot import LineBotApi, WebhookParser
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
-    MessageEvent, ImageMessage, TextSendMessage, ImageSendMessage
+    MessageEvent, ImageMessage, TextMessage, TextSendMessage, ImageSendMessage,
+    QuickReply, QuickReplyButton, MessageAction
 )
 
 from critique_engine import generate_critique
@@ -26,47 +27,30 @@ supabase_mgr = SupabaseManager()
 
 @app.get("/health")
 def health_check():
-    """
-    スリープ防止用ヘルスチェックエンドポイント
-    (UptimeRobot等の外部サービスから14分おきに叩くことで常時ウォーム状態を維持)
-    """
     return {"status": "ok", "service": "Photo AI Critique Bot"}
 
 
 def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str):
-    """
-    非同期バックグラウンド処理
-    - 個人情報・画像データの完全即時削除を保証 (finally節で処理終了時にフォルダ丸ごと全削除)
-    - message_id ごとの独立一時フォルダ構造により他ユーザーとのデータ混同を100%遮断
-    """
     temp_dir = Path(tempfile.mkdtemp())
     img_path = temp_dir / f"{message_id}.jpg"
     card_path = temp_dir / f"{message_id}_card.png"
 
     try:
-        # 1. LINEサーバーから画像バイナリを取得
         message_content = line_bot_api.get_message_content(message_id)
         with open(img_path, "wb") as f:
             for chunk in message_content.iter_content():
                 f.write(chunk)
 
-        # 2. ユーザー設定の出力モード ('compact' or 'full') を取得
         user_mode = supabase_mgr.get_user_mode(line_user_id)
-
-        # 3. AI講評生成 (共通モジュール)
         critique_text = generate_critique(img_path)
-
-        # 4. 評価カード画像生成 (共通モジュール)
         create_critique_card(img_path, critique_text, card_path)
 
-        # 5. カード画像を Supabase Storage (critique-cards) にアップロード
         card_public_url = supabase_mgr.upload_card_image(
             card_path=card_path,
             file_name=f"{message_id}_card.png",
             bucket_name="critique-cards"
         )
 
-        # 6. Supabase DB に分析ログを保存
         supabase_mgr.save_critique_log(
             line_user_id=line_user_id,
             image_url="",
@@ -74,7 +58,6 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
             card_image_url=card_public_url
         )
 
-        # 7. 特定の line_user_id に対してのみ応答を送信 (他ユーザーへの誤送信防止)
         messages_to_send = []
 
         if card_public_url:
@@ -101,7 +84,7 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
         line_bot_api.push_message(line_user_id, messages_to_send)
 
     except Exception as e:
-        print(f"[Processing Error] {e}")
+        print(f"[Processing Error] {e}", flush=True)
         traceback.print_exc()
         try:
             line_bot_api.push_message(
@@ -111,38 +94,74 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
         except Exception:
             pass
     finally:
-        # サーバー上の一次ファイル・フォルダを完全物理削除 (セキュリティ・プライバシー保護)
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def handle_text_message(reply_token: str, line_user_id: str, text: str):
+    """
+    テキストメッセージ（設定コマンド）の処理
+    """
+    if text in ["設定", "せってい", "モード設定"]:
+        current_mode = supabase_mgr.get_user_mode(line_user_id)
+        mode_label = "詳細版" if current_mode == "full" else "簡易版"
+        
+        msg_text = f"⚙️【講評出力モード設定】\n\n現在の設定：【{mode_label}】\n\n変更したいモードを下のボタンから選択してください。"
+        
+        quick_reply = QuickReply(
+            items=[
+                QuickReplyButton(action=MessageAction(label="📷 簡易版にする", text="設定:簡易版")),
+                QuickReplyButton(action=MessageAction(label="📝 詳細版にする", text="設定:詳細版"))
+            ]
+        )
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(text=msg_text, quick_reply=quick_reply)
+        )
+
+    elif text in ["設定:簡易版", "簡易版"]:
+        supabase_mgr.set_user_mode(line_user_id, "simple")
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から「カード画像＋要約」が送信されます。")
+        )
+
+    elif text in ["設定:詳細版", "詳細版"]:
+        supabase_mgr.set_user_mode(line_user_id, "full")
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(text="📝 講評出力モードを【詳細版】に変更しました。\n次回の写真送信から「カード画像＋全文講評テキスト」が送信されます。")
+        )
 
 
 @app.post("/webhook")
 async def callback(request: Request, background_tasks: BackgroundTasks, x_line_signature: str = Header(None)):
-    """
-    LINE Webhook 受信エンドポイント (WebhookParser 方式)
-    """
     if not x_line_signature:
         raise HTTPException(status_code=400, detail="Missing signature")
 
     body = (await request.body()).decode("utf-8")
 
     try:
-        # 署名検証とイベント抽出
         events = parser.parse(body, x_line_signature)
     except InvalidSignatureError:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
-        if isinstance(event, MessageEvent) and isinstance(event.message, ImageMessage):
+        if isinstance(event, MessageEvent):
             line_user_id = event.source.user_id
-            message_id = event.message.id
             reply_token = event.reply_token
 
-            # FastAPIの依存関係注入を活かした安全なタスク登録
-            background_tasks.add_task(
-                process_image_and_reply,
-                reply_token,
-                line_user_id,
-                message_id
-            )
+            # 画像メッセージを受信した場合
+            if isinstance(event.message, ImageMessage):
+                message_id = event.message.id
+                background_tasks.add_task(
+                    process_image_and_reply,
+                    reply_token,
+                    line_user_id,
+                    message_id
+                )
+            # テキストメッセージ（設定コマンド）を受信した場合
+            elif isinstance(event.message, TextMessage):
+                text_content = event.message.text.strip()
+                handle_text_message(reply_token, line_user_id, text_content)
 
     return "OK"

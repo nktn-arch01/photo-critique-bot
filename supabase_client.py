@@ -28,16 +28,33 @@ class SupabaseManager:
             return "compact"
 
         try:
-            # 実際のDBカラム名 user_id と mode を指定
             res = self.client.table("user_settings").select("mode").eq("user_id", line_user_id).execute()
             if res.data and len(res.data) > 0:
                 mode_val = res.data[0].get("mode", "compact")
-                # simple や compact は要約モード、full や detail は全文モード
                 return "full" if mode_val in ["full", "detail"] else "compact"
         except Exception as e:
             print(f"[Supabase get_user_mode Error] {e}", flush=True)
 
         return "compact"
+
+    def set_user_mode(self, line_user_id: str, mode: str) -> bool:
+        """
+        ユーザーの講評出力モード ('simple' または 'full') を保存・更新する
+        """
+        if not self.client:
+            return False
+
+        try:
+            payload = {
+                "user_id": line_user_id,
+                "mode": mode
+            }
+            self.client.table("user_settings").upsert(payload, on_conflict="user_id").execute()
+            print(f"[Supabase set_user_mode Success] user_id: {line_user_id}, mode: {mode}", flush=True)
+            return True
+        except Exception as e:
+            print(f"[Supabase set_user_mode Error] {e}", flush=True)
+            return False
 
     def upload_card_image(self, card_path: Path, file_name: str, bucket_name: str = "critique-cards") -> str:
         if not self.client or not card_path.exists():
