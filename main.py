@@ -69,8 +69,10 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
             )
 
         if user_mode == "full":
+            # 詳細版：全文講評テキストを送信
             messages_to_send.append(TextSendMessage(text=critique_text))
         else:
+            # 簡易版：TITLE と CRITIQUE_SUMMARY（コンパクトな返信文）を送信
             import re
             title_m = re.search(r'■TITLE:\s*(.+)', critique_text)
             crit_sum_m = re.search(r'■CRITIQUE_SUMMARY:\s*(.+)', critique_text)
@@ -98,9 +100,6 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
 
 
 def handle_text_message(reply_token: str, line_user_id: str, text: str):
-    """
-    テキストメッセージ（設定コマンド）の処理
-    """
     if text in ["設定", "せってい", "モード設定"]:
         current_mode = supabase_mgr.get_user_mode(line_user_id)
         mode_label = "詳細版" if current_mode == "full" else "簡易版"
@@ -122,7 +121,7 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
         supabase_mgr.set_user_mode(line_user_id, "simple")
         line_bot_api.reply_message(
             reply_token,
-            TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から「カード画像＋要約」が送信されます。")
+            TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から「カード画像＋CRITIQUE_SUMMARY」が送信されます。")
         )
 
     elif text in ["設定:詳細版", "詳細版"]:
@@ -150,7 +149,6 @@ async def callback(request: Request, background_tasks: BackgroundTasks, x_line_s
             line_user_id = event.source.user_id
             reply_token = event.reply_token
 
-            # 画像メッセージを受信した場合
             if isinstance(event.message, ImageMessage):
                 message_id = event.message.id
                 background_tasks.add_task(
@@ -159,7 +157,6 @@ async def callback(request: Request, background_tasks: BackgroundTasks, x_line_s
                     line_user_id,
                     message_id
                 )
-            # テキストメッセージ（設定コマンド）を受信した場合
             elif isinstance(event.message, TextMessage):
                 text_content = event.message.text.strip()
                 handle_text_message(reply_token, line_user_id, text_content)
