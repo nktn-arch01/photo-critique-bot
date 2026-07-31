@@ -5,10 +5,9 @@
 [重要設計セオリー / ARCHITECTURAL DECISION RECORD]
 
 1. 日本語フォント同梱の絶対ルール:
-   - 日本語フォント (fonts/NotoSansJP-Regular.ttf) は、必ずリポジトリ内に
-     バイナリファイルとして直接同梱 (git commit) してクラウドへ送信すること。
-   - 理由: サーバー起動時・実行時の動的ダウンロード (urllib/curl) は、
-     Renderのネットワーク制限やUser-Agent拒否、HTMLエラーページの返却リスクがあり、
+   - 日本語フォント (fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf 等) は、
+     必ずリポジトリ内にバイナリファイルとして直接同梱 (git commit) して送信すること。
+   - 理由: サーバー起動時・実行時の動的ダウンロードは失敗リスクがあり、
      Pillowの標準英数フォントに落下して文字化け（豆腐化）を引き起こす。
    - Git同梱方式がネットワーク依存リスクを100%排除できる唯一かつ最良の解である。
 
@@ -52,14 +51,14 @@ def parse_critique_text(critique_text: str) -> dict:
 
 def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
     """
-    リポジトリ同梱の fonts/NotoSansJP-Regular.ttf を優先読み込み
+    配置された 5.5MB の NotoSansJP-Regular.ttf を最優先で読み込む
     """
-    fonts_dir = Path(__file__).parent / "fonts"
-    bundled_font = fonts_dir / "NotoSansJP-Regular.ttf"
-
+    base_dir = Path(__file__).parent
+    
     font_candidates = [
-        bundled_font,
-        Path(__file__).parent / "NotoSansJP-Regular.ttf",
+        base_dir / "fonts" / "Noto_Sans_JP" / "static" / "NotoSansJP-Regular.ttf",
+        base_dir / "fonts" / "NotoSansJP-Regular.ttf",
+        base_dir / "NotoSansJP-Regular.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
@@ -68,14 +67,13 @@ def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
     ]
 
     for fp in font_candidates:
-        p = Path(fp)
-        if p.exists():
+        if fp.exists():
             try:
-                font_obj = ImageFont.truetype(str(p), size)
-                print(f"[Font Load Success] Loaded: {p}", flush=True)
+                font_obj = ImageFont.truetype(str(fp), size)
+                print(f"[Font Load Success] Loaded: {fp}", flush=True)
                 return font_obj
             except Exception as e:
-                print(f"[Font Load Error] {p}: {e}", flush=True)
+                print(f"[Font Load Error] {fp}: {e}", flush=True)
 
     print("[Font Warning] Falling back to default font", flush=True)
     return ImageFont.load_default()
