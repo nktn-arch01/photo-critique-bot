@@ -7,7 +7,6 @@ from typing import Dict, Any, Optional
 try:
     from supabase import create_client, Client
 except ImportError:
-    # ライブラリ未インストール時のフォールバック定義
     create_client = None
     Client = Any
 
@@ -25,10 +24,6 @@ class SupabaseManager:
             self.client = create_client(self.url, self.key)
 
     def get_user_mode(self, line_user_id: str) -> str:
-        """
-        ユーザーの出力モード ('compact' または 'full') を取得する
-        未設定の場合はデフォルトの 'compact' を返す
-        """
         if not self.client:
             return "compact"
 
@@ -41,26 +36,24 @@ class SupabaseManager:
 
         return "compact"
 
-    def upload_card_image(self, card_path: Path, file_name: str) -> str:
+    def upload_card_image(self, card_path: Path, file_name: str, bucket_name: str = "critique-cards") -> str:
         """
-        評価カード画像を Supabase Storage ('critique-cards') にアップロードし、公開URLを返す
+        評価カード画像を Supabase Storage にアップロードし、公開URLを返す
+        ※ デフォルトバケットをテスト用の 'critique-cards' に設定 (本番切り替え時は 'cards' に指定)
         """
         if not self.client or not card_path.exists():
             return ""
 
-        bucket_name = "cards"
         destination_path = file_name
 
         try:
             with open(card_path, "rb") as f:
-                # 既存ファイルが存在する場合は上書きアップロード
                 self.client.storage.from_(bucket_name).upload(
                     path=destination_path,
                     file=f,
                     file_options={"content-type": "image/png", "x-upsert": "true"}
                 )
             
-            # 公開URLを取得
             public_url = self.client.storage.from_(bucket_name).get_public_url(destination_path)
             return public_url
         except Exception as e:
@@ -74,13 +67,9 @@ class SupabaseManager:
         critique_text: str,
         card_image_url: str = ""
     ) -> bool:
-        """
-        講評結果テキストをパースし、Supabase DB ('critique_logs') へ保存する
-        """
         if not self.client:
             return False
 
-        # テキストパース
         title_m = re.search(r'■TITLE:\s*(.+)', critique_text)
         summary_m = re.search(r'■SUMMARY:\s*(.+)', critique_text)
         crit_sum_m = re.search(r'■CRITIQUE_SUMMARY:\s*(.+)', critique_text)
