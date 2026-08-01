@@ -42,7 +42,7 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
                 f.write(chunk)
 
         user_mode = supabase_mgr.get_user_mode(line_user_id)
-        critique_text = generate_critique(img_path)
+        critique_text = generate_critique(img_path, mode=user_mode)
         create_critique_card(img_path, critique_text, card_path)
 
         card_public_url = supabase_mgr.upload_card_image(
@@ -69,10 +69,8 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
             )
 
         if user_mode == "full":
-            # 詳細版：全文講評テキストを送信
             messages_to_send.append(TextSendMessage(text=critique_text))
         else:
-            # 簡易版：TITLE と CRITIQUE_SUMMARY（コンパクトな返信文）を送信
             import re
             title_m = re.search(r'■TITLE:\s*(.+)', critique_text)
             crit_sum_m = re.search(r'■CRITIQUE_SUMMARY:\s*(.+)', critique_text)
@@ -121,14 +119,14 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
         supabase_mgr.set_user_mode(line_user_id, "simple")
         line_bot_api.reply_message(
             reply_token,
-            TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から「カード画像＋CRITIQUE_SUMMARY」が送信されます。")
+            TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から高速（約3〜5秒）でカード画像と要約が送信されます。")
         )
 
     elif text in ["設定:詳細版", "詳細版"]:
         supabase_mgr.set_user_mode(line_user_id, "full")
         line_bot_api.reply_message(
             reply_token,
-            TextSendMessage(text="📝 講評出力モードを【詳細版】に変更しました。\n次回の写真送信から「カード画像＋全文講評テキスト」が送信されます。")
+            TextSendMessage(text="📝 講評出力モードを【詳細版】に変更しました。\n次回の写真送信からカード画像と全文講評テキストが送信されます。")
         )
 
 

@@ -26,6 +26,7 @@ def generate_critique(
     metadata: dict = None, 
     dop_info: dict = None, 
     model: str = "gpt-4o-mini",
+    mode: str = "compact",
     max_retries: int = 3,
     backoff_factor: float = 2.0
 ) -> str:
@@ -52,7 +53,9 @@ def generate_critique(
     rating_str = dop_info.get("rating_str", "なし")
     preset_name = dop_info.get("preset_name", "標準/未指定")
 
-    prompt = f"""あなたは写真表現と撮影技術を深く探求するプロの写真評論家・フォトブック編集者です。
+    if mode == "full":
+        # 詳細版用プロンプト (【1】〜【7】の全文を含む)
+        prompt = f"""あなたは写真表現と撮影技術を深く探求するプロの写真評論家・フォトブック編集者です。
 与えられた写真と以下の撮影環境・メタデータを観察し、撮影者の美意識に寄り添う情熱的で具体的な講評を作成してください。
 
 【撮影環境ファクトデータ】
@@ -111,6 +114,31 @@ def generate_critique(
 ## 【7. 自動タグ】
 #カメラ_{camera_model} #レンズ_{lens_model} #構図_こだわり #光_演出 #雰囲気_表現
 """
+    else:
+        # 簡易版用軽量プロンプト (カード生成に必要な要素のみ出力し高速化)
+        prompt = f"""あなたはプロの写真評論家です。
+与えられた写真を観察し、カード画像生成に必要な以下の4項目（TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY）のみを即座に作成してください。
+
+【講評作成の絶対ルール】
+1. ■SCORESの5項目は提示された写真を個別に分析し、1〜5の数値（および対応する★記号）を独自に算出して出力してください。
+2. 【1】〜【7】などの本文文章は一切出力しないでください。
+
+【出力フォーマット】
+以下の4項目のみを出力してください。
+
+■TITLE: 写真の核心を表現した15文字以内のタイトル
+■SUMMARY: この写真の美を決定づける25文字以内のキャッチコピー
+■SCORES:
+・構図・構成  : [写真に応じた★評価] ([1〜5の数値]/5)
+・光・色彩    : [写真に応じた★評価] ([1〜5の数値]/5)
+・ストーリー  : [写真に応じた★評価] ([1〜5の数値]/5)
+・技術・露出  : [写真に応じた★評価] ([1〜5の数値]/5)
+・独自・世界観: [写真に応じた★評価] ([1〜5の数値]/5)
+(※SCORES出力例: ・構図・構成  : ★★★☆☆ (3/5) のように必ず★記号5文字と(数値/5)形式で出力すること)
+■CRITIQUE_SUMMARY: 「本人が意識していないかもしれないが非常に効果的なポイント」や「良い点」を主体に、読者の好奇心を煽る文章を70〜80文字程度で記述してください。
+"""
+
+    max_tok = 4096 if mode == "full" else 500
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -131,7 +159,7 @@ def generate_critique(
                     }
                 ],
                 temperature=0.7,
-                max_tokens=4096
+                max_tokens=max_tok
             )
             return response.choices[0].message.content
 
