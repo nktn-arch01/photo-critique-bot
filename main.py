@@ -168,5 +168,11 @@ async def callback(request: Request, background_tasks: BackgroundTasks, x_line_s
                     reply_token,
                     TextSendMessage(text="スタンプありがとうございます！講評したい写真をぜひ送信してみてください📷✨")
                 )
+            else:
+                # 動画、音声、ファイル、位置情報などの非対応メッセージ
+                line_bot_api.reply_message(
+                    reply_token,
+                    TextSendMessage(text="申し訳ありません。動画や音声、非対応のファイル形式には対応しておりません。\n静止画（JPEGまたはPNG形式の写真）を送信してください📷✨")
+                )
 
     return "OK"
