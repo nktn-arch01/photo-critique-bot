@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Header
 from linebot import LineBotApi, WebhookParser
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
-    MessageEvent, ImageMessage, TextMessage, TextSendMessage, ImageSendMessage,
+    MessageEvent, ImageMessage, TextMessage, StickerMessage, TextSendMessage, ImageSendMessage,
     QuickReply, QuickReplyButton, MessageAction
 )
 
@@ -119,7 +119,7 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
         supabase_mgr.set_user_mode(line_user_id, "simple")
         line_bot_api.reply_message(
             reply_token,
-            TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から高速（約3〜5秒）でカード画像と要約が送信されます。")
+            TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から高速でカード画像と要約が送信されます。")
         )
 
     elif text in ["設定:詳細版", "詳細版"]:
@@ -127,6 +127,11 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
         line_bot_api.reply_message(
             reply_token,
             TextSendMessage(text="📝 講評出力モードを【詳細版】に変更しました。\n次回の写真送信からカード画像と全文講評テキストが送信されます。")
+        )
+    else:
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(text="写真を送信いただくと、AIが講評とカード画像を自動生成します📷\nモードの切り替えは「設定」と送信してください。")
         )
 
 
@@ -158,5 +163,10 @@ async def callback(request: Request, background_tasks: BackgroundTasks, x_line_s
             elif isinstance(event.message, TextMessage):
                 text_content = event.message.text.strip()
                 handle_text_message(reply_token, line_user_id, text_content)
+            elif isinstance(event.message, StickerMessage):
+                line_bot_api.reply_message(
+                    reply_token,
+                    TextSendMessage(text="スタンプありがとうございます！講評したい写真をぜひ送信してみてください📷✨")
+                )
 
     return "OK"
