@@ -58,6 +58,30 @@ class DesktopLogManager:
         full_content = f"{header_str}\n{structured_critique}\n\n---\n\n{metadata_block}"
         return full_content
 
+    def _update_or_append_log(self, log_file_path: Path, file_name: str, log_entry: str):
+        if not log_file_path.exists():
+            log_file_path.write_text(log_entry, encoding="utf-8")
+            return
+
+        content = log_file_path.read_text(encoding="utf-8")
+        header_marker = f"==================================================\n📷 ファイル名: {file_name}\n=================================================="
+
+        if header_marker in content:
+            # 既存のエントリが存在する場合は、該当ブロックを最新データで置換更新
+            start_idx = content.find(header_marker)
+            next_marker_idx = content.find("==================================================\n📷 ファイル名:", start_idx + len(header_marker))
+            
+            if next_marker_idx != -1:
+                new_content = content[:start_idx] + log_entry + content[next_marker_idx:]
+            else:
+                new_content = content[:start_idx] + log_entry
+            
+            log_file_path.write_text(new_content, encoding="utf-8")
+        else:
+            # 存在しない場合は末尾に追記
+            with open(log_file_path, "a", encoding="utf-8") as f:
+                f.write(log_entry)
+
     def save_analysis_result(self, file_name: str, metadata_block: str, critique_text: str):
         stem = Path(file_name).stem
         note_file = self.notes_dir / f"{stem}.md"
@@ -70,18 +94,18 @@ class DesktopLogManager:
         # 2. ログエントリ
         log_entry = f"{formatted_content}\n\n"
 
-        # 3. 月間テキストログ
-        existing_monthly = self.monthly_log_path.read_text(encoding="utf-8") if self.monthly_log_path.exists() else ""
-        if file_name not in existing_monthly:
-            with open(self.monthly_log_path, "a", encoding="utf-8") as f:
-                f.write(log_entry)
+        # 3. 月間テキストログ (置換または追記)
+        self._update_or_append_log(self.monthly_log_path, file_name, log_entry)
 
-        # 4. 年間統合テキストログ
-        existing_annual = self.annual_log_path.read_text(encoding="utf-8") if self.annual_log_path.exists() else ""
-        if file_name not in existing_annual:
-            with open(self.annual_log_path, "a", encoding="utf-8") as f:
-                f.write(log_entry)
+        # 4. 年間統合テキストログ (置換または追記)
+        self._update_or_append_log(self.annual_log_path, file_name, log_entry)
 
         # 5. ステータスファイル更新
-        with open(self.status_file_path, "a", encoding="utf-8") as f:
-            f.write(f"[PROCESSED] {file_name}\n")
+        if self.status_file_path.exists():
+            status_text = self.status_file_path.read_text(encoding="utf-8")
+            if file_name not in status_text:
+                with open(self.status_file_path, "a", encoding="utf-8") as f:
+                    f.write(f"[PROCESSED] {file_name}\n")
+        else:
+            with open(self.status_file_path, "a", encoding="utf-8") as f:
+                f.write(f"[PROCESSED] {file_name}\n")
