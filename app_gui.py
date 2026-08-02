@@ -152,7 +152,6 @@ class Application(tk.Tk):
         lbl_title = ttk.Label(frame, text="写真講評 AI 一括生成システム", font=("Helvetica", 16, "bold"))
         lbl_title.pack(anchor=tk.W, pady=(0, 15))
 
-        # フォルダ選択セクション
         dir_frame = ttk.Frame(frame)
         dir_frame.pack(fill=tk.X, pady=5)
 
@@ -162,23 +161,18 @@ class Application(tk.Tk):
         self.lbl_dir_path = ttk.Label(dir_frame, text="未選択", foreground="gray", wraplength=480)
         self.lbl_dir_path.pack(side=tk.LEFT, padx=10)
 
-        # オプション設定
         chk_overwrite = ttk.Checkbutton(frame, text="既存の分析結果を上書き再生成する (処理済みファイルをスキップしない)", variable=self.overwrite_var)
         chk_overwrite.pack(anchor=tk.W, pady=15)
 
-        # 実行ボタン
         self.btn_run = ttk.Button(frame, text="一括分析・生成を実行", command=self.confirm_and_start_processing, state=tk.DISABLED)
         self.btn_run.pack(fill=tk.X, pady=10)
 
-        # プログレスバー
         self.progress_bar = ttk.Progressbar(frame, mode="determinate")
         self.progress_bar.pack(fill=tk.X, pady=10)
 
-        # ステータス表示
         self.lbl_status = ttk.Label(frame, text="フォルダを選択して実行してください。", foreground="black", font=("Helvetica", 11))
         self.lbl_status.pack(anchor=tk.W, pady=5)
 
-        # 成果物オープンボタンフレーム
         open_frame = ttk.Frame(frame)
         open_frame.pack(fill=tk.X, pady=(10, 0))
         self.btn_open_folder = ttk.Button(open_frame, text="📂 成果物フォルダを開く", command=self.open_output_folder, state=tk.DISABLED)
@@ -281,7 +275,6 @@ class Application(tk.Tk):
             self.reset_buttons()
 
     def open_output_folder(self):
-        # 処理対象として選択しているフォルダ(self.target_dir)を直接開くように変更
         if self.target_dir and self.target_dir.exists():
             try:
                 subprocess.run(["open", str(self.target_dir)])
