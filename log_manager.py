@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from pathlib import Path
 
 
@@ -37,13 +38,9 @@ class DesktopLogManager:
         title_m = re.search(r'(■TITLE:\s*.+)', critique_text)
         summary_m = re.search(r'(■SUMMARY:\s*.+)', critique_text)
         
-        scores_m = re.search(r'(■SCORES:\s*\n(?:・[^\n]+\n)+)', critique_text)
-        if not scores_m:
-            scores_m = re.search(r'(■SCORES:[\s\S]*?)(?=■CRITIQUE_SUMMARY|##|---|$)', critique_text)
-
+        scores_m = re.search(r'(■SCORES:[\s\S]*?)(?=■CRITIQUE_SUMMARY|##|---|$)', critique_text)
         crit_sum_m = re.search(r'(■CRITIQUE_SUMMARY:\s*.+)', critique_text)
         
-        # 講評本文（## 【1】〜最後まで）を確実に取りこぼさず取得
         body_m = re.search(r'(##\s*【1[\s\S]*)', critique_text)
 
         title_str = title_m.group(1).strip() if title_m else "■TITLE: 写真分析講評"
@@ -64,23 +61,23 @@ class DesktopLogManager:
             return
 
         content = log_file_path.read_text(encoding="utf-8")
-        header_marker = f"==================================================\n📷 ファイル名: {file_name}\n=================================================="
+        
+        # 正規表現パターンで既存のログブロック（ファイル名ヘッダーから次のヘッダーの手前まで）を確実に補足
+        pattern = re.compile(
+            r'==================================================\n'
+            r'📷 ファイル名:\s*' + re.escape(file_name) + r'\n'
+            r'==================================================[\s\S]*?'
+            r'(?=\n==================================================\n📷 ファイル名:|$)'
+        )
 
-        if header_marker in content:
-            # 既存のエントリが存在する場合は、該当ブロックを最新データで置換更新
-            start_idx = content.find(header_marker)
-            next_marker_idx = content.find("==================================================\n📷 ファイル名:", start_idx + len(header_marker))
-            
-            if next_marker_idx != -1:
-                new_content = content[:start_idx] + log_entry + content[next_marker_idx:]
-            else:
-                new_content = content[:start_idx] + log_entry
-            
+        if pattern.search(content):
+            # 既存ブロックを最新ログで置換
+            new_content = pattern.sub(log_entry.strip(), content)
             log_file_path.write_text(new_content, encoding="utf-8")
         else:
-            # 存在しない場合は末尾に追記
+            # 存在しない場合は追記
             with open(log_file_path, "a", encoding="utf-8") as f:
-                f.write(log_entry)
+                f.write("\n\n" + log_entry.strip())
 
     def save_analysis_result(self, file_name: str, metadata_block: str, critique_text: str):
         stem = Path(file_name).stem
@@ -94,17 +91,14 @@ class DesktopLogManager:
         # 2. ログエントリ
         log_entry = f"{formatted_content}\n\n"
 
-        # 3. 月間テキストログ (置換または追記)
+        # 3. 月間テキストログ (正規表現置換または追記)
         self._update_or_append_log(self.monthly_log_path, file_name, log_entry)
 
-        # 4. 年間統合テキストログ (置換または追記)
+        # 4. 年間統合テキストログ (正規表現置換または追記)
         self._update_or_append_log(self.annual_log_path, file_name, log_entry)
 
-        # 5. ステータスファイル更新 (重複なし)
-        existing_lines = []
-        if self.status_file_path.exists():
-            existing_lines = [l.strip() for l in self.status_file_path.read_text(encoding="utf-8").splitlines() if l.strip()]
-        line_to_add = f"[PROCESSED] {file_name}"
-        if line_to_add not in existing_lines:
-            existing_lines.append(line_to_add)
-            self.status_file_path.write_text("\n".join(existing_lines) + "\n", encoding="utf-8")
+        # 5. ステータスファイル更新 (日時分秒付き)
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        status_line = f"[PROCESSED] {now_str} {file_name}\n"
+        with open(self.status_file_path, "a", encoding="utf-8") as f:
+            f.write(status_line)
