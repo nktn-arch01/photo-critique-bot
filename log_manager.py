@@ -10,7 +10,7 @@ class DesktopLogManager:
     """
     def __init__(self, target_dir: Path):
         self.target_dir = target_dir
-        self.ym_str = target_dir.name  # 例: 202607
+        self.ym_str = target_dir.name
         self.year_str = self.ym_str[:4] if len(self.ym_str) >= 4 else "2026"
 
         self.notes_dir = target_dir / f"{self.ym_str}写真分析ノート"
@@ -35,11 +35,12 @@ class DesktopLogManager:
         return self.cards_dir / f"{stem}_card.png"
 
     def _format_structured_content(self, file_name: str, metadata_block: str, critique_text: str) -> str:
-        title_m = re.search(r'(■TITLE:\s*.+)', critique_text)
-        summary_m = re.search(r'(■SUMMARY:\s*.+)', critique_text)
+        title_m = re.search(r'(■\s*TITLE\s*[:：].+)', critique_text)
+        summary_m = re.search(r'(■\s*SUMMARY\s*[:：].+)', critique_text)
         
-        scores_m = re.search(r'(■SCORES:[\s\S]*?)(?=■CRITIQUE_SUMMARY|##|---|$)', critique_text)
-        crit_sum_m = re.search(r'(■CRITIQUE_SUMMARY:\s*.+)', critique_text)
+        # SCORESブロックを表記ゆれに強く抽出
+        scores_m = re.search(r'(■\s*SCORES\s*[:：][\s\S]*?)(?=■\s*CRITIQUE_SUMMARY|##|---|$)', critique_text)
+        crit_sum_m = re.search(r'(■\s*CRITIQUE_SUMMARY\s*[:：].+)', critique_text)
         
         body_m = re.search(r'(##\s*【1[\s\S]*)', critique_text)
 

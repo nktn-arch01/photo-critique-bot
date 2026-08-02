@@ -1,22 +1,3 @@
-"""
-==============================================================================
-【写真分析評価カード生成モジュール】
-==============================================================================
-[重要設計セオリー / ARCHITECTURAL DECISION RECORD]
-
-1. 日本語フォント同梱の絶対ルール:
-   - 日本語フォント (fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf 等) は、
-     必ずリポジトリ内にバイナリファイルとして直接同梱 (git commit) して送信すること。
-   - 理由: サーバー起動時・実行時の動的ダウンロードは失敗リスクがあり、
-     Pillowの標準英数フォントに落下して文字化け（豆腐化）を引き起こす。
-   - Git同梱方式がネットワーク依存リスクを100%排除できる唯一かつ最良の解である。
-
-2. Supabase 連携セオリー:
-   - バックエンド処理は SUPABASE_SERVICE_ROLE_KEY を使用し、
-     critique_logs テーブルへの書き込み権限を担保すること。
-==============================================================================
-"""
-
 import re
 import textwrap
 from pathlib import Path
@@ -31,18 +12,18 @@ def parse_critique_text(critique_text: str) -> dict:
         "point_text": "光と質感が織りなす印象的な情景。"
     }
     
-    title_m = re.search(r'■TITLE:\s*(.+)', critique_text)
+    title_m = re.search(r'■\s*TITLE\s*[:：]\s*(.+)', critique_text)
     if title_m: data["title"] = title_m.group(1).strip()
 
-    summary_m = re.search(r'■SUMMARY:\s*(.+)', critique_text)
+    summary_m = re.search(r'■\s*SUMMARY\s*[:：]\s*(.+)', critique_text)
     if summary_m: data["summary"] = summary_m.group(1).strip()
 
-    score_pattern = re.compile(r'・([^:\s]+)\s*:\s*([★☆]+)\s*\(([\d\.]+)/5\)')
+    score_pattern = re.compile(r'・([^:\s：]+)\s*[:：]\s*([★☆]+)\s*\(([\d\.]+)/5\)')
     for m in score_pattern.finditer(critique_text):
         label, stars, val = m.group(1), m.group(2), m.group(3)
         data["scores"][label] = (stars, val)
 
-    crit_sum_m = re.search(r'■CRITIQUE_SUMMARY:\s*(.+)', critique_text)
+    crit_sum_m = re.search(r'■\s*CRITIQUE_SUMMARY\s*[:：]\s*(.+)', critique_text)
     if crit_sum_m:
         data["point_text"] = crit_sum_m.group(1).strip()
 
@@ -50,32 +31,21 @@ def parse_critique_text(critique_text: str) -> dict:
 
 
 def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
-    """
-    配置された 5.5MB の NotoSansJP-Regular.ttf を最優先で読み込む
-    """
     base_dir = Path(__file__).parent
-    
     font_candidates = [
         base_dir / "fonts" / "Noto_Sans_JP" / "static" / "NotoSansJP-Regular.ttf",
         base_dir / "fonts" / "NotoSansJP-Regular.ttf",
-        base_dir / "NotoSansJP-Regular.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
         "/System/Library/Fonts/Hiragino Sans GB.ttc",
-        "/System/Library/Fonts/CJK/PingFang.ttc",
     ]
 
     for fp in font_candidates:
         if fp.exists():
             try:
-                font_obj = ImageFont.truetype(str(fp), size)
-                print(f"[Font Load Success] Loaded: {fp}", flush=True)
-                return font_obj
-            except Exception as e:
-                print(f"[Font Load Error] {fp}: {e}", flush=True)
+                return ImageFont.truetype(str(fp), size)
+            except Exception:
+                continue
 
-    print("[Font Warning] Falling back to default font", flush=True)
     return ImageFont.load_default()
 
 
