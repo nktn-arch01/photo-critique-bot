@@ -377,7 +377,7 @@ class PhotoAICritiqueApp:
                     dop_info = parse_dop_file(dop_path)
 
                     self.log("   └─ AI講評生成中 (CritiqueEngine)...")
-                    critique_text = generate_critique(img_path, metadata=exif_meta, dop_info=dop_info)
+                    critique_text = generate_critique(img_path, metadata=exif_meta, dop_info=dop_info, mode="full")
 
                     self.log("   └─ 評価カード画像生成中...")
                     card_output_path = log_mgr.get_card_output_path(file_name)

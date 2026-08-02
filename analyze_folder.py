@@ -36,7 +36,7 @@ def main():
             critique_text = generate_critique(
                 image_path=item["path"],
                 metadata=item["metadata"],
-                dop_info=item["dop_info"]
+                dop_info=item["dop_info"], mode="full"
             )
 
             # Step 2: 講評カード画像 (PNG) の生成
