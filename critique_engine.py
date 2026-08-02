@@ -35,7 +35,7 @@ def generate_critique(
     dop_info: dict = None, 
     model: str = "gpt-4o-mini",
     mode: str = "compact",
-    max_retries: int = 4,
+    max_retries: int = 3,
     backoff_factor: float = 2.0
 ) -> str:
     client = get_openai_client()
@@ -82,7 +82,7 @@ def generate_critique(
 2. 『三分割法』『柔らかい光』『季節感あふれる』といった定型フレーズを避け、目の前の写真を具体的に描写してください。
 3. 時間帯ファクト（{time_zone_fact}）と、実際の画面に現れている光・シャドウを整合させて解説してください。
 4. ■SCORESの5項目（構図・構成、光・色彩、ストーリー、技術・露出、独自・世界観）は省略せず必ず全5行を出力してください。数値（1〜5）および対応する★記号（例: 4なら★★★★☆）は提示された写真を分析して毎回独自に算出して出力してください。
-5. ■CRITIQUE_SUMMARY は、読者の好奇心を煽るフックとなる文章を「70〜80文字程度（必ず65文字以上・2文以上）」で詳細に記述してください。短すぎる1文のみの出力は不可とします。
+5. ■CRITIQUE_SUMMARY は、読者の好奇心を煽るフックとなる文章を「70〜80文字程度」で詳細に記述してください。
 6. ## 【7. 自動タグ】 では、写真に写っている被写体、場所、季節、空気感、テーマ等に応じたハッシュタグ（例: #被写体名 #季節 #雰囲気 など）を8〜12個程度生成してください。
 
 【出力フォーマット】
@@ -96,6 +96,7 @@ def generate_critique(
 ・ストーリー  : ★★★★☆ (4/5)
 ・技術・露出  : ★★★★☆ (4/5)
 ・独自・世界観: ★★★★☆ (4/5)
+(※SCORES出力例: 必ず上記5項目すべてを★記号と(数値/5)形式で出力すること)
 ■CRITIQUE_SUMMARY: 否定的な表現を使わず、読者の好奇心を煽るフックとなる文章を70〜80文字程度で詳細に記述してください。
 
 ---
@@ -167,23 +168,21 @@ def generate_critique(
             )
             content = response.choices[0].message.content or ""
             
-            # 厳格な出力バリデーション（完全自動検知）
+            # バリデーションチェック (スコア必須項目チェック + 最短長35文字以上のルーズチェック)
             required_items = [
                 "■TITLE:", "■SUMMARY:", "■SCORES:",
-                "・構図・構成", "・光・色彩", "・ストーリー", "・技術・露出", "・独自・世界观",
+                "・構図・構成", "・光・色彩", "・ストーリー", "・技術・露出",
                 "■CRITIQUE_SUMMARY:"
             ]
-            # 日本語表記ゆれ対策
-            if "・独自・世界観" in content:
-                required_items.remove("・独自・世界观")
 
             missing = [item for item in required_items if item not in content]
             
             crit_sum_m = re.search(r'■CRITIQUE_SUMMARY:\s*(.+)', content)
             crit_sum_len = len(crit_sum_m.group(1).strip()) if crit_sum_m else 0
 
-            if missing or crit_sum_len < 60 or "申し訳ありません" in content:
-                print(f"⚠️ 出力検証不完全 (欠落項目: {missing}, 要約長: {crit_sum_len}字)。自動再試行 ({attempt}/{max_retries})...")
+            # 35文字未満の極端に短すぎる出力、または必要構造の欠落時のみリトライ
+            if missing or crit_sum_len < 35 or "申し訳ありません" in content:
+                print(f"⚠️ 構造欠落検知 (欠落: {missing}, 要約長: {crit_sum_len}字)。再試行 ({attempt}/{max_retries})...")
                 if attempt < max_retries:
                     time.sleep(backoff_factor ** attempt)
                     continue
