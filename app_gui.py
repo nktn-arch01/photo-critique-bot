@@ -1,6 +1,7 @@
 import sys
 import os
 import json
+import re
 import subprocess
 import threading
 from pathlib import Path
@@ -73,7 +74,6 @@ def extract_metadata_and_dop(image_path: Path) -> tuple[dict, dict, str]:
         except Exception:
             pass
 
-    # user_intent（撮影コメント）を複数のタグから多角的にフォールバック抽出
     user_intent = (
         meta.get("Caption-Abstract") or 
         meta.get("Description") or 
@@ -93,7 +93,6 @@ def extract_metadata_and_dop(image_path: Path) -> tuple[dict, dict, str]:
         "user_intent": user_intent
     }
 
-    # Sidecar (.dop) 情報の取得
     dop_path = image_path.with_name(image_path.name + ".dop")
     dop_info = {
         "content_headline": meta.get("Headline", ""),
@@ -175,13 +174,17 @@ class Application(tk.Tk):
         selected = filedialog.askdirectory()
         if selected:
             path = Path(selected)
-            if re.match(r'^\d{6}$', path.name):
+            # フォルダ名のチェックを緩和: 6桁数字が含まれているか、またはフォルダ内に画像が存在するか確認
+            valid_exts = {".jpg", ".jpeg", ".png"}
+            has_images = any(f.is_file() and f.suffix.lower() in valid_exts for f in path.iterdir())
+            
+            if has_images or re.search(r'\d{6}', path.name):
                 self.target_dir = path
                 self.lbl_dir_path.config(text=str(path), foreground="black")
                 self.btn_run.config(state=tk.NORMAL)
                 self.lbl_status.config(text="実行準備完了。")
             else:
-                messagebox.showerror("エラー", "年月フォルダ (例: 202607) を選択してください。")
+                messagebox.showerror("エラー", "選択したフォルダ内に画像ファイル (.jpg, .png) が見つかりませんでした。")
 
     def start_processing(self):
         self.btn_select.config(state=tk.DISABLED)
