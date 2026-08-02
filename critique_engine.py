@@ -58,8 +58,15 @@ def generate_critique(
     category = sanitize_str(dop_info.get("category"))
     other_categories = sanitize_str(dop_info.get("other_categories"))
     keywords = sanitize_str(dop_info.get("keywords"))
-    rating_str = sanitize_str(dop_info.get("rating_str"))
     preset_name = sanitize_str(dop_info.get("preset_name"))
+
+    # user_intent が入っている場合と「なし」の場合でプロンプト指示文を自動切替
+    if user_intent != "なし":
+        intent_rule = f"【撮影意図への回答】: 撮影者の意図・悩み（「{user_intent}」）に直接触れ、それがどう写真に結実しているか、またはどうすればより意図が際立つか回答してください。"
+        intent_display = user_intent
+    else:
+        intent_rule = "【撮影意図への回答】: 明確な撮影意図コメントの指定がないため、画面の中に立ち現れている表現上の魅力や視覚的効果を中心に講評を作成してください。"
+        intent_display = "特になし（作品の客観的分析を実施）"
 
     if mode == "full":
         prompt = f"""あなたは写真表現と撮影技術を深く探求するプロの写真評論家・フォトブック編集者です。
@@ -69,20 +76,20 @@ def generate_critique(
 - 撮影日時: {date_time} (時間帯分類: {time_zone_fact})
 - カメラ: {camera_model} / レンズ: {lens_model}
 - 撮影設定: {f_number} | {shutter_speed} | {iso} | 焦点距離: {focal_length}
-- DxO評価/Preset: {rating_str} | Preset: {preset_name}
+- Preset: {preset_name}
 
 【撮影者が付与したメタデータ (IPTC)】
 - 作品タイトル/見出し (Headline): {content_headline}
-- 撮影意図・悩み・コメント (User Intent): {user_intent}
+- 撮影意図・悩み・コメント (User Intent): {intent_display}
 - カテゴリー: {category} (補足: {other_categories})
 - キーワード/タグ: {keywords}
 
 【講評作成の絶対ルール】
-1. 【撮影意図への回答】: 撮影者の意図・悩み（「{user_intent}」）に直接触れ、それがどう写真に結実しているか、またはどうすればより意図が際立つか回答してください。
+1. {intent_rule}
 2. 【脱テンプレート化】: 『三分割法』『柔らかい光』『季節感あふれる』といった安易で一般的な定型フレーズは使用厳禁です。
 3. 【光と陰影の整合】: 時間帯ファクト（{time_zone_fact}）と、実際の画面に現れている直射光・反射・シャドウの濃さを正しく対応させて描写してください。
 4. 【具体的なアクション指導】: アドバイスでは具体的な動作や数値で示してください。
-5. 【動的な独立評価】: ■SCORESの5項目（構図・構成、光・色彩、ストーリー、技術・露出、独自・世界観）は固定サンプル値を出力せず、提示された写真を個別に厳格分析し、1〜5の数値（および対応する★記号）を毎回独自に算出して出力してください。なお、3/5を「標準・良好」、4/5を「優秀」、5/5は「極めて稀な最高評価」、2/5以下は「明確な改善点あり」とし、極端な最高点や最低点に偏らせず、3/5を中心に写真ごとの差を表現してください。
+5. 【動的な独立評価】: ■SCORESの5項目（構図・構成、光・色彩、ストーリー、技術・露出、独自・世界観）は固定サンプル値を出力せず、提示された写真を個別に厳格分析し、1〜5の数値（および対応する★記号）を毎回独自に算出して出力してください。
 
 【出力フォーマット】
 以下のフォーマットと見出しを厳格に維持し、各見出しの後に必ず【1】から【7】までのすべての解説文を途切れなく記述してください。
@@ -126,7 +133,7 @@ def generate_critique(
 与えられた写真を観察し、カード画像生成に必要な以下の4項目（TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY）のみを即座に作成してください。
 
 【講評作成の絶対ルール】
-1. ■SCORESの5項目は提示された写真を個別に分析し、1〜5の数値（および対応する★記号）を独自に算出して出力してください。3/5を「標準・良好」、4/5を「優秀」、5/5は「極めて稀な最高評価」とし、3/5を中心に写真に応じた差をつけてください。
+1. ■SCORESの5項目は提示された写真を個別に分析し、1〜5の数値（および対応する★記号）を独自に算出して出力してください。
 2. 【1】〜【7】などの本文文章は一切出力しないでください。
 
 【出力フォーマット】
@@ -169,6 +176,7 @@ def generate_critique(
             )
             content = response.choices[0].message.content or ""
             
+            # 最低限の必須構造チェックのみ（スコアの固定値判定による無理やり再試行ロジックは撤廃）
             has_title = bool(re.search(r'■\s*TITLE\s*[:：]', content))
             has_scores = bool(re.search(r'■\s*SCORES\s*[:：]', content))
             has_crit_sum = bool(re.search(r'■\s*CRITIQUE_SUMMARY\s*[:：]', content))
