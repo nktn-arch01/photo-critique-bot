@@ -226,7 +226,6 @@ class Application(tk.Tk):
             messagebox.showerror("エラー", "有効なフォルダが選択されていません。")
             return
 
-        # 実行前の確認ダイアログ
         msg = f"以下のフォルダに対してAI講評の一括生成を開始します。\n\n対象: {self.target_dir}\n上書きモード: {'ON' if self.overwrite_var.get() else 'OFF'}"
         if not messagebox.askyesno("実行確認", msg):
             return
@@ -272,8 +271,7 @@ class Application(tk.Tk):
 
             self.update_status(f"処理完了: {processed_count} 件の画像を分析しました。")
             
-            # 完了時のダイアログとフォルダオープン案内
-            if messagebox.askyesno("完了", f"すべての処理が完了しました（成功: {processed_count} 件）。\n評価カードの保存フォルダを開きますか？"):
+            if messagebox.askyesno("完了", f"すべての処理が完了しました（成功: {processed_count} 件）。\n処理対象フォルダを開きますか？"):
                 self.open_output_folder()
 
         except Exception as e:
@@ -283,12 +281,10 @@ class Application(tk.Tk):
             self.reset_buttons()
 
     def open_output_folder(self):
+        # 処理対象として選択しているフォルダ(self.target_dir)を直接開くように変更
         if self.target_dir and self.target_dir.exists():
-            ym_str = self.target_dir.name
-            cards_dir = self.target_dir / f"{ym_str}評価カード"
-            target_open = cards_dir if cards_dir.exists() else self.target_dir
             try:
-                subprocess.run(["open", str(target_open)])
+                subprocess.run(["open", str(self.target_dir)])
             except Exception:
                 pass
 
