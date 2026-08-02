@@ -168,17 +168,18 @@ def generate_critique(
             )
             content = response.choices[0].message.content or ""
             
-            # カード描画やログパースに必要な基本ヘッダーの存在確認のみ
-            required_items = ["■TITLE:", "■SUMMARY:", "■SCORES:", "■CRITIQUE_SUMMARY:"]
-            missing = [item for item in required_items if item not in content]
+            # 正規表現による柔軟な表記ゆれ吸収チェック（全角/半角コロン・空白に対応）
+            has_title = bool(re.search(r'■\s*TITLE\s*[:：]', content))
+            has_scores = bool(re.search(r'■\s*SCORES\s*[:：]', content))
+            has_crit_sum = bool(re.search(r'■\s*CRITIQUE_SUMMARY\s*[:：]', content))
 
-            if missing or "申し訳ありません" in content:
-                print(f"⚠️ 構造ヘッダー欠落を検知 (欠落: {missing})。自動再試行 ({attempt}/{max_retries})...")
+            if not (has_title and has_scores and has_crit_sum) or "申し訳ありません" in content:
+                print(f"⚠️ 必須構造が見つかりません。自動再試行 ({attempt}/{max_retries})...")
                 if attempt < max_retries:
                     time.sleep(backoff_factor ** attempt)
                     continue
                 else:
-                    raise ValueError(f"OpenAI API出力に必須ヘッダーが含まれませんでした (欠落: {missing})")
+                    raise ValueError("OpenAI API出力に必須ヘッダーが含まれませんでした。")
                     
             return content
 
