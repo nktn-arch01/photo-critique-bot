@@ -35,7 +35,7 @@ def generate_critique(
     dop_info: dict = None, 
     model: str = "gpt-4o-mini",
     mode: str = "compact",
-    max_retries: int = 3,
+    max_retries: int = 4,
     backoff_factor: float = 2.0
 ) -> str:
     client = get_openai_client()
@@ -81,11 +81,12 @@ def generate_critique(
 1. 撮影者の意図・悩み（「{user_intent}」）に直接触れ、それがどう写真に結実しているか、またはどうすればより意図が際立つか回答してください。
 2. 『三分割法』『柔らかい光』『季節感あふれる』といった定型フレーズを避け、目の前の写真を具体的に描写してください。
 3. 時間帯ファクト（{time_zone_fact}）と、実際の画面に現れている光・シャドウを整合させて解説してください。
-4. ■SCORESの5項目（構図・構成、光・色彩、ストーリー、技術・露出、独自・世界観）は写真ごとに個別に分析し、1〜5の数値（および対応する★記号）を独自に算出して出力してください。
-5. ## 【7. 自動タグ】 では、写真に写っている被写体、場所、季節、空気感、テーマ等に応じたハッシュタグ（例: #被写体名 #季節 #雰囲気 など）を8〜12個程度生成してください。
+4. ■SCORESの5項目（構図・構成、光・色彩、ストーリー、技術・露出、独自・世界観）は省略せず必ず全5行を出力してください。数値（1〜5）および対応する★記号（例: 4なら★★★★☆）は提示された写真を分析して毎回独自に算出して出力してください。
+5. ■CRITIQUE_SUMMARY は、読者の好奇心を煽るフックとなる文章を「70〜80文字程度（必ず65文字以上・2文以上）」で詳細に記述してください。短すぎる1文のみの出力は不可とします。
+6. ## 【7. 自動タグ】 では、写真に写っている被写体、場所、季節、空気感、テーマ等に応じたハッシュタグ（例: #被写体名 #季節 #雰囲気 など）を8〜12個程度生成してください。
 
 【出力フォーマット】
-以下の見出し形式を維持し、すべてのセクションを途切れなく記述してください。
+以下の見出し形式と項目名を厳格に維持し、すべてのセクションを途切れなく記述してください。
 
 ■TITLE: 写真の核心を表現した15文字以内のタイトル
 ■SUMMARY: この写真の美を決定づける25文字以内のキャッチコピー
@@ -95,7 +96,7 @@ def generate_critique(
 ・ストーリー  : ★★★★☆ (4/5)
 ・技術・露出  : ★★★★☆ (4/5)
 ・独自・世界観: ★★★★☆ (4/5)
-■CRITIQUE_SUMMARY: 否定的な表現を使わず、読者の好奇心を煽るフックとなる文章を70〜80文字程度で記述してください。
+■CRITIQUE_SUMMARY: 否定的な表現を使わず、読者の好奇心を煽るフックとなる文章を70〜80文字程度で詳細に記述してください。
 
 ---
 
@@ -166,13 +167,28 @@ def generate_critique(
             )
             content = response.choices[0].message.content or ""
             
-            if "申し訳ありません" in content or "■TITLE:" not in content:
-                print(f"⚠️ OpenAI拒否/不正応答検知 (試行 {attempt}/{max_retries})。再試行します...")
+            # 厳格な出力バリデーション（完全自動検知）
+            required_items = [
+                "■TITLE:", "■SUMMARY:", "■SCORES:",
+                "・構図・構成", "・光・色彩", "・ストーリー", "・技術・露出", "・独自・世界观",
+                "■CRITIQUE_SUMMARY:"
+            ]
+            # 日本語表記ゆれ対策
+            if "・独自・世界観" in content:
+                required_items.remove("・独自・世界观")
+
+            missing = [item for item in required_items if item not in content]
+            
+            crit_sum_m = re.search(r'■CRITIQUE_SUMMARY:\s*(.+)', content)
+            crit_sum_len = len(crit_sum_m.group(1).strip()) if crit_sum_m else 0
+
+            if missing or crit_sum_len < 60 or "申し訳ありません" in content:
+                print(f"⚠️ 出力検証不完全 (欠落項目: {missing}, 要約長: {crit_sum_len}字)。自動再試行 ({attempt}/{max_retries})...")
                 if attempt < max_retries:
                     time.sleep(backoff_factor ** attempt)
                     continue
                 else:
-                    raise ValueError("OpenAI APIが有効な講評を生成できませんでした。")
+                    raise ValueError(f"OpenAI API出力が条件を満たしませんでした (欠落: {missing})")
                     
             return content
 

@@ -62,7 +62,6 @@ class DesktopLogManager:
 
         content = log_file_path.read_text(encoding="utf-8")
         
-        # 正規表現パターンで既存のログブロック（ファイル名ヘッダーから次のヘッダーの手前まで）を確実に補足
         pattern = re.compile(
             r'==================================================\n'
             r'📷 ファイル名:\s*' + re.escape(file_name) + r'\n'
@@ -71,11 +70,9 @@ class DesktopLogManager:
         )
 
         if pattern.search(content):
-            # 既存ブロックを最新ログで置換
             new_content = pattern.sub(log_entry.strip(), content)
             log_file_path.write_text(new_content, encoding="utf-8")
         else:
-            # 存在しない場合は追記
             with open(log_file_path, "a", encoding="utf-8") as f:
                 f.write("\n\n" + log_entry.strip())
 
@@ -91,13 +88,13 @@ class DesktopLogManager:
         # 2. ログエントリ
         log_entry = f"{formatted_content}\n\n"
 
-        # 3. 月間テキストログ (正規表現置換または追記)
+        # 3. 月間テキストログ
         self._update_or_append_log(self.monthly_log_path, file_name, log_entry)
 
-        # 4. 年間統合テキストログ (正規表現置換または追記)
+        # 4. 年間統合テキストログ
         self._update_or_append_log(self.annual_log_path, file_name, log_entry)
 
-        # 5. ステータスファイル更新 (日時分秒付き)
+        # 5. ステータスファイル更新 (日時付き)
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         status_line = f"[PROCESSED] {now_str} {file_name}\n"
         with open(self.status_file_path, "a", encoding="utf-8") as f:
