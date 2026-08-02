@@ -12,6 +12,8 @@ from critique_engine import generate_critique
 from generate_critique_card import create_critique_card
 from log_manager import DesktopLogManager
 
+CONFIG_FILE = Path.home() / ".photo_ai_config.json"
+
 
 def get_exiftool_path() -> str:
     base_dir = Path(__file__).parent
@@ -134,13 +136,14 @@ class Application(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Photo AI Critique - デスクトップ分析ツール")
-        self.geometry("680x420")
+        self.geometry("700x460")
         self.resizable(False, False)
 
         self.target_dir = None
         self.overwrite_var = tk.BooleanVar(value=False)
 
         self.create_widgets()
+        self.load_last_directory()
 
     def create_widgets(self):
         frame = ttk.Frame(self, padding=20)
@@ -149,32 +152,62 @@ class Application(tk.Tk):
         lbl_title = ttk.Label(frame, text="写真講評 AI 一括生成システム", font=("Helvetica", 16, "bold"))
         lbl_title.pack(anchor=tk.W, pady=(0, 15))
 
+        # フォルダ選択セクション
         dir_frame = ttk.Frame(frame)
         dir_frame.pack(fill=tk.X, pady=5)
 
         self.btn_select = ttk.Button(dir_frame, text="対象フォルダを選択", command=self.select_directory)
         self.btn_select.pack(side=tk.LEFT)
 
-        self.lbl_dir_path = ttk.Label(dir_frame, text="未選択", foreground="gray")
+        self.lbl_dir_path = ttk.Label(dir_frame, text="未選択", foreground="gray", wraplength=480)
         self.lbl_dir_path.pack(side=tk.LEFT, padx=10)
 
+        # オプション設定
         chk_overwrite = ttk.Checkbutton(frame, text="既存の分析結果を上書き再生成する (処理済みファイルをスキップしない)", variable=self.overwrite_var)
         chk_overwrite.pack(anchor=tk.W, pady=15)
 
-        self.btn_run = ttk.Button(frame, text="一括分析・生成を実行", command=self.start_processing, state=tk.DISABLED)
+        # 実行ボタン
+        self.btn_run = ttk.Button(frame, text="一括分析・生成を実行", command=self.confirm_and_start_processing, state=tk.DISABLED)
         self.btn_run.pack(fill=tk.X, pady=10)
 
+        # プログレスバー
         self.progress_bar = ttk.Progressbar(frame, mode="determinate")
         self.progress_bar.pack(fill=tk.X, pady=10)
 
-        self.lbl_status = ttk.Label(frame, text="フォルダを選択してください。", foreground="black")
+        # ステータス表示
+        self.lbl_status = ttk.Label(frame, text="フォルダを選択して実行してください。", foreground="black", font=("Helvetica", 11))
         self.lbl_status.pack(anchor=tk.W, pady=5)
+
+        # 成果物オープンボタンフレーム
+        open_frame = ttk.Frame(frame)
+        open_frame.pack(fill=tk.X, pady=(10, 0))
+        self.btn_open_folder = ttk.Button(open_frame, text="📂 成果物フォルダを開く", command=self.open_output_folder, state=tk.DISABLED)
+        self.btn_open_folder.pack(side=tk.RIGHT)
+
+    def load_last_directory(self):
+        if CONFIG_FILE.exists():
+            try:
+                data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                last_path = Path(data.get("last_dir", ""))
+                if last_path.exists() and last_path.is_dir():
+                    self.target_dir = last_path
+                    self.lbl_dir_path.config(text=str(last_path), foreground="black")
+                    self.btn_run.config(state=tk.NORMAL)
+                    self.btn_open_folder.config(state=tk.NORMAL)
+                    self.lbl_status.config(text="前回の選択フォルダを復元しました。実行準備完了。")
+            except Exception:
+                pass
+
+    def save_last_directory(self, path: Path):
+        try:
+            CONFIG_FILE.write_text(json.dumps({"last_dir": str(path)}, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
 
     def select_directory(self):
         selected = filedialog.askdirectory()
         if selected:
             path = Path(selected)
-            # フォルダ名のチェックを緩和: 6桁数字が含まれているか、またはフォルダ内に画像が存在するか確認
             valid_exts = {".jpg", ".jpeg", ".png"}
             has_images = any(f.is_file() and f.suffix.lower() in valid_exts for f in path.iterdir())
             
@@ -182,13 +215,25 @@ class Application(tk.Tk):
                 self.target_dir = path
                 self.lbl_dir_path.config(text=str(path), foreground="black")
                 self.btn_run.config(state=tk.NORMAL)
+                self.btn_open_folder.config(state=tk.NORMAL)
                 self.lbl_status.config(text="実行準備完了。")
+                self.save_last_directory(path)
             else:
                 messagebox.showerror("エラー", "選択したフォルダ内に画像ファイル (.jpg, .png) が見つかりませんでした。")
 
-    def start_processing(self):
+    def confirm_and_start_processing(self):
+        if not self.target_dir or not self.target_dir.exists():
+            messagebox.showerror("エラー", "有効なフォルダが選択されていません。")
+            return
+
+        # 実行前の確認ダイアログ
+        msg = f"以下のフォルダに対してAI講評の一括生成を開始します。\n\n対象: {self.target_dir}\n上書きモード: {'ON' if self.overwrite_var.get() else 'OFF'}"
+        if not messagebox.askyesno("実行確認", msg):
+            return
+
         self.btn_select.config(state=tk.DISABLED)
         self.btn_run.config(state=tk.DISABLED)
+        self.progress_bar['value'] = 0
         threading.Thread(target=self.process_batch, daemon=True).start()
 
     def process_batch(self):
@@ -209,7 +254,7 @@ class Application(tk.Tk):
                 file_name = img_path.name
                 
                 if not self.overwrite_var.get() and log_mgr.is_processed(file_name):
-                    self.update_status(f"[{idx}/{total}] スキップ: {file_name}")
+                    self.update_status(f"[{idx}/{total}] スキップ (処理済): {file_name}")
                     continue
 
                 self.update_status(f"[{idx}/{total}] AI講評生成中: {file_name}...")
@@ -226,7 +271,10 @@ class Application(tk.Tk):
                 self.progress_bar['value'] = (idx / total) * 100
 
             self.update_status(f"処理完了: {processed_count} 件の画像を分析しました。")
-            messagebox.showinfo("完了", "すべての画像分析・講評カード生成が完了しました。")
+            
+            # 完了時のダイアログとフォルダオープン案内
+            if messagebox.askyesno("完了", f"すべての処理が完了しました（成功: {processed_count} 件）。\n評価カードの保存フォルダを開きますか？"):
+                self.open_output_folder()
 
         except Exception as e:
             self.update_status(f"エラー発生: {e}")
@@ -234,8 +282,19 @@ class Application(tk.Tk):
         finally:
             self.reset_buttons()
 
+    def open_output_folder(self):
+        if self.target_dir and self.target_dir.exists():
+            ym_str = self.target_dir.name
+            cards_dir = self.target_dir / f"{ym_str}評価カード"
+            target_open = cards_dir if cards_dir.exists() else self.target_dir
+            try:
+                subprocess.run(["open", str(target_open)])
+            except Exception:
+                pass
+
     def update_status(self, text: str):
         self.lbl_status.config(text=text)
+        self.update_idletasks()
 
     def reset_buttons(self):
         self.btn_select.config(state=tk.NORMAL)
