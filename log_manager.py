@@ -100,12 +100,11 @@ class DesktopLogManager:
         # 4. 年間統合テキストログ (置換または追記)
         self._update_or_append_log(self.annual_log_path, file_name, log_entry)
 
-        # 5. ステータスファイル更新
+        # 5. ステータスファイル更新 (重複なし)
+        existing_lines = []
         if self.status_file_path.exists():
-            status_text = self.status_file_path.read_text(encoding="utf-8")
-            if file_name not in status_text:
-                with open(self.status_file_path, "a", encoding="utf-8") as f:
-                    f.write(f"[PROCESSED] {file_name}\n")
-        else:
-            with open(self.status_file_path, "a", encoding="utf-8") as f:
-                f.write(f"[PROCESSED] {file_name}\n")
+            existing_lines = [l.strip() for l in self.status_file_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+        line_to_add = f"[PROCESSED] {file_name}"
+        if line_to_add not in existing_lines:
+            existing_lines.append(line_to_add)
+            self.status_file_path.write_text("\n".join(existing_lines) + "\n", encoding="utf-8")

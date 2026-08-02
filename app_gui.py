@@ -95,8 +95,8 @@ def extract_exif_metadata(img_path: Path) -> dict:
                 tag_name = ExifTags.TAGS.get(tag, tag)
                 exif_data[tag_name] = val
 
-            meta["camera_model"] = exif_data.get("Model", "不明")
-            meta["lens_model"] = exif_data.get("LensModel", "不明")
+            meta["camera_model"] = str(exif_data.get("Model", "不明")).replace("\x00", "").strip()
+            meta["lens_model"] = str(exif_data.get("LensModel", "不明")).replace("\x00", "").strip()
             
             if "FNumber" in exif_data:
                 meta["f_number"] = f"f/{float(exif_data['FNumber']):.1f}"
