@@ -12,18 +12,22 @@ def parse_critique_text(critique_text: str) -> dict:
         "point_text": "光と質感が織りなす印象的な情景。"
     }
     
-    title_m = re.search(r'■\s*TITLE\s*[:：]\s*(.+)', critique_text)
-    if title_m: data["title"] = title_m.group(1).strip()
+    # 規則6準拠: (?:##\s*)?■?\s* パターンで表記揺れを吸収
+    title_m = re.search(r'(?:##\s*)?■?\s*TITLE\s*[:：]\s*(.+)', critique_text, re.IGNORECASE)
+    if title_m:
+        data["title"] = title_m.group(1).strip()
 
-    summary_m = re.search(r'■\s*SUMMARY\s*[:：]\s*(.+)', critique_text)
-    if summary_m: data["summary"] = summary_m.group(1).strip()
+    summary_m = re.search(r'(?:##\s*)?■?\s*SUMMARY\s*[:：]\s*(.+)', critique_text, re.IGNORECASE)
+    if summary_m:
+        data["summary"] = summary_m.group(1).strip()
 
-    score_pattern = re.compile(r'・([^:\s：]+)\s*[:：]\s*([★☆]+)\s*\(([\d\.]+)/5\)')
+    # スコア抽出 (全角・半角コロン、スペースの揺れに対応)
+    score_pattern = re.compile(r'・\s*([^:\s：]+)\s*[:：]\s*([★☆]+)\s*\(([\d\.]+)/5\)')
     for m in score_pattern.finditer(critique_text):
         label, stars, val = m.group(1), m.group(2), m.group(3)
         data["scores"][label] = (stars, val)
 
-    crit_sum_m = re.search(r'■\s*CRITIQUE_SUMMARY\s*[:：]\s*(.+)', critique_text)
+    crit_sum_m = re.search(r'(?:##\s*)?■?\s*CRITIQUE_SUMMARY\s*[:：]\s*(.+)', critique_text, re.IGNORECASE)
     if crit_sum_m:
         data["point_text"] = crit_sum_m.group(1).strip()
 

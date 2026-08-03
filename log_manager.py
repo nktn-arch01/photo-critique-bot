@@ -35,12 +35,12 @@ class DesktopLogManager:
         return self.cards_dir / f"{stem}_card.png"
 
     def _format_structured_content(self, file_name: str, metadata_block: str, critique_text: str) -> str:
-        title_m = re.search(r'(■\s*TITLE\s*[:：].+)', critique_text)
-        summary_m = re.search(r'(■\s*SUMMARY\s*[:：].+)', critique_text)
+        # 規則6準拠の正規表現パース
+        title_m = re.search(r'((?:##\s*)?■?\s*TITLE\s*[:：].+)', critique_text, re.IGNORECASE)
+        summary_m = re.search(r'((?:##\s*)?■?\s*SUMMARY\s*[:：].+)', critique_text, re.IGNORECASE)
         
-        # SCORESブロックを表記ゆれに強く抽出
-        scores_m = re.search(r'(■\s*SCORES\s*[:：][\s\S]*?)(?=■\s*CRITIQUE_SUMMARY|##|---|$)', critique_text)
-        crit_sum_m = re.search(r'(■\s*CRITIQUE_SUMMARY\s*[:：].+)', critique_text)
+        scores_m = re.search(r'((?:##\s*)?■?\s*SCORES\s*[:：][\s\S]*?)(?=(?:##\s*)?■?\s*CRITIQUE_SUMMARY|##|---|$)', critique_text, re.IGNORECASE)
+        crit_sum_m = re.search(r'((?:##\s*)?■?\s*CRITIQUE_SUMMARY\s*[:：].+)', critique_text, re.IGNORECASE)
         
         body_m = re.search(r'(##\s*【1[\s\S]*)', critique_text)
 

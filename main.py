@@ -72,8 +72,8 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
             messages_to_send.append(TextSendMessage(text=critique_text))
         else:
             import re
-            title_m = re.search(r'■TITLE:\s*(.+)', critique_text)
-            crit_sum_m = re.search(r'■CRITIQUE_SUMMARY:\s*(.+)', critique_text)
+            title_m = re.search(r'(?:##\s*)?■?\s*TITLE:\s*(.+)', critique_text, re.IGNORECASE)
+            crit_sum_m = re.search(r'(?:##\s*)?■?\s*CRITIQUE_SUMMARY:\s*(.+)', critique_text, re.IGNORECASE)
             
             title_str = title_m.group(1).strip() if title_m else "写真分析講評"
             crit_sum_str = crit_sum_m.group(1).strip() if crit_sum_m else "分析が完了しました。"
@@ -116,7 +116,8 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
         )
 
     elif text in ["設定:簡易版", "簡易版"]:
-        supabase_mgr.set_user_mode(line_user_id, "simple")
+        # モード名を 'compact' に統一
+        supabase_mgr.set_user_mode(line_user_id, "compact")
         line_bot_api.reply_message(
             reply_token,
             TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から高速でカード画像と要約が送信されます。")
@@ -169,7 +170,6 @@ async def callback(request: Request, background_tasks: BackgroundTasks, x_line_s
                     TextSendMessage(text="スタンプありがとうございます！講評したい写真をぜひ送信してみてください📷✨")
                 )
             else:
-                # 動画、音声、ファイル、位置情報などの非対応メッセージ
                 line_bot_api.reply_message(
                     reply_token,
                     TextSendMessage(text="申し訳ありません。動画や音声、非対応のファイル形式には対応しておりません。\n静止画（JPEGまたはPNG形式の写真）を送信してください📷✨")
