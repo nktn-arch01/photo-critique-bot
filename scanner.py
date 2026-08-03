@@ -204,33 +204,25 @@ def _extract_dop_data(image_path: Path) -> dict:
     return dop_meta
 
 
-def scan_monthly_folder(target_dir: Path, log_mgr):
-    valid_exts = {".jpg", ".jpeg", ".png", ".heic"}
-    targets, skipped = [], []
-    for file_path in sorted(target_dir.iterdir()):
-        if file_path.is_file() and file_path.suffix.lower() in valid_exts:
-            if file_path.name.startswith("._") or "_card" in file_path.stem: continue
-            file_name = file_path.name
-            if log_mgr.is_processed(file_name):
-                skipped.append(file_name); continue
+def extract_file_metadata(file_path: Path) -> tuple[dict, dict, str]:
+    """単一の写真ファイルからEXIFおよび.dopメタデータを高精度に抽出する共通関数"""
+    exif_info = _extract_exif_data(file_path)
+    dop_info = _extract_dop_data(file_path)
 
-            exif_info = _extract_exif_data(file_path)
-            dop_info = _extract_dop_data(file_path)
+    final_user_intent = dop_info["caption"] or exif_info["caption"] or "なし"
 
-            final_user_intent = dop_info["caption"] or exif_info["caption"] or "なし"
+    headline = dop_info["content_headline"] or "なし"
+    category = dop_info["category"] or "なし"
+    other_cats = dop_info["other_categories"] or "なし"
+    subj_code = dop_info["subject_code"] or "なし"
+    keywords = dop_info["keywords"] or "なし"
+    byline = dop_info["byline"] or exif_info["artist"] or "なし"
+    copyright_str = dop_info["copyright"] or exif_info["copyright"] or "なし"
 
-            headline = dop_info["content_headline"] or "なし"
-            category = dop_info["category"] or "なし"
-            other_cats = dop_info["other_categories"] or "なし"
-            subj_code = dop_info["subject_code"] or "なし"
-            keywords = dop_info["keywords"] or "なし"
-            byline = dop_info["byline"] or exif_info["artist"] or "なし"
-            copyright_str = dop_info["copyright"] or exif_info["copyright"] or "なし"
+    dop_status_str = f"あり [評価: {dop_info['rating_str']}] [Preset: {dop_info['preset_name']}]" if dop_info['dop_found'] else "なし"
 
-            dop_status_str = f"あり [評価: {dop_info['rating_str']}] [Preset: {dop_info['preset_name']}]" if dop_info['dop_found'] else "なし"
-
-            meta_block = f"""=== メタデータ ===
-file_name: {file_name}
+    meta_block = f"""=== メタデータ ===
+file_name: {file_path.name}
 date_time: {exif_info['date_time']}
 time_zone_fact: {exif_info['time_zone_fact']}
 camera_model: {exif_info['camera_model']}
@@ -249,7 +241,23 @@ Keywords: {keywords}
 Byline: {byline}
 Copyright: {copyright_str}"""
 
-            metadata_dict = {**exif_info, "user_intent": final_user_intent}
+    metadata_dict = {**exif_info, "user_intent": final_user_intent}
+    return metadata_dict, dop_info, meta_block
+
+
+def scan_monthly_folder(target_dir: Path, log_mgr):
+    """月別フォルダ内の一括スキャン処理"""
+    valid_exts = {".jpg", ".jpeg", ".png", ".heic"}
+    targets, skipped = [], []
+    for file_path in sorted(target_dir.iterdir()):
+        if file_path.is_file() and file_path.suffix.lower() in valid_exts:
+            if file_path.name.startswith("._") or "_card" in file_path.stem: continue
+            file_name = file_path.name
+            if log_mgr.is_processed(file_name):
+                skipped.append(file_name); continue
+
+            metadata_dict, dop_info, meta_block = extract_file_metadata(file_path)
+
             targets.append({
                 "path": file_path, "name": file_name, "stem": file_path.stem,
                 "metadata": metadata_dict, "dop_info": dop_info, "metadata_block": meta_block,

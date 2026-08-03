@@ -15,6 +15,7 @@ from critique_engine import generate_critique
 from generate_critique_card import create_critique_card
 from supabase_client import SupabaseManager
 from critique_parser import parse_critique_text
+from scanner import extract_file_metadata  # ★ scanner からメタデータ抽出関数をインポート
 
 app = FastAPI(title="Photo AI Critique LINE Bot")
 
@@ -43,7 +44,18 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
                 f.write(chunk)
 
         user_mode = supabase_mgr.get_user_mode(line_user_id)
-        critique_text = generate_critique(img_path, mode=user_mode)
+
+        # ★ 画像からメタデータ（時間帯情報 time_zone_fact 等）を抽出
+        exif_meta, dop_info, _ = extract_file_metadata(img_path)
+
+        # ★ metadata と dop_info を渡して generate_critique を実行
+        critique_text = generate_critique(
+            img_path, 
+            metadata=exif_meta, 
+            dop_info=dop_info, 
+            mode=user_mode
+        )
+        
         create_critique_card(img_path, critique_text, card_path)
 
         card_public_url = supabase_mgr.upload_card_image(

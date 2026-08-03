@@ -1,215 +1,18 @@
 import os
 import sys
 import json
-import re
 import threading
 import subprocess
 from pathlib import Path
-from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-
-from PIL import Image, ExifTags
 
 from log_manager import DesktopLogManager
 from critique_engine import generate_critique, get_openai_client
 from generate_critique_card import create_critique_card
+from scanner import extract_file_metadata
 
 CONFIG_FILE = Path.home() / ".photo_ai_config.json"
-
-
-def get_exiftool_path() -> str:
-    """ExifToolの実行パスを取得します"""
-    base_dir = Path(__file__).parent
-    local_exiftool = base_dir / "tools" / "exiftool"
-    if local_exiftool.exists():
-        return str(local_exiftool)
-    return "exiftool"
-
-
-def extract_metadata_and_dop(image_path: Path) -> tuple[dict, dict, str]:
-    """
-    ExifToolまたは内蔵PILを使用してメタデータと.dop情報を抽出します。
-    """
-    exiftool_bin = get_exiftool_path()
-    meta_raw = {}
-    
-    # 1. ExifToolによる抽出の試行
-    cmd = [
-        exiftool_bin,
-        "-j",
-        "-DateTimeOriginal",
-        "-CreateDate",
-        "-ModifyDate",
-        "-Model",
-        "-LensModel",
-        "-FNumber",
-        "-ExposureTime",
-        "-ISO",
-        "-FocalLength",
-        "-Headline",
-        "-Caption-Abstract",
-        "-Description",
-        "-UserComment",
-        "-Category",
-        "-SupplementalCategories",
-        "-Keywords",
-        str(image_path)
-    ]
-
-    try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="ignore")
-        if res.returncode == 0 and res.stdout:
-            data = json.loads(res.stdout)
-            if data and isinstance(data, list):
-                meta_raw = data[0]
-    except Exception:
-        pass
-
-    # 2. ExifToolが失敗した場合のPIL（Python内蔵）フォールバック
-    date_time = meta_raw.get("DateTimeOriginal") or meta_raw.get("CreateDate") or meta_raw.get("ModifyDate")
-    camera_model = meta_raw.get("Model")
-    lens_model = meta_raw.get("LensModel")
-    f_number = f"f/{meta_raw.get('FNumber')}" if meta_raw.get('FNumber') else None
-    shutter_speed = f"{meta_raw.get('ExposureTime')}s" if meta_raw.get('ExposureTime') else None
-    iso = f"ISO {meta_raw.get('ISO')}" if meta_raw.get('ISO') else None
-    focal_length = f"{meta_raw.get('FocalLength')}mm" if meta_raw.get('FocalLength') else None
-    user_intent = meta_raw.get("Caption-Abstract") or meta_raw.get("Description") or meta_raw.get("UserComment") or ""
-
-    if not date_time or camera_model is None:
-        try:
-            with Image.open(image_path) as img:
-                exif = img._getexif()
-                if exif:
-                    exif_data = {ExifTags.TAGS.get(k, k): v for k, v in exif.items() if k in ExifTags.TAGS}
-                    date_time = date_time or str(exif_data.get("DateTimeOriginal", exif_data.get("DateTime", "不明")))
-                    camera_model = camera_model or str(exif_data.get("Model", "不明"))
-                    lens_model = lens_model or str(exif_data.get("LensModel", "不明"))
-                    if not f_number and "FNumber" in exif_data:
-                        f_number = f"f/{float(exif_data['FNumber']):.1f}"
-                    if not shutter_speed and "ExposureTime" in exif_data:
-                        shutter_speed = f"1/{int(1/float(exif_data['ExposureTime']))}s"
-                    if not iso and "ISOSpeedRatings" in exif_data:
-                        iso = f"ISO {exif_data['ISOSpeedRatings']}"
-                    if not focal_length and "FocalLength" in exif_data:
-                        focal_length = f"{int(exif_data['FocalLength'])}mm"
-                    user_intent = user_intent or str(exif_data.get("ImageDescription", ""))
-        except Exception:
-            pass
-
-    date_time = date_time or "不明"
-    camera_model = camera_model or "不明"
-    lens_model = lens_model or "不明"
-    f_number = f_number or "不明"
-    shutter_speed = shutter_speed or "不明"
-    iso = iso or "不明"
-    focal_length = focal_length or "不明"
-
-    # 時間帯判定
-    time_zone_fact = "日中・明るい時間帯"
-    if date_time != "不明" and " " in date_time:
-        try:
-            time_str = date_time.split(" ")[1]
-            hour = int(time_str.split(":")[0])
-            if 4 <= hour < 7:
-                time_zone_fact = "早朝・黎明（日の出前後）"
-            elif 7 <= hour < 11:
-                time_zone_fact = "午前（順光・斜光）"
-            elif 11 <= hour < 14:
-                time_zone_fact = "昼間（トップライト・高コントラスト）"
-            elif 14 <= hour < 17:
-                time_zone_fact = "午後（斜光・長シャドウ）"
-            elif 17 <= hour < 19:
-                time_zone_fact = "夕方・マジックアワー（日の入り前後）"
-            else:
-                time_zone_fact = "夜間・暗所（人工光・長時間露光）"
-        except Exception:
-            pass
-
-    extracted_metadata = {
-        "date_time": date_time,
-        "time_zone_fact": time_zone_fact,
-        "camera_model": camera_model,
-        "lens_model": lens_model,
-        "f_number": f_number,
-        "shutter_speed": shutter_speed,
-        "iso": iso,
-        "focal_length": focal_length,
-        "user_intent": user_intent
-    }
-
-    # .dop ファイルの検索と解析
-    dop_path = image_path.parent / f"{image_path.stem}.dop"
-    if not dop_path.exists():
-        dop_path = image_path.parent / f"{image_path.name}.dop"
-
-    dop_info = {
-        "rating_str": "なし",
-        "preset_name": "標準/未指定",
-        "content_headline": meta_raw.get("Headline", ""),
-        "category": meta_raw.get("Category", ""),
-        "other_categories": meta_raw.get("SupplementalCategories", ""),
-        "keywords": meta_raw.get("Keywords", "")
-    }
-
-    if dop_path.exists():
-        try:
-            content = dop_path.read_text(encoding="utf-8", errors="ignore")
-            rank_m = re.search(r'Rank\s*=\s*(\d+)', content)
-            if rank_m:
-                r = int(rank_m.group(1))
-                dop_info["rating_str"] = "★" * r + "☆" * (5 - r) + f" ({r}/5)"
-
-            preset_m = re.search(r'PresetName\s*=\s*"([^"]+)"', content)
-            if preset_m:
-                dop_info["preset_name"] = preset_m.group(1)
-
-            if not dop_info["content_headline"]:
-                hl_m = re.search(r'Headline\s*=\s*"([^"]+)"', content)
-                if hl_m: dop_info["content_headline"] = hl_m.group(1)
-
-            if not extracted_metadata["user_intent"]:
-                cap_m = re.search(r'Caption\s*=\s*\[\[(.*?)\]\]', content, re.DOTALL)
-                if cap_m: extracted_metadata["user_intent"] = cap_m.group(1).strip()
-
-            if not dop_info["category"]:
-                cat_m = re.search(r'Category\s*=\s*"([^"]+)"', content)
-                if cat_m: dop_info["category"] = cat_m.group(1)
-
-            if not dop_info["other_categories"]:
-                supp_m = re.search(r'SupplementalCategories\s*=\s*\{([^\}]+)\}', content)
-                if supp_m:
-                    cats = re.findall(r'"([^"]+)"', supp_m.group(1))
-                    dop_info["other_categories"] = ", ".join(cats)
-
-            if not dop_info["keywords"]:
-                kw_m = re.search(r'Keywords\s*=\s*\{([^\}]+)\}', content)
-                if kw_m:
-                    kws = re.findall(r'"([^"]+)"', kw_m.group(1))
-                    dop_info["keywords"] = ", ".join(kws)
-
-        except Exception:
-            pass
-
-    dop_status = f"あり [評価: {dop_info['rating_str']}] [Preset: {dop_info['preset_name']}]" if dop_path.exists() else "なし"
-
-    metadata_block = f"""file_name: {image_path.name}
-date_time: {extracted_metadata['date_time']}
-time_zone_fact: {extracted_metadata['time_zone_fact']}
-camera_model: {extracted_metadata['camera_model']}
-lens_model: {extracted_metadata['lens_model']}
-f_number: {extracted_metadata['f_number']}
-shutter_speed: {extracted_metadata['shutter_speed']}
-iso: {extracted_metadata['iso']}
-focal_length: {extracted_metadata['focal_length']}
-dxo_dop_sidecar: {dop_status}
-contentHeadline: {dop_info['content_headline']}
-user_intent: {extracted_metadata['user_intent']}
-Category: {dop_info['category']}
-OtherCategories: {dop_info['other_categories']}
-Keywords: {dop_info['keywords']}"""
-
-    return extracted_metadata, dop_info, metadata_block
 
 
 class PhotoAICritiqueApp:
@@ -442,10 +245,10 @@ class PhotoAICritiqueApp:
 
                 self.log(f"📸 [{idx}/{total}] 処理中: {file_name}")
 
-                # 1枚ごとに独立した try...except を設定
                 try:
-                    self.log("   └─ EXIF / .dop メタデータ抽出中...")
-                    exif_meta, dop_info, metadata_block = extract_metadata_and_dop(img_path)
+                    self.log("   └─ EXIF / .dop メタデータ抽出中 (scanner.py)...")
+                    # scanner.py の共通高精度関数を利用
+                    exif_meta, dop_info, metadata_block = extract_file_metadata(img_path)
 
                     self.log("   └─ AI講評生成中 (CritiqueEngine)...")
                     critique_text = generate_critique(
