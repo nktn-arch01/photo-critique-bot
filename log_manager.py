@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from pathlib import Path
+from critique_parser import parse_critique_text
 
 
 class DesktopLogManager:
@@ -35,20 +36,20 @@ class DesktopLogManager:
         return self.cards_dir / f"{stem}_card.png"
 
     def _format_structured_content(self, file_name: str, metadata_block: str, critique_text: str) -> str:
-        # 規則6準拠の正規表現パース
-        title_m = re.search(r'((?:##\s*)?■?\s*TITLE\s*[:：].+)', critique_text, re.IGNORECASE)
-        summary_m = re.search(r'((?:##\s*)?■?\s*SUMMARY\s*[:：].+)', critique_text, re.IGNORECASE)
-        
-        scores_m = re.search(r'((?:##\s*)?■?\s*SCORES\s*[:：][\s\S]*?)(?=(?:##\s*)?■?\s*CRITIQUE_SUMMARY|##|---|$)', critique_text, re.IGNORECASE)
-        crit_sum_m = re.search(r'((?:##\s*)?■?\s*CRITIQUE_SUMMARY\s*[:：].+)', critique_text, re.IGNORECASE)
-        
-        body_m = re.search(r'(##\s*【1[\s\S]*)', critique_text)
+        # 共通パーサーを使用して安全に抽出
+        parsed = parse_critique_text(critique_text)
 
-        title_str = title_m.group(1).strip() if title_m else "■TITLE: 写真分析講評"
-        summary_str = summary_m.group(1).strip() if summary_m else "■SUMMARY: 分析完了"
-        scores_str = scores_m.group(1).strip() if scores_m else "■SCORES:"
-        crit_sum_str = crit_sum_m.group(1).strip() if crit_sum_m else "■CRITIQUE_SUMMARY: 優れた瞬間を切り取った作品。"
-        body_str = body_m.group(1).strip() if body_m else critique_text
+        title_str = f"■TITLE: {parsed['title']}"
+        summary_str = f"■SUMMARY: {parsed['summary']}"
+        
+        # SCORES ブロックの再構築
+        scores_lines = ["■SCORES:"]
+        for label, score_info in parsed["scores"].items():
+            scores_lines.append(f"・{label:<6}: {score_info['stars']} ({score_info['val']}/5)")
+        scores_str = "\n".join(scores_lines)
+
+        crit_sum_str = f"■CRITIQUE_SUMMARY: {parsed['point_text']}"
+        body_str = parsed["body"] if parsed["body"] else critique_text
 
         header_str = f"==================================================\n📷 ファイル名: {file_name}\n=================================================="
         

@@ -1,12 +1,15 @@
 import os
 import time
 import base64
-import re
 from pathlib import Path
 from openai import OpenAI
 
+# 共通パーサーモジュールの読み込み
+from critique_parser import parse_critique_text
+
 
 def get_openai_client() -> OpenAI:
+    """OpenAI APIクライアントの初期化を行います。"""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         key_file = Path.home() / ".openai_api_key"
@@ -18,11 +21,13 @@ def get_openai_client() -> OpenAI:
 
 
 def encode_image(image_path: Path) -> str:
+    """画像ファイルをBase64文字列にエンコードします。"""
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
 def sanitize_str(val: str) -> str:
+    """ヌル文字の除去と文字列の整形を行います。"""
     if not val:
         return "なし"
     clean = str(val).replace("\x00", "").strip()
@@ -38,6 +43,11 @@ def generate_critique(
     max_retries: int = 3,
     backoff_factor: float = 2.0
 ) -> str:
+    """
+    OpenAI Vision APIを呼び出し、写真のAI講評文を生成します。
+    mode="compact": Phase 1 (カード用要素) のみ生成して高速返信
+    mode="full": Phase 1 ➔ Phase 2 (長文本文) の2段階分離生成
+    """
     client = get_openai_client()
     base64_image = encode_image(image_path)
 
@@ -61,7 +71,7 @@ def generate_critique(
     rating_str = sanitize_str(dop_info.get("rating_str"))
     preset_name = sanitize_str(dop_info.get("preset_name"))
 
-    # ハッシュタグ破綻防止: スペースをアンダースコアに置換
+    # ハッシュタグ破綻防止: スペースをアンダースコアに自動置換
     camera_tag = camera_model.replace(" ", "_")
     lens_tag = lens_model.replace(" ", "_")
 
@@ -113,10 +123,10 @@ def generate_critique(
                 max_tokens=500
             )
             content = res1.choices[0].message.content or ""
-            has_title = bool(re.search(r'■\s*TITLE\s*[:：]', content))
-            has_scores = bool(re.search(r'■\s*SCORES\s*[:：]', content))
             
-            if (has_title and has_scores) and "申し訳ありません" not in content:
+            # ★共通パーサーを使用して Phase 1 出力の構造をチェック★
+            parsed_check = parse_critique_text(content)
+            if parsed_check["has_valid_phase1"] and "申し訳ありません" not in content:
                 phase1_output = content.strip()
                 break
             
@@ -129,11 +139,12 @@ def generate_critique(
                 raise e
             time.sleep(backoff_factor ** attempt)
 
+    # 簡易版 (compact) の場合は Phase 1 の結果のみを即座に返す
     if mode != "full":
         return phase1_output
 
     # =========================================================
-    # Phase 2: 本文【1】〜【7】生成 (ハッシュタグの決定的な固定ルール化)
+    # Phase 2: 本文【1】〜【7】生成
     # =========================================================
     prompt_phase2 = f"""あなたは写真表現と撮影技術を深く探求するプロの写真評論家・フォトブック編集者です。
 与えられた写真、撮影環境・メタデータ、および既に確定した以下の基本評価・要約を観察し、撮影者の美意識に寄り添う情熱的で具体的な講評本文（【1】〜【7】）を作成してください。
@@ -206,7 +217,7 @@ def generate_critique(
                 max_tokens=4096
             )
             content = res2.choices[0].message.content or ""
-            if "## 【1." in content or "## 【1" in content:
+            if "【1." in content or "【1" in content:
                 phase2_output = content.strip()
                 break
             
@@ -220,5 +231,3 @@ def generate_critique(
             time.sleep(backoff_factor ** attempt)
 
     return f"{phase1_output}\n\n---\n\n{phase2_output}"
-
-

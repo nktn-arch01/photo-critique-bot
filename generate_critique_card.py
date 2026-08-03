@@ -1,37 +1,7 @@
-import re
 import textwrap
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-
-
-def parse_critique_text(critique_text: str) -> dict:
-    data = {
-        "title": "写真分析講評",
-        "summary": "分析完了",
-        "scores": {},
-        "point_text": "光と質感が織りなす印象的な情景。"
-    }
-    
-    # 規則6準拠: (?:##\s*)?■?\s* パターンで表記揺れを吸収
-    title_m = re.search(r'(?:##\s*)?■?\s*TITLE\s*[:：]\s*(.+)', critique_text, re.IGNORECASE)
-    if title_m:
-        data["title"] = title_m.group(1).strip()
-
-    summary_m = re.search(r'(?:##\s*)?■?\s*SUMMARY\s*[:：]\s*(.+)', critique_text, re.IGNORECASE)
-    if summary_m:
-        data["summary"] = summary_m.group(1).strip()
-
-    # スコア抽出 (全角・半角コロン、スペースの揺れに対応)
-    score_pattern = re.compile(r'・\s*([^:\s：]+)\s*[:：]\s*([★☆]+)\s*\(([\d\.]+)/5\)')
-    for m in score_pattern.finditer(critique_text):
-        label, stars, val = m.group(1), m.group(2), m.group(3)
-        data["scores"][label] = (stars, val)
-
-    crit_sum_m = re.search(r'(?:##\s*)?■?\s*CRITIQUE_SUMMARY\s*[:：]\s*(.+)', critique_text, re.IGNORECASE)
-    if crit_sum_m:
-        data["point_text"] = crit_sum_m.group(1).strip()
-
-    return data
+from critique_parser import parse_critique_text
 
 
 def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
@@ -54,6 +24,7 @@ def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def create_critique_card(image_path: Path, critique_text: str, output_card_path: Path):
+    # 共通パーサーを使用してデータを取得
     parsed = parse_critique_text(critique_text)
     
     W, H = 1080, 1350
@@ -96,7 +67,10 @@ def create_critique_card(image_path: Path, critique_text: str, output_card_path:
     draw.line([(40, y_offset), (1040, y_offset)], fill=(60, 64, 72), width=1)
     y_offset += 20
 
-    for label, (stars, val) in parsed["scores"].items():
+    # 辞書形式から安全にデータを展開して描画
+    for label, score_info in parsed["scores"].items():
+        stars = score_info["stars"]
+        val = score_info["val"]
         draw.text((50, y_offset), f"{label}", font=font_score, fill=(200, 205, 215))
         draw.text((380, y_offset), f"{stars}", font=font_score, fill=(255, 190, 0))
         draw.text((680, y_offset), f"({val}/5)", font=font_score, fill=(160, 165, 175))

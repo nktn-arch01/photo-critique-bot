@@ -14,6 +14,7 @@ from linebot.models import (
 from critique_engine import generate_critique
 from generate_critique_card import create_critique_card
 from supabase_client import SupabaseManager
+from critique_parser import parse_critique_text
 
 app = FastAPI(title="Photo AI Critique LINE Bot")
 
@@ -71,14 +72,9 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
         if user_mode == "full":
             messages_to_send.append(TextSendMessage(text=critique_text))
         else:
-            import re
-            title_m = re.search(r'(?:##\s*)?■?\s*TITLE:\s*(.+)', critique_text, re.IGNORECASE)
-            crit_sum_m = re.search(r'(?:##\s*)?■?\s*CRITIQUE_SUMMARY:\s*(.+)', critique_text, re.IGNORECASE)
-            
-            title_str = title_m.group(1).strip() if title_m else "写真分析講評"
-            crit_sum_str = crit_sum_m.group(1).strip() if crit_sum_m else "分析が完了しました。"
-            
-            compact_msg = f"📷【{title_str}】\n\n{crit_sum_str}"
+            # 共通パーサーを使用して安全かつ確実にテキストを抽出
+            parsed = parse_critique_text(critique_text)
+            compact_msg = f"📷【{parsed['title']}】\n\n{parsed['point_text']}"
             messages_to_send.append(TextSendMessage(text=compact_msg))
 
         line_bot_api.push_message(line_user_id, messages_to_send)
@@ -116,7 +112,6 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
         )
 
     elif text in ["設定:簡易版", "簡易版"]:
-        # モード名を 'compact' に統一
         supabase_mgr.set_user_mode(line_user_id, "compact")
         line_bot_api.reply_message(
             reply_token,

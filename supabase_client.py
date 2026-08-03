@@ -1,6 +1,5 @@
 import os
 import json
-import re
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -10,11 +9,10 @@ except ImportError:
     create_client = None
     Client = Any
 
+from critique_parser import parse_critique_text
+
 
 class SupabaseManager:
-    """
-    Supabase DBおよびStorageへのアクセスを一元管理するクラス
-    """
     def __init__(self):
         self.url: str = os.getenv("SUPABASE_URL", "")
         self.key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", os.getenv("SUPABASE_KEY", ""))
@@ -38,9 +36,6 @@ class SupabaseManager:
         return "compact"
 
     def set_user_mode(self, line_user_id: str, mode: str) -> bool:
-        """
-        ユーザーの講評出力モード ('simple' または 'full') を保存・更新する
-        """
         if not self.client:
             return False
 
@@ -88,22 +83,16 @@ class SupabaseManager:
             print("[Supabase DB Error] Client not initialized", flush=True)
             return False
 
-        title_m = re.search(r'■TITLE:\s*(.+)', critique_text)
-        summary_m = re.search(r'■SUMMARY:\s*(.+)', critique_text)
-        crit_sum_m = re.search(r'■CRITIQUE_SUMMARY:\s*(.+)', critique_text)
-        
-        scores = {}
-        score_pattern = re.compile(r'・([^:\s]+)\s*:\s*([★☆]+)\s*\(([\d\.]+)/5\)')
-        for m in score_pattern.finditer(critique_text):
-            scores[m.group(1)] = {"stars": m.group(2), "val": m.group(3)}
+        # 共通パーサーを使用してパース漏れを完全回避
+        parsed = parse_critique_text(critique_text)
 
         payload = {
             "line_user_id": line_user_id,
             "image_url": image_url,
-            "title": title_m.group(1).strip() if title_m else "",
-            "summary": summary_m.group(1).strip() if summary_m else "",
-            "scores_json": scores,
-            "critique_summary": crit_sum_m.group(1).strip() if crit_sum_m else "",
+            "title": parsed["title"],
+            "summary": parsed["summary"],
+            "scores_json": parsed["scores"],
+            "critique_summary": parsed["point_text"],
             "full_critique_text": critique_text,
             "card_image_url": card_image_url
         }
