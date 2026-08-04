@@ -8,10 +8,10 @@
 本システムは、**ローカル環境（デスクトップGUIバッチ処理 / CLIバッチ）** と **クラウド環境（LINE Bot Web サーバー）** が、中央の **「共通コアモジュール（AIエンジン・テキスト解析・カード生成・スキャナー）」** を共有するハイブリッド構造で設計されています。
 
 [デスクトップ版 (app_gui.py / analyze_folder.py)]
-  ├── 1. メタデータ抽出 (scanner.py / extract_file_metadata) ➔ EXIF + .dop(LuaTableParser)
+  ├── 1. メタデータ抽出 (scanner.py / extract_file_metadata) ➔ EXIF + .dop(正規表現優先+Luaパース補完)
   ├── 2. 共通コア (critique_engine.py) ➔ 2段階分離生成 (mode="full")
-  │      ├── Phase 1: 評価・カード項目 (TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY) 確定
-  │      └── Phase 2: 長文講評本文 (【1】〜【7】) ＋ 動的ハッシュタグ生成
+  │      ├── Phase 1: 時間帯非依存で評価・カード項目 (TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY) 確定
+  │      └── Phase 2: 時間帯ファクト保持＋光・陰影具象描写による長文講評本文 (【1】〜【7】) 生成
   ├── 3. 共通テキスト解析 (critique_parser.py) ➔ 構造化データの統一抽出
   ├── 4. 共通コア (generate_critique_card.py) ➔ 1080x1350px カード画像描画
   └── 5. DesktopLogManager (log_manager.py)
@@ -42,9 +42,9 @@
 
 #### ① 共通コアモジュール (Shared Core)
 - `critique_parser.py`: **【中央テキスト解析エンジン】** AIが出力するテキスト（Phase 1 / Phase 2）をパースし、全角記号や記号揺れ（`##`、`■`、`：`、`（）`、`／`）を100%吸収して統一辞書データへ変換する単一責任モジュール。
-- `critique_engine.py`: OpenAI Vision API (`gpt-4o-mini`) 呼び出し。2段階分離生成（Phase 1 ➔ Phase 2）、動的スコア評価、モード分岐 (`compact`/`full`) を担うコア。
+- `critique_engine.py`: OpenAI Vision API (`gpt-4o-mini`) 呼び出し。2段階分離生成（Phase 1 ➔ Phase 2）、動的スコア評価、光・色彩の具象描写プロンプト制御、モード分岐 (`compact`/`full`) を担うコア。
 - `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。
-- `scanner.py`: **【中央メタデータ解析エンジン】** 画像ファイル (JPG/PNG/HEIC) および DxO PhotoLab の `.dop` サイドカーファイルを高精度スキャンする共通モジュール。`extract_file_metadata()` により全環境で一元利用。
+- `scanner.py`: **【中央メタデータ解析エンジン】** 画像ファイル (JPG/PNG/HEIC) および DxO PhotoLab の `.dop` サイドカーファイルを高精度スキャンする共通モジュール。正規表現優先＋Luaパース補完の多層防御構造を採用。
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
@@ -79,8 +79,10 @@
 ### 規則 3: モード別プロンプト分岐と識別子の統一 (`compact` / `full`)
 - **ルール:** 簡易版呼び出し時は `mode="compact"` を使用し、Phase 1 完了時点で即座にレスポンスを返すこと。LINE Bot設定、Supabase DB、共通コア間でモード識別子に `"simple"` 等の不統一な文字列を使用しないこと。
 
-### 規則 4: Phase 1 への時間帯ファクト (`time_zone_fact`) 必須注入と「夕日誤認バイアス」の防護
-- **ルール:** Phase 1 のリクエストには、画像データだけでなく必ず撮影日時と時間帯分類（`time_zone_fact`）を渡すこと。また、LINE送信等で EXIF 情報が削除され時間帯が「不明」となった場合は、AIが水面の光やシルエットを見て勝手に「夕日・夕焼け・夕暮れ・夕映え・夕景・黄昏」と決めつけることを強力に禁止し、「光の質感・コントラスト・グラデーション」を描写させるプロンプト制約を自動適用すること。
+### 規則 4: 時間帯ラベル依存の脱却と「光・陰影具象描写」プロンプト原則
+- **ルール:** 
+  1. **Phase 1（カード用要素）**: 時間帯の先入観によるAIのハルシネーション（水面やシルエットを見て勝手に夕日と誤認知する等）を防ぐため、プロンプトには時間帯データをあえて与えず、直接的な時間帯単語（「朝日」「夕日」「夕焼け」「夕暮れ」「夕映え」「夕景」「夜景」「黄昏」）の使用を【一切厳禁】とすること。
+  2. **Phase 2（長文本文）**: 撮影者の背景意図を読み解くため時間帯ファクト（`time_zone_fact`）は提示するが、時間帯ラベル単語の連呼を厳禁とし、「光の照射角度」「明暗のコントラスト」「色彩グラデーション」「シャドウの深度」など具体性のある光の表現へ変換させること。
 
 ### 規則 5: ハッシュタグ用機材名スペースのアンダースコア自動置換
 - **ルール:** 機材文字列をハッシュタグへ埋め込む際は、Python側で事前にスペースをアンダースコア（`_`）へ自動変換すること（例: `OM_14-150mm`）。
@@ -88,8 +90,8 @@
 ### 規則 6: テキスト解析の一元化原則 (DRY原則)
 - **ルール:** AI出力テキストのパース処理（見出し、スコア、要約、本文の抽出）はすべて `critique_parser.py` の `parse_critique_text()` を経由すること。各ファイルで個別に `re.search` を記述しないこと。
 
-### 規則 7: メタデータ抽出の一元化原則 (DRY原則)
-- **ルール:** 写真ファイルからの EXIF 情報および `.dop` サイドカーファイルの抽出処理は、すべて `scanner.py` の `extract_file_metadata()` を経由すること。`app_gui.py` や `main.py` 等で個別に独自の正規表現や抽出処理を記述しないこと。
+### 規則 7: メタデータ抽出の一元化原則 (DRY原則) と多層防御解析
+- **ルール:** 写真ファイルからの EXIF 情報および `.dop` サイドカーファイルの抽出処理は、すべて `scanner.py` の `extract_file_metadata()` を経由すること。DxO PhotoLab のバージョン更新による構文変化に備え、`.dop` の抽出処理は「テキスト直読の正規表現（Regex）を最優先とし、`LuaTableParser` で二次補完する多層防御構造（Graceful Degradation）」を維持すること。
 
 ### 規則 8: GUIコンソールの操作安全性・一括処理堅牢性・設定永続化
 - **ルール:** デスクトップGUI（`app_gui.py`）は、選択フォルダの自動記憶（`.photo_ai_config.json`）、確認ダイアログ、リアルタイムログ表示、中断制御を保持すること。また、一括処理ループ内の1枚でエラーが発生しても全体を停止させず、エラーログを出力して次の画像処理へ継続させる独立 `try...except` 構造にすること。
