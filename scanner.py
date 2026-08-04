@@ -45,7 +45,7 @@ class LuaTableParser:
             elif kind == "IDENT":
                 pos += 1; return val
             else:
-                pos += 1; return None
+                return None  # 構文エラー防止: 不正なトークンを無理に消費しない
 
         def parse_table():
             nonlocal pos
@@ -55,14 +55,17 @@ class LuaTableParser:
                 kind, val = tokens[pos]
                 if kind == "RBRACE": pos += 1; break
                 if kind == "COMMA": pos += 1; continue
-                if kind in ("IDENT", "NUMBER") and (pos + 1 < len(tokens)) and tokens[pos+1][0] == "EQUAL":
+                if kind in ("IDENT", "STRING", "NUMBER") and (pos + 1 < len(tokens)) and tokens[pos+1][0] == "EQUAL":
                     key = str(val)
                     pos += 2
                     val_obj = parse_value()
                     res_dict[key] = val_obj
                 else:
                     val_obj = parse_value()
-                    if val_obj is not None: arr_list.append(val_obj)
+                    if val_obj is not None:
+                        arr_list.append(val_obj)
+                    else:
+                        pos += 1  # 無限ループ防止のための安全進展
             if res_dict and arr_list: res_dict["_array"] = arr_list; return res_dict
             elif res_dict: return res_dict
             else: return arr_list
@@ -179,45 +182,65 @@ def _extract_dop_data(image_path: Path) -> dict:
                 if not content: continue
 
                 dop_meta["dop_found"] = True
-                parsed_root = LuaTableParser.parse(content)
 
-                # 1. Rating (評価) の検索 (DxO 9 では 'Rating' キーが使用される)
-                rank_val = deep_find_key(parsed_root, ["Rating", "Rank", "StarRating"]) if parsed_root else None
-                if not rank_val:
-                    # 正規表現による直接救出フォールバック
-                    m_rate = re.search(r'Rating\s*=\s*(\d+)', content)
-                    if m_rate: rank_val = m_rate.group(1)
-
-                if rank_val:
+                # --- 1. テキストからの直接正規表現抽出 (確実・最優先) ---
+                # 評価 (Rating / Rank)
+                m_rate = re.search(r'(?:Rating|Rank|StarRating)\s*=\s*(\d+)', content)
+                if m_rate:
                     try:
-                        r_int = int(float(rank_val))
+                        r_int = int(m_rate.group(1))
                         if r_int > 0:
                             dop_meta["rating_str"] = "★" * r_int + "☆" * (5 - r_int) + f" ({r_int}/5)"
                     except Exception: pass
 
-                # 2. Preset 名の検索 (DxO 9 では 'AppliedPresetDisplayName' キーが使用される)
-                preset_val = deep_find_key(parsed_root, ["AppliedPresetDisplayName", "PresetName", "Preset"]) if parsed_root else None
-                if not preset_val:
-                    m_preset = re.search(r'AppliedPresetDisplayName\s*=\s*"([^"]+)"', content)
-                    if m_preset: preset_val = m_preset.group(1)
-                dop_meta["preset_name"] = preset_val or "標準/未指定"
+                # プリセット名 (AppliedPresetDisplayName)
+                m_preset = re.search(r'(?:AppliedPresetDisplayName|PresetName|AppliedPresetUniqueName)\s*=\s*"([^"]+)"', content)
+                if m_preset:
+                    dop_meta["preset_name"] = m_preset.group(1).strip()
 
-                # 3. IPTC / Caption / User Intent の検索 (DxO 9 では 'contentDescription' キーが使用される)
-                caption_val = deep_find_key(parsed_root, ["contentDescription", "Caption", "Description", "ImageDescription", "user_intent"]) if parsed_root else None
-                if not caption_val:
-                    m_cap = re.search(r'contentDescription\s*=\s*"([^"]*)"', content)
-                    if m_cap and m_cap.group(1).strip(): caption_val = m_cap.group(1).strip()
-                dop_meta["caption"] = caption_val
+                # 撮影意図・コメント (contentDescription)
+                m_cap = re.search(r'(?:contentDescription|Caption|Description|ImageDescription)\s*=\s*"([^"]*)"', content)
+                if m_cap and m_cap.group(1).strip():
+                    dop_meta["caption"] = m_cap.group(1).strip()
 
-                # 4. その他の IPTC メタデータの検索
-                if parsed_root:
-                    dop_meta["content_headline"] = deep_find_key(parsed_root, ["contentHeadline", "Headline", "Title"])
-                    dop_meta["category"] = deep_find_key(parsed_root, ["Category", "IPTCCategory"])
-                    dop_meta["other_categories"] = deep_find_key(parsed_root, ["SupplementalCategories", "OtherCategories", "SupplementalCategory"])
-                    dop_meta["subject_code"] = deep_find_key(parsed_root, ["SubjectCode", "IPTCSubjectCode"])
-                    dop_meta["keywords"] = deep_find_key(parsed_root, ["Keywords", "IPTCKeywords", "Tags"])
-                    dop_meta["byline"] = deep_find_key(parsed_root, ["Byline", "Author", "Artist"])
-                    dop_meta["copyright"] = deep_find_key(parsed_root, ["Copyright", "IPTCCopyright"])
+                # 見出し (contentHeadline)
+                m_head = re.search(r'(?:contentHeadline|Headline|Title)\s*=\s*"([^"]*)"', content)
+                if m_head and m_head.group(1).strip():
+                    dop_meta["content_headline"] = m_head.group(1).strip()
+
+                # カテゴリー (Category)
+                m_cat = re.search(r'(?:IPTCCategory|Category)\s*=\s*"([^"]*)"', content)
+                if m_cat and m_cat.group(1).strip():
+                    dop_meta["category"] = m_cat.group(1).strip()
+
+                # --- 2. Lua テーブルパースによる二次深層レスキュー ---
+                try:
+                    parsed_root = LuaTableParser.parse(content)
+                    if parsed_root:
+                        if dop_meta["rating_str"] == "なし":
+                            rank_val = deep_find_key(parsed_root, ["Rating", "Rank", "StarRating"])
+                            if rank_val:
+                                r_int = int(float(rank_val))
+                                if r_int > 0:
+                                    dop_meta["rating_str"] = "★" * r_int + "☆" * (5 - r_int) + f" ({r_int}/5)"
+
+                        if dop_meta["preset_name"] == "標準/未指定":
+                            preset_val = deep_find_key(parsed_root, ["AppliedPresetDisplayName", "PresetName", "Preset"])
+                            if preset_val: dop_meta["preset_name"] = preset_val
+
+                        if not dop_meta["caption"]:
+                            dop_meta["caption"] = deep_find_key(parsed_root, ["contentDescription", "Caption", "Description", "ImageDescription", "user_intent"])
+
+                        if not dop_meta["content_headline"]:
+                            dop_meta["content_headline"] = deep_find_key(parsed_root, ["contentHeadline", "Headline", "Title"])
+
+                        dop_meta["other_categories"] = deep_find_key(parsed_root, ["SupplementalCategories", "OtherCategories", "SupplementalCategory"])
+                        dop_meta["subject_code"] = deep_find_key(parsed_root, ["SubjectCode", "IPTCSubjectCode"])
+                        dop_meta["keywords"] = deep_find_key(parsed_root, ["Keywords", "IPTCKeywords", "Tags"])
+                        dop_meta["byline"] = deep_find_key(parsed_root, ["Byline", "Author", "Artist"])
+                        dop_meta["copyright"] = deep_find_key(parsed_root, ["Copyright", "IPTCCopyright"])
+                except Exception:
+                    pass  # Luaパースで例外が起きても、上記1で抽出したデータは保護される
 
                 break
             except Exception: pass
