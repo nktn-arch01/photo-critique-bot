@@ -178,11 +178,16 @@ def _extract_dop_data(image_path: Path) -> dict:
                     except Exception: continue
                 if not content: continue
 
-                parsed_root = LuaTableParser.parse(content)
-                if not parsed_root: continue
                 dop_meta["dop_found"] = True
+                parsed_root = LuaTableParser.parse(content)
 
-                rank_val = deep_find_key(parsed_root, ["Rank"])
+                # 1. Rating (評価) の検索 (DxO 9 では 'Rating' キーが使用される)
+                rank_val = deep_find_key(parsed_root, ["Rating", "Rank", "StarRating"]) if parsed_root else None
+                if not rank_val:
+                    # 正規表現による直接救出フォールバック
+                    m_rate = re.search(r'Rating\s*=\s*(\d+)', content)
+                    if m_rate: rank_val = m_rate.group(1)
+
                 if rank_val:
                     try:
                         r_int = int(float(rank_val))
@@ -190,15 +195,30 @@ def _extract_dop_data(image_path: Path) -> dict:
                             dop_meta["rating_str"] = "★" * r_int + "☆" * (5 - r_int) + f" ({r_int}/5)"
                     except Exception: pass
 
-                dop_meta["preset_name"] = deep_find_key(parsed_root, ["PresetName", "Preset"]) or "標準/未指定"
-                dop_meta["content_headline"] = deep_find_key(parsed_root, ["Headline", "contentHeadline", "Title"])
-                dop_meta["caption"] = deep_find_key(parsed_root, ["Caption", "Description", "ImageDescription", "user_intent"])
-                dop_meta["category"] = deep_find_key(parsed_root, ["Category", "IPTCCategory"])
-                dop_meta["other_categories"] = deep_find_key(parsed_root, ["SupplementalCategories", "OtherCategories", "SupplementalCategory"])
-                dop_meta["subject_code"] = deep_find_key(parsed_root, ["SubjectCode", "IPTCSubjectCode"])
-                dop_meta["keywords"] = deep_find_key(parsed_root, ["Keywords", "IPTCKeywords", "Tags"])
-                dop_meta["byline"] = deep_find_key(parsed_root, ["Byline", "Author", "Artist"])
-                dop_meta["copyright"] = deep_find_key(parsed_root, ["Copyright", "IPTCCopyright"])
+                # 2. Preset 名の検索 (DxO 9 では 'AppliedPresetDisplayName' キーが使用される)
+                preset_val = deep_find_key(parsed_root, ["AppliedPresetDisplayName", "PresetName", "Preset"]) if parsed_root else None
+                if not preset_val:
+                    m_preset = re.search(r'AppliedPresetDisplayName\s*=\s*"([^"]+)"', content)
+                    if m_preset: preset_val = m_preset.group(1)
+                dop_meta["preset_name"] = preset_val or "標準/未指定"
+
+                # 3. IPTC / Caption / User Intent の検索 (DxO 9 では 'contentDescription' キーが使用される)
+                caption_val = deep_find_key(parsed_root, ["contentDescription", "Caption", "Description", "ImageDescription", "user_intent"]) if parsed_root else None
+                if not caption_val:
+                    m_cap = re.search(r'contentDescription\s*=\s*"([^"]*)"', content)
+                    if m_cap and m_cap.group(1).strip(): caption_val = m_cap.group(1).strip()
+                dop_meta["caption"] = caption_val
+
+                # 4. その他の IPTC メタデータの検索
+                if parsed_root:
+                    dop_meta["content_headline"] = deep_find_key(parsed_root, ["contentHeadline", "Headline", "Title"])
+                    dop_meta["category"] = deep_find_key(parsed_root, ["Category", "IPTCCategory"])
+                    dop_meta["other_categories"] = deep_find_key(parsed_root, ["SupplementalCategories", "OtherCategories", "SupplementalCategory"])
+                    dop_meta["subject_code"] = deep_find_key(parsed_root, ["SubjectCode", "IPTCSubjectCode"])
+                    dop_meta["keywords"] = deep_find_key(parsed_root, ["Keywords", "IPTCKeywords", "Tags"])
+                    dop_meta["byline"] = deep_find_key(parsed_root, ["Byline", "Author", "Artist"])
+                    dop_meta["copyright"] = deep_find_key(parsed_root, ["Copyright", "IPTCCopyright"])
+
                 break
             except Exception: pass
     return dop_meta
