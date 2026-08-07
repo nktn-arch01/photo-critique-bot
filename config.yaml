@@ -1,9 +1,0 @@
-storage:
-  base_dir: "./DxO folder"
-google_drive:
-  enabled: false
-  sync_dir: ""
-ai:
-  model: "gpt-4o-mini"
-  desktop_mode: "full"
-  line_mode: "compact"
