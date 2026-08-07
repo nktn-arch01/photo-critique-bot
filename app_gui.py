@@ -19,7 +19,7 @@ class PhotoAICritiqueApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Photo AI 写真講評バッチ処理システム")
-        self.root.geometry("700x580")
+        self.root.geometry("700x610")
         self.root.minsize(620, 500)
 
         try:
@@ -62,6 +62,18 @@ class PhotoAICritiqueApp:
         main_frame = ttk.Frame(self.root, padding="15")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
+        # ---------------------------------------------------------
+        # AIモデル情報表示フレーム
+        # ---------------------------------------------------------
+        model_frame = ttk.LabelFrame(main_frame, text=" AIエンジン設定情報 (OpenAI API) ", padding="8")
+        model_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.lbl_active_model = ttk.Label(model_frame, text="• 使用モデル : gpt-4o-mini (従量後払い・制限なし)", font=("Helvetica", 10, "bold"))
+        self.lbl_active_model.pack(anchor=tk.W)
+
+        # ---------------------------------------------------------
+        # フォルダ選択フレーム
+        # ---------------------------------------------------------
         folder_frame = ttk.LabelFrame(main_frame, text=" 処理対象フォルダの確認・選択 ", padding="10")
         folder_frame.pack(fill=tk.X, pady=(0, 10))
 
@@ -215,7 +227,7 @@ class PhotoAICritiqueApp:
     def run_batch(self, target_dir: Path, image_files: list):
         try:
             self.log("=" * 50)
-            self.log(f"🚀 講評バッチ処理を開始します: {target_dir.name}")
+            self.log(f"🚀 講評バッチ処理を開始します (gpt-4o-mini): {target_dir.name}")
             self.log("=" * 50)
 
             log_mgr = DesktopLogManager(target_dir)
@@ -247,10 +259,9 @@ class PhotoAICritiqueApp:
 
                 try:
                     self.log("   └─ EXIF / .dop メタデータ抽出中 (scanner.py)...")
-                    # scanner.py の共通高精度関数を利用
                     exif_meta, dop_info, metadata_block = extract_file_metadata(img_path)
 
-                    self.log("   └─ AI講評生成中 (CritiqueEngine)...")
+                    self.log("   └─ AI講評生成中 (OpenAI gpt-4o-mini)...")
                     critique_text = generate_critique(
                         img_path, 
                         metadata=exif_meta, 
@@ -288,7 +299,7 @@ class PhotoAICritiqueApp:
     def reset_ui(self):
         self.is_running = False
         self.cancel_requested = False
-        self.btn_start.config(state=tk.NORMAL, bg="#007aff")
+        self.btn_start.config(state=tk.DISABLED if self.is_running else tk.NORMAL, bg="#007aff")
         self.btn_cancel.config(state=tk.DISABLED)
         self.btn_browse.config(state=tk.NORMAL)
         self.dir_entry.config(state=tk.NORMAL)

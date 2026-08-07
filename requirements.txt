@@ -2,6 +2,7 @@ fastapi
 uvicorn
 line-bot-sdk
 openai
+google-generativeai
 supabase
 pillow
 requests

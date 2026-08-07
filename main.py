@@ -11,11 +11,12 @@ from linebot.models import (
     QuickReply, QuickReplyButton, MessageAction
 )
 
-from critique_engine import generate_critique
+from critique_engine import generate_critique_for_line
 from generate_critique_card import create_critique_card
+from line_messaging import push_messages_in_batches, split_full_critique_for_line, split_text_for_line
 from supabase_client import SupabaseManager
 from critique_parser import parse_critique_text
-from scanner import extract_file_metadata  # ★ scanner からメタデータ抽出関数をインポート
+from scanner import extract_file_metadata
 
 app = FastAPI(title="Photo AI Critique LINE Bot")
 
@@ -48,12 +49,11 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
         # ★ 画像からメタデータ（時間帯情報 time_zone_fact 等）を抽出
         exif_meta, dop_info, _ = extract_file_metadata(img_path)
 
-        # ★ metadata と dop_info を渡して generate_critique を実行
-        critique_text = generate_critique(
-            img_path, 
-            metadata=exif_meta, 
-            dop_info=dop_info, 
-            mode=user_mode
+        critique_text = generate_critique_for_line(
+            img_path,
+            metadata=exif_meta,
+            dop_info=dop_info,
+            mode=user_mode,
         )
         
         create_critique_card(img_path, critique_text, card_path)
@@ -82,14 +82,15 @@ def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str
             )
 
         if user_mode == "full":
-            messages_to_send.append(TextSendMessage(text=critique_text))
+            for part in split_full_critique_for_line(critique_text):
+                messages_to_send.append(TextSendMessage(text=part))
         else:
-            # 共通パーサーを使用して安全かつ確実にテキストを抽出
             parsed = parse_critique_text(critique_text)
             compact_msg = f"📷【{parsed['title']}】\n\n{parsed['point_text']}"
-            messages_to_send.append(TextSendMessage(text=compact_msg))
+            for part in split_text_for_line(compact_msg):
+                messages_to_send.append(TextSendMessage(text=part))
 
-        line_bot_api.push_message(line_user_id, messages_to_send)
+        push_messages_in_batches(line_bot_api, line_user_id, messages_to_send)
 
     except Exception as e:
         print(f"[Processing Error] {e}", flush=True)
