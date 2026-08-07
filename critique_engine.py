@@ -52,6 +52,12 @@ def _run_two_phase_generation(
                 phase1_output = content
                 break
 
+            print(
+                f"[Phase1 retry {attempt}/{max_retries}] provider={provider} "
+                f"valid={parsed_check['has_valid_phase1']} preview={content[:200]!r}",
+                flush=True,
+            )
+
             if attempt < max_retries:
                 time.sleep(backoff_factor ** attempt)
             else:

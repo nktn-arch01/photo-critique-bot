@@ -16,6 +16,7 @@ from generate_critique_card import create_critique_card
 from line_messaging import push_messages_in_batches, split_full_critique_for_line, split_text_for_line
 from supabase_client import SupabaseManager
 from critique_parser import parse_critique_text
+from ai_vision import sniff_image_mime
 from scanner import extract_file_metadata
 
 app = FastAPI(title="Photo AI Critique LINE Bot")
@@ -29,22 +30,37 @@ supabase_mgr = SupabaseManager()
 
 
 @app.get("/health")
+@app.head("/health")
 def health_check():
     return {"status": "ok", "service": "Photo AI Critique Bot"}
 
 
+@app.on_event("startup")
+def log_startup_config():
+    gemini = "set" if os.getenv("GEMINI_API_KEY") else "MISSING"
+    openai_key = "set" if os.getenv("OPENAI_API_KEY") else "MISSING"
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash (default)")
+    print(
+        f"[Startup] GEMINI_API_KEY={gemini}, OPENAI_API_KEY={openai_key}, GEMINI_MODEL={gemini_model}",
+        flush=True,
+    )
+
+
 def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str):
     temp_dir = Path(tempfile.mkdtemp())
-    img_path = temp_dir / f"{message_id}.jpg"
+    img_path = temp_dir / "pending.jpg"
     card_path = temp_dir / f"{message_id}_card.png"
 
     try:
         message_content = line_bot_api.get_message_content(message_id)
-        with open(img_path, "wb") as f:
-            for chunk in message_content.iter_content():
-                f.write(chunk)
+        image_bytes = b"".join(message_content.iter_content())
+        mime = sniff_image_mime(image_bytes)
+        ext = ".png" if mime == "image/png" else ".jpg"
+        img_path = temp_dir / f"{message_id}{ext}"
+        img_path.write_bytes(image_bytes)
 
         user_mode = supabase_mgr.get_user_mode(line_user_id)
+        print(f"[LINE] user={line_user_id[:8]}... mode={user_mode} image={mime} bytes={len(image_bytes)}", flush=True)
 
         # ★ 画像からメタデータ（時間帯情報 time_zone_fact 等）を抽出
         exif_meta, dop_info, _ = extract_file_metadata(img_path)
