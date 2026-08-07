@@ -77,7 +77,7 @@
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
-- `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ自動記憶 (`.photo_ai_config.json`)、独立例外処理、リアルタイムログ表示、中断制御対応。
+- `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、独立例外処理、リアルタイムログ表示、中断制御対応。
 - `analyze_folder.py`: 月別フォルダを一括処理するCLIバッチスクリプト。
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。
 - `PhotoAICritique.command`: ダブルクリック起動シェルスクリプト（Gatekeeper属性の自動解除機能付き）。
@@ -93,6 +93,8 @@
 
 ### 開発・運用スタイル規定
 - **開発・テスト時**: ターミナルからのコピペ一発実行（CLIテストや単体テストスクリプト）で動作確認を行う。
+- **push 前（任意・推奨）**: API キー不要の `python3 test_offline_suite.py`（パーサー・処理済み判定・LINE 4分割）。GitHub Actions `Offline tests` ワークフローが同内容を main で自動実行。
+- **本番の手動確認**: デスクトップ GUI または LINE で代表1枚（簡易/詳細）— OpenAI 実呼び出しは CI では行わない。
 - **本番運用時**: `PhotoAICritique.command` をダブルクリックし、GUI（`app_gui.py`）から対象フォルダを選択して実行する。
 
 ---
@@ -130,7 +132,7 @@
 - 写真ファイルからの EXIF 情報および `.dop` サイドカーファイルの抽出処理は、すべて `scanner.py` の `extract_file_metadata()` を経由すること。`metadata_extractor.py` は後方互換ラッパのみ（新規コードから呼ばない）。DxO PhotoLab のバージョン更新に備え、`.dop` の抽出処理は「テキスト直読の正規表現（Regex）を最優先とし、`LuaTableParser` で二次補完する多層防御構造」を維持すること。
 
 ### 規則 9: GUIコンソールの操作安全性・一括処理堅牢性・設定永続化
-- デスクトップGUI（`app_gui.py`）は、選択フォルダの自動記憶（`.photo_ai_config.json`）、確認ダイアログ、リアルタイムログ表示、中断制御を保持すること。一括処理ループ内の1枚でエラーが発生しても全体を停止させず、次の画像処理へ継続させる独立 `try...except` 構造にすること。
+- デスクトップGUI（`app_gui.py`）は、選択フォルダの自動記憶（`~/.photo_ai_config.json`）、確認ダイアログ、リアルタイムログ表示、中断制御を保持すること。一括処理ループ内の1枚でエラーが発生しても全体を停止させず、次の画像処理へ継続させる独立 `try...except` 構造にすること。
 
 ### 規則 10: 同期・非同期処理の厳格分離 (LINE Webhook)
 - LINEの Webhook 内で重いタスクを行う際は、必ず FastAPI の `BackgroundTasks` を使用し、一括送信は `push_message` で行うこと。
@@ -140,7 +142,7 @@
 - `/health` エンドポイントを設け、外部監視（UptimeRobot等）から 5分間隔で GET アクセスを送信させること。
 
 ### 規則 12: メタデータ抽出の二重フォールバック構造
-- メタデータ解析時は `exiftool` バイナリの実行を第一候補とし、ローカル環境に同ツールが存在しない場合は Python 内蔵の PIL 処理および `scanner.py` 内の `LuaTableParser` へ安全にフォールバックすること。
+- メタデータ解析時は `scanner.py` 内で **`exiftool -json -n` を第一候補**とし、未インストールまたは失敗時は **PIL（`_getexif`）** へフォールバックすること。`.dop` は正規表現優先＋ `LuaTableParser` 補完（規則8）。
 
 ### 規則 13: DBキー名および権限管理の安定性維持
 - Supabase 接続時の環境変数には `SUPABASE_SERVICE_ROLE_KEY` を優先使用し、バックエンドからの書き込み権限エラー（RLSブロック）を防止すること。既存のコードベースと環境変数の命名互換性を損なわない設計を維持すること。

@@ -1,5 +1,8 @@
 import datetime
+import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from PIL import Image, ExifTags
 
@@ -136,31 +139,119 @@ def _determine_time_zone_fact(dt: datetime.datetime | None) -> str:
     else: return "夜間・深夜"
 
 
-def _extract_exif_data(image_path: Path) -> dict:
-    meta = {
+def _default_exif_meta() -> dict:
+    return {
         "date_time": "不明", "time_zone_fact": "不明", "camera_model": "不明",
         "lens_model": "不明", "f_number": "不明", "shutter_speed": "不明",
         "iso": "不明", "focal_length": "不明", "caption": None, "copyright": None, "artist": None,
     }
+
+
+def _apply_datetime_to_meta(meta: dict, dt_str: str | None) -> None:
+    if not dt_str:
+        return
     try:
+        dt = datetime.datetime.strptime(str(dt_str).strip(), "%Y:%m:%d %H:%M:%S")
+        meta["date_time"] = dt.strftime("%Y-%m-%d %H:%M:%S")
+        meta["time_zone_fact"] = _determine_time_zone_fact(dt)
+    except Exception:
+        meta["date_time"] = str(dt_str).strip()
+
+
+def _extract_exif_via_exiftool(image_path: Path) -> dict | None:
+    """exiftool -json -n（規則12 第一候補）。未インストール時は None。"""
+    if not shutil.which("exiftool"):
+        return None
+    try:
+        proc = subprocess.run(
+            ["exiftool", "-json", "-n", str(image_path)],
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return None
+        tags = json.loads(proc.stdout)[0]
+    except Exception:
+        return None
+
+    meta = _default_exif_meta()
+    _apply_datetime_to_meta(
+        meta,
+        tags.get("DateTimeOriginal") or tags.get("CreateDate") or tags.get("ModifyDate"),
+    )
+
+    model = tags.get("Model") or tags.get("CameraModelName")
+    if model:
+        meta["camera_model"] = str(model).replace("\x00", "").strip()
+
+    lens = tags.get("LensModel") or tags.get("Lens") or tags.get("LensID")
+    if lens:
+        meta["lens_model"] = str(lens).replace("\x00", "").strip()
+
+    if tags.get("FNumber") is not None:
+        try:
+            meta["f_number"] = f"f/{float(tags['FNumber']):.1f}"
+        except Exception:
+            meta["f_number"] = str(tags["FNumber"])
+
+    if tags.get("ExposureTime") is not None:
+        try:
+            et = float(tags["ExposureTime"])
+            if et <= 0:
+                meta["shutter_speed"] = str(tags["ExposureTime"])
+            elif et < 1:
+                meta["shutter_speed"] = f"1/{int(round(1 / et))}s"
+            else:
+                meta["shutter_speed"] = f"{et}s"
+        except Exception:
+            meta["shutter_speed"] = str(tags["ExposureTime"])
+
+    if tags.get("ISO") is not None:
+        meta["iso"] = f"ISO {tags['ISO']}"
+
+    if tags.get("FocalLength") is not None:
+        try:
+            meta["focal_length"] = f"{int(float(tags['FocalLength']))}mm"
+        except Exception:
+            meta["focal_length"] = str(tags["FocalLength"])
+
+    for tag, key in (
+        ("ImageDescription", "caption"),
+        ("Description", "caption"),
+        ("Artist", "artist"),
+        ("Copyright", "copyright"),
+    ):
+        val = tags.get(tag)
+        if val and not meta.get(key):
+            meta[key] = str(val).replace("\x00", "").strip()
+
+    return meta
+
+
+def _extract_exif_via_pil(image_path: Path) -> dict:
+    meta = _default_exif_meta()
+    try:
+        ensure_heif_support()
         with Image.open(image_path) as img:
             exif_raw = img._getexif()
-            if not exif_raw: return meta
+            if not exif_raw:
+                return meta
             exif = {ExifTags.TAGS.get(k, k): v for k, v in exif_raw.items() if k in ExifTags.TAGS}
-            dt_str = exif.get("DateTimeOriginal") or exif.get("DateTime")
-            if dt_str:
-                try:
-                    dt = datetime.datetime.strptime(str(dt_str), "%Y:%m:%d %H:%M:%S")
-                    meta["date_time"] = dt.strftime("%Y-%m-%d %H:%M:%S")
-                    meta["time_zone_fact"] = _determine_time_zone_fact(dt)
-                except Exception: meta["date_time"] = str(dt_str)
+            _apply_datetime_to_meta(
+                meta,
+                exif.get("DateTimeOriginal") or exif.get("DateTime"),
+            )
 
             meta["camera_model"] = str(exif.get("Model", "不明")).replace("\x00", "").strip()
             meta["lens_model"] = str(exif.get("LensModel", "不明")).replace("\x00", "").strip()
 
             if "FNumber" in exif:
-                try: meta["f_number"] = f"f/{float(exif['FNumber']):.1f}"
-                except Exception: meta["f_number"] = str(exif["FNumber"])
+                try:
+                    meta["f_number"] = f"f/{float(exif['FNumber']):.1f}"
+                except Exception:
+                    meta["f_number"] = str(exif["FNumber"])
             if "ExposureTime" in exif:
                 try:
                     et = float(exif["ExposureTime"])
@@ -172,10 +263,13 @@ def _extract_exif_data(image_path: Path) -> dict:
                         meta["shutter_speed"] = f"{et}s"
                 except Exception:
                     meta["shutter_speed"] = str(exif["ExposureTime"])
-            if "ISOSpeedRatings" in exif: meta["iso"] = f"ISO {exif['ISOSpeedRatings']}"
+            if "ISOSpeedRatings" in exif:
+                meta["iso"] = f"ISO {exif['ISOSpeedRatings']}"
             if "FocalLength" in exif:
-                try: meta["focal_length"] = f"{int(float(exif['FocalLength']))}mm"
-                except Exception: meta["focal_length"] = str(exif["FocalLength"])
+                try:
+                    meta["focal_length"] = f"{int(float(exif['FocalLength']))}mm"
+                except Exception:
+                    meta["focal_length"] = str(exif["FocalLength"])
 
             if "ImageDescription" in exif and exif["ImageDescription"]:
                 meta["caption"] = str(exif["ImageDescription"]).replace("\x00", "").strip()
@@ -183,8 +277,35 @@ def _extract_exif_data(image_path: Path) -> dict:
                 meta["artist"] = str(exif["Artist"]).replace("\x00", "").strip()
             if "Copyright" in exif and exif["Copyright"]:
                 meta["copyright"] = str(exif["Copyright"]).replace("\x00", "").strip()
-    except Exception: pass
+    except Exception:
+        pass
     return meta
+
+
+def _merge_exif_meta(primary: dict | None, fallback: dict) -> dict:
+    """primary（exiftool）を優先し、欠損項目のみ fallback（PIL）で補完。"""
+
+    def _missing(val) -> bool:
+        if val is None:
+            return True
+        if val == "不明":
+            return True
+        return isinstance(val, str) and not str(val).strip()
+
+    out = _default_exif_meta()
+    for key in out:
+        val = primary.get(key) if primary else None
+        if _missing(val):
+            val = fallback.get(key)
+        if not _missing(val):
+            out[key] = val
+    return out
+
+
+def _extract_exif_data(image_path: Path) -> dict:
+    exif_tool = _extract_exif_via_exiftool(image_path)
+    pil_meta = _extract_exif_via_pil(image_path)
+    return _merge_exif_meta(exif_tool, pil_meta)
 
 
 def _extract_dop_data(image_path: Path) -> dict:

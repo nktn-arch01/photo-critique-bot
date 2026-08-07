@@ -51,7 +51,7 @@ def reply_image_received(reply_token: str, line_user_id: str) -> None:
     """Webhook 内で即時返信（reply_token は約30秒で失効するためここでのみ使用）。"""
     mode = supabase_mgr.get_user_mode(line_user_id)
     mode_label = "詳細版" if mode == "full" else "簡易版"
-    wait_hint = "1〜2分ほど" if mode == "full" else "30秒ほど"
+    wait_hint = "30秒ほど" if mode == "full" else "15秒ほど"
     try:
         line_bot_api.reply_message(
             reply_token,

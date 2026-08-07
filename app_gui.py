@@ -13,7 +13,7 @@ from critique_engine import generate_critique, get_openai_client
 from generate_critique_card import create_critique_card
 from scanner import extract_file_metadata, SUPPORTED_IMAGE_SUFFIXES
 
-CONFIG_FILE = Path.home() / ".photo_ai_config.json"
+CONFIG_FILE = Path.home() / ".photo_ai_config.json"  # 仕様: ユーザーホーム直下（プロジェクト外）
 
 
 class PhotoAICritiqueApp:

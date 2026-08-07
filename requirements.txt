@@ -7,4 +7,3 @@ supabase
 pillow
 pillow-heif
 requests
-japanize-matplotlib
