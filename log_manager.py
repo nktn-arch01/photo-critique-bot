@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from critique_parser import parse_critique_text
+from critique_parser import parse_critique_text, is_valid_phase2_content
 
 
 class DesktopLogManager:
@@ -23,11 +23,23 @@ class DesktopLogManager:
         self.notes_dir.mkdir(parents=True, exist_ok=True)
         self.cards_dir.mkdir(parents=True, exist_ok=True)
 
-    def is_processed(self, file_name: str) -> bool:
-        if self.status_file_path.exists():
-            status_text = self.status_file_path.read_text(encoding="utf-8")
-            if file_name in status_text:
+    _PROCESSED_STATUS_LINE = re.compile(
+        r"^\[PROCESSED\]\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+(?P<file_name>.+?)\s*$",
+        re.MULTILINE,
+    )
+
+    def _is_in_status_file(self, file_name: str) -> bool:
+        if not self.status_file_path.exists():
+            return False
+        status_text = self.status_file_path.read_text(encoding="utf-8")
+        for match in self._PROCESSED_STATUS_LINE.finditer(status_text):
+            if match.group("file_name") == file_name:
                 return True
+        return False
+
+    def is_processed(self, file_name: str) -> bool:
+        if self._is_in_status_file(file_name):
+            return True
         stem = Path(file_name).stem
         return (self.notes_dir / f"{stem}.md").exists()
 
@@ -49,13 +61,26 @@ class DesktopLogManager:
         scores_str = "\n".join(scores_lines)
 
         crit_sum_str = f"■CRITIQUE_SUMMARY: {parsed['point_text']}"
-        body_str = parsed["body"] if parsed["body"] else critique_text
+        body_str = self._resolve_body_for_log(critique_text, parsed)
 
         header_str = f"==================================================\n📷 ファイル名: {file_name}\n=================================================="
         
         structured_critique = f"{title_str}\n\n{summary_str}\n\n{scores_str}\n\n{crit_sum_str}\n\n---\n\n{body_str}"
         full_content = f"{header_str}\n{structured_critique}\n\n---\n\n{metadata_block}"
         return full_content
+
+    def _resolve_body_for_log(self, critique_text: str, parsed: dict) -> str:
+        if parsed.get("body"):
+            return parsed["body"]
+        if "---" in critique_text:
+            tail = critique_text.split("---", 1)[1].strip()
+            if tail:
+                tail_parsed = parse_critique_text(tail)
+                if tail_parsed.get("body"):
+                    return tail_parsed["body"]
+                if is_valid_phase2_content(tail):
+                    return tail
+        return critique_text
 
     def _update_or_append_log(self, log_file_path: Path, file_name: str, log_entry: str):
         if not log_file_path.exists():

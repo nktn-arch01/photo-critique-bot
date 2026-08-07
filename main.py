@@ -47,7 +47,27 @@ def log_startup_config():
     )
 
 
-def process_image_and_reply(reply_token: str, line_user_id: str, message_id: str):
+def reply_image_received(reply_token: str, line_user_id: str) -> None:
+    """Webhook 内で即時返信（reply_token は約30秒で失効するためここでのみ使用）。"""
+    mode = supabase_mgr.get_user_mode(line_user_id)
+    mode_label = "詳細版" if mode == "full" else "簡易版"
+    wait_hint = "1〜2分ほど" if mode == "full" else "30秒ほど"
+    try:
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text=(
+                    f"📷 写真を受け取りました（{mode_label}）。\n"
+                    f"AIが講評とカード画像を作成しています（{wait_hint}）。\n"
+                    "完成次第、このトークに送信します。"
+                )
+            ),
+        )
+    except Exception as e:
+        print(f"[LINE reply ack error] {e}", flush=True)
+
+
+def process_image_and_reply(line_user_id: str, message_id: str):
     temp_dir = Path(tempfile.mkdtemp())
     img_path = temp_dir / "pending.jpg"
     card_path = temp_dir / f"{message_id}_card.png"
@@ -180,11 +200,11 @@ async def callback(request: Request, background_tasks: BackgroundTasks, x_line_s
 
             if isinstance(event.message, ImageMessage):
                 message_id = event.message.id
+                reply_image_received(reply_token, line_user_id)
                 background_tasks.add_task(
                     process_image_and_reply,
-                    reply_token,
                     line_user_id,
-                    message_id
+                    message_id,
                 )
             elif isinstance(event.message, TextMessage):
                 text_content = event.message.text.strip()

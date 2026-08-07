@@ -11,7 +11,8 @@ def parse_critique_text(critique_text: str) -> dict:
         "scores": {},
         "point_text": "光と質感が織りなす印象的な情景。",
         "body": "",
-        "has_valid_phase1": False
+        "has_valid_phase1": False,
+        "has_valid_phase2": False,
     }
 
     if not critique_text:
@@ -40,6 +41,8 @@ def parse_critique_text(critique_text: str) -> dict:
 
     # 5. 本文 (【1】〜【7】) 抽出
     body_m = re.search(r'(##\s*【1[\s\S]*)', critique_text)
+    if not body_m:
+        body_m = re.search(r'(【1[\.\s][\s\S]*)', critique_text)
     if body_m:
         data["body"] = body_m.group(1).strip()
 
@@ -47,4 +50,16 @@ def parse_critique_text(critique_text: str) -> dict:
     if title_m and len(data["scores"]) > 0:
         data["has_valid_phase1"] = True
 
+    data["has_valid_phase2"] = bool(data["body"])
+
     return data
+
+
+def is_valid_phase2_content(critique_text: str) -> bool:
+    """Phase 2 本文がパーサーまたは見出しパターンで検証できるか。"""
+    if not critique_text or not critique_text.strip():
+        return False
+    parsed = parse_critique_text(critique_text)
+    if parsed["has_valid_phase2"]:
+        return True
+    return bool(re.search(r"【1[\.\s]", critique_text))

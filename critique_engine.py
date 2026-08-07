@@ -12,7 +12,7 @@ from ai_vision import (
     get_openai_client,
     is_quota_or_rate_limit_error,
 )
-from critique_parser import parse_critique_text
+from critique_parser import parse_critique_text, is_valid_phase2_content
 from critique_prompts import CritiquePromptContext, build_phase1_prompt, build_phase2_prompt
 
 # デスクトップ等からの後方互換
@@ -85,9 +85,15 @@ def _run_two_phase_generation(
                 model=model,
                 max_tokens=2500,
             )
-            if "【1." in content or "【1" in content:
+            if is_valid_phase2_content(content):
                 phase2_output = content
                 break
+
+            print(
+                f"[Phase2 retry {attempt}/{max_retries}] provider={provider} "
+                f"valid=False preview={content[:200]!r}",
+                flush=True,
+            )
 
             if attempt < max_retries:
                 time.sleep(backoff_factor ** attempt)

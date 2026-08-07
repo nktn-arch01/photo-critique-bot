@@ -127,13 +127,14 @@
 - AI出力テキストのパース処理（見出し、スコア、要約、本文の抽出）はすべて `critique_parser.py` の `parse_critique_text()` を経由すること。各ファイルで個別に `re.search` を記述しないこと。
 
 ### 規則 8: メタデータ抽出の一元化原則 (DRY原則) と多層防御解析
-- 写真ファイルからの EXIF 情報および `.dop` サイドカーファイルの抽出処理は、すべて `scanner.py` の `extract_file_metadata()` を経由すること。DxO PhotoLab のバージョン更新に備え、`.dop` の抽出処理は「テキスト直読の正規表現（Regex）を最優先とし、`LuaTableParser` で二次補完する多層防御構造」を維持すること。
+- 写真ファイルからの EXIF 情報および `.dop` サイドカーファイルの抽出処理は、すべて `scanner.py` の `extract_file_metadata()` を経由すること。`metadata_extractor.py` は後方互換ラッパのみ（新規コードから呼ばない）。DxO PhotoLab のバージョン更新に備え、`.dop` の抽出処理は「テキスト直読の正規表現（Regex）を最優先とし、`LuaTableParser` で二次補完する多層防御構造」を維持すること。
 
 ### 規則 9: GUIコンソールの操作安全性・一括処理堅牢性・設定永続化
 - デスクトップGUI（`app_gui.py`）は、選択フォルダの自動記憶（`.photo_ai_config.json`）、確認ダイアログ、リアルタイムログ表示、中断制御を保持すること。一括処理ループ内の1枚でエラーが発生しても全体を停止させず、次の画像処理へ継続させる独立 `try...except` 構造にすること。
 
 ### 規則 10: 同期・非同期処理の厳格分離 (LINE Webhook)
 - LINEの Webhook 内で重いタスクを行う際は、必ず FastAPI の `BackgroundTasks` を使用し、一括送信は `push_message` で行うこと。
+- 画像受信時は Webhook 処理内で `reply_message` により **解析中の即時返信** を行い、完了通知（カード・講評）は `push_message` で送ること（`reply_token` の失効対策）。
 
 ### 規則 11: サーバー（Render Free Tier）のスリープ防止
 - `/health` エンドポイントを設け、外部監視（UptimeRobot等）から 5分間隔で GET アクセスを送信させること。

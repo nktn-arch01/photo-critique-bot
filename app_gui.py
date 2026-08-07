@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import re
 import threading
 import subprocess
 from pathlib import Path
@@ -10,7 +11,7 @@ from tkinter import ttk, filedialog, messagebox
 from log_manager import DesktopLogManager
 from critique_engine import generate_critique, get_openai_client
 from generate_critique_card import create_critique_card
-from scanner import extract_file_metadata
+from scanner import extract_file_metadata, SUPPORTED_IMAGE_SUFFIXES
 
 CONFIG_FILE = Path.home() / ".photo_ai_config.json"
 
@@ -201,12 +202,20 @@ class PhotoAICritiqueApp:
             return
 
         image_files = [
-            f for f in target_dir.iterdir() 
-            if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in [".jpg", ".jpeg", ".png"]
+            f for f in target_dir.iterdir()
+            if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in SUPPORTED_IMAGE_SUFFIXES
         ]
         if not image_files:
             messagebox.showwarning("警告", f"対象フォルダ内に画像ファイルが見つかりません:\n{target_dir}")
             return
+
+        if not re.fullmatch(r"\d{6}", target_dir.name):
+            if not messagebox.askyesno(
+                "フォルダ名の確認",
+                f"フォルダ名が月別形式 (例: 202607) ではありません:\n「{target_dir.name}」\n\n"
+                "出力サブフォルダ名や年間ログの保存先が意図と異なる場合があります。\nこのまま続行しますか？",
+            ):
+                return
 
         mode_str = "【上書き再生成モード】" if self.force_overwrite_var.get() else "【通常モード (処理済みスキップ)】"
         if not messagebox.askyesno("実行確認", f"対象フォルダ: {target_dir.name}\n画像ファイル数: {len(image_files)} 件\n動作モード: {mode_str}\n\n処理を開始しますか？"):

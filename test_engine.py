@@ -1,50 +1,34 @@
 import os
 from pathlib import Path
-from critique_engine import CritiqueEngine, CritiqueInput
-from metadata_extractor import extract_jpeg_metadata
 
-api_key = os.environ.get("OPENAI_API_KEY")
-if not api_key:
-    print("[-] OPENAI_API_KEY 環境変数が未設定です。")
-    exit(1)
+from critique_engine import generate_critique_openai
+from critique_parser import parse_critique_text
+from scanner import extract_file_metadata
+
+if not os.environ.get("OPENAI_API_KEY") and not (Path.home() / ".openai_api_key").exists():
+    print("[-] OPENAI_API_KEY または ~/.openai_api_key が未設定です。")
+    raise SystemExit(1)
 
 test_file = Path("test_input.jpg")
 if not test_file.exists():
     print("[-] test_input.jpg が見つかりません。")
-    exit(1)
+    raise SystemExit(1)
 
-print("=== Phase 1: CritiqueEngine 単体テスト開始 ===")
+print("=== OpenAI compact 単体テスト (Phase 1) ===")
 
-# メタデータ抽出
-meta = extract_jpeg_metadata(test_file)
-
-# 生画像バイトの読み込み
-image_bytes = test_file.read_bytes()
-
-# 入力オブジェクト構築
-inp = CritiqueInput(
-    image_bytes=image_bytes,
-    file_name=meta["file_name"],
-    date_time=str(meta["date_time"]),
-    time_zone_fact=meta["time_zone_fact"],
-    camera_model=meta["camera_model"],
-    lens_model=meta["lens_model"],
-    f_number=meta["f_number"],
-    shutter_speed=meta["shutter_speed"],
-    iso=meta["iso"],
-    focal_length=meta["focal_length"],
-    user_intent=meta["user_intent"]
+exif_meta, dop_info, _ = extract_file_metadata(test_file)
+critique_text = generate_critique_openai(
+    test_file,
+    metadata=exif_meta,
+    dop_info=dop_info,
+    mode="compact",
 )
+parsed = parse_critique_text(critique_text)
 
-# エンジン実行
-engine = CritiqueEngine(api_key=api_key)
-res = engine.generate(inp)
-
-print("\n[+] AI応答・パース完了 (Schema Version:", res.schema_version, ")")
+print("\n[+] パース完了")
 print("----------------------------------------")
-print("■ TITLE   :", res.title)
-print("■ SUMMARY :", res.summary)
-print("■ SCORES  :", res.scores)
+print("■ TITLE   :", parsed["title"])
+print("■ SUMMARY :", parsed["summary"])
+print("■ SCORES  :", parsed["scores"])
+print("■ SUMMARY :", parsed["point_text"][:120])
 print("----------------------------------------")
-print("【生成されたMarkdown本文の一部】")
-print(res.body_markdown[:200] + "...\n")

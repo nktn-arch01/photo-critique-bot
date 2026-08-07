@@ -3,6 +3,25 @@ import re
 from pathlib import Path
 from PIL import Image, ExifTags
 
+# デスクトップ GUI / CLI / スキャナー共通の対応拡張子
+SUPPORTED_IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".heic", ".heif"})
+
+_heif_registered = False
+
+
+def ensure_heif_support() -> None:
+    """HEIC/HEIF 読み込み（pillow-heif がある場合のみ）。"""
+    global _heif_registered
+    if _heif_registered:
+        return
+    try:
+        from pillow_heif import register_heif_opener
+
+        register_heif_opener()
+    except ImportError:
+        pass
+    _heif_registered = True
+
 
 class LuaTableParser:
     @staticmethod
@@ -145,8 +164,14 @@ def _extract_exif_data(image_path: Path) -> dict:
             if "ExposureTime" in exif:
                 try:
                     et = float(exif["ExposureTime"])
-                    meta["shutter_speed"] = f"1/{int(1/et)}s" if et < 1 else f"{et}s"
-                except Exception: meta["shutter_speed"] = str(exif["ExposureTime"])
+                    if et <= 0:
+                        meta["shutter_speed"] = str(exif["ExposureTime"])
+                    elif et < 1:
+                        meta["shutter_speed"] = f"1/{int(round(1 / et))}s"
+                    else:
+                        meta["shutter_speed"] = f"{et}s"
+                except Exception:
+                    meta["shutter_speed"] = str(exif["ExposureTime"])
             if "ISOSpeedRatings" in exif: meta["iso"] = f"ISO {exif['ISOSpeedRatings']}"
             if "FocalLength" in exif:
                 try: meta["focal_length"] = f"{int(float(exif['FocalLength']))}mm"
@@ -249,6 +274,7 @@ def _extract_dop_data(image_path: Path) -> dict:
 
 def extract_file_metadata(file_path: Path) -> tuple[dict, dict, str]:
     """単一の写真ファイルからEXIFおよび.dopメタデータを高精度に抽出する共通関数"""
+    ensure_heif_support()
     exif_info = _extract_exif_data(file_path)
     dop_info = _extract_dop_data(file_path)
 
@@ -290,7 +316,7 @@ Copyright: {copyright_str}"""
 
 def scan_monthly_folder(target_dir: Path, log_mgr):
     """月別フォルダ内の一括スキャン処理"""
-    valid_exts = {".jpg", ".jpeg", ".png", ".heic"}
+    valid_exts = SUPPORTED_IMAGE_SUFFIXES
     targets, skipped = [], []
     for file_path in sorted(target_dir.iterdir()):
         if file_path.is_file() and file_path.suffix.lower() in valid_exts:

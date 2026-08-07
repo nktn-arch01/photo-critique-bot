@@ -91,7 +91,7 @@ class SupabaseManager:
             "image_url": image_url,
             "title": parsed["title"],
             "summary": parsed["summary"],
-            "scores_json": parsed["scores"],
+            "scores_json": json.loads(json.dumps(parsed["scores"], ensure_ascii=False)),
             "critique_summary": parsed["point_text"],
             "full_critique_text": critique_text,
             "card_image_url": card_image_url

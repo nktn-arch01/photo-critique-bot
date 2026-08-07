@@ -1,16 +1,21 @@
 """マルチプロバイダ向け Vision API アダプタ（モデル差し替えはここと環境変数で行う）。"""
 
 import base64
+import io
 import os
 from pathlib import Path
 from typing import Literal
 
 from openai import OpenAI
+from PIL import Image, ImageOps
+
+from scanner import ensure_heif_support
 
 VisionProvider = Literal["openai", "gemini"]
 
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+VISION_MAX_SIDE = int(os.getenv("VISION_MAX_IMAGE_SIDE", "2048"))
 
 
 def sniff_image_mime(data: bytes) -> str:
@@ -44,6 +49,19 @@ def get_openai_client() -> OpenAI:
 
 def _read_image_bytes(image_path: Path) -> bytes:
     return image_path.read_bytes()
+
+
+def prepare_vision_image_bytes(image_path: Path, max_side: int | None = None) -> tuple[bytes, str]:
+    """API 送信用に EXIF 補正・リサイズした JPEG バイト列を生成。"""
+    ensure_heif_support()
+    limit = max_side or VISION_MAX_SIDE
+    with Image.open(image_path) as raw:
+        img = ImageOps.exif_transpose(raw).convert("RGB")
+        if max(img.size) > limit:
+            img.thumbnail((limit, limit), Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return buf.getvalue(), "image/jpeg"
 
 
 def _extract_gemini_text(response) -> str:
@@ -84,8 +102,8 @@ def complete_with_image_openai(
     image_detail: str = "low",
 ) -> str:
     client = get_openai_client()
-    mime = image_mime_type(image_path)
-    b64 = base64.b64encode(_read_image_bytes(image_path)).decode("utf-8")
+    raw, mime = prepare_vision_image_bytes(image_path)
+    b64 = base64.b64encode(raw).decode("utf-8")
     image_url_data = f"data:{mime};base64,{b64}"
 
     response = client.chat.completions.create(
@@ -140,8 +158,7 @@ def complete_with_image_gemini(
 
     genai.configure(api_key=api_key)
     gemini_model = genai.GenerativeModel(model_name)
-    raw = _read_image_bytes(image_path)
-    mime = sniff_image_mime(raw)
+    raw, mime = prepare_vision_image_bytes(image_path)
     image_part = {"mime_type": mime, "data": raw}
 
     response = gemini_model.generate_content(
