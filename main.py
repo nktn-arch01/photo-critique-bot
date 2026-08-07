@@ -17,6 +17,7 @@ from line_messaging import push_messages_in_batches, split_full_critique_for_lin
 from supabase_client import SupabaseManager
 from critique_parser import parse_critique_text
 from ai_vision import sniff_image_mime
+from privacy_utils import redact_line_user_id, storage_folder_for_user
 from scanner import extract_file_metadata
 
 app = FastAPI(title="Photo AI Critique LINE Bot")
@@ -81,7 +82,11 @@ def process_image_and_reply(line_user_id: str, message_id: str):
         img_path.write_bytes(image_bytes)
 
         user_mode = supabase_mgr.get_user_mode(line_user_id)
-        print(f"[LINE] user={line_user_id[:8]}... mode={user_mode} image={mime} bytes={len(image_bytes)}", flush=True)
+        print(
+            f"[LINE] user={redact_line_user_id(line_user_id)} mode={user_mode} "
+            f"image={mime} bytes={len(image_bytes)}",
+            flush=True,
+        )
 
         # ★ 画像からメタデータ（時間帯情報 time_zone_fact 等）を抽出
         exif_meta, dop_info, _ = extract_file_metadata(img_path)
@@ -95,10 +100,11 @@ def process_image_and_reply(line_user_id: str, message_id: str):
         
         create_critique_card(img_path, critique_text, card_path)
 
+        storage_path = f"{storage_folder_for_user(line_user_id)}/{message_id}_card.png"
         card_public_url = supabase_mgr.upload_card_image(
             card_path=card_path,
-            file_name=f"{message_id}_card.png",
-            bucket_name="critique-cards"
+            storage_path=storage_path,
+            bucket_name="critique-cards",
         )
 
         supabase_mgr.save_critique_log(

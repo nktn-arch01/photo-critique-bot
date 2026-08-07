@@ -146,3 +146,13 @@
 
 ### 規則 13: DBキー名および権限管理の安定性維持
 - Supabase 接続時の環境変数には `SUPABASE_SERVICE_ROLE_KEY` を優先使用し、バックエンドからの書き込み権限エラー（RLSブロック）を防止すること。既存のコードベースと環境変数の命名互換性を損なわない設計を維持すること。
+
+---
+
+## PART 3: プライバシー & セキュリティ（概要）
+
+詳細・チェックリストは **`PRIVACY_AND_SECURITY.md`** を参照。
+
+- LINE user ID・講評・カードは Supabase（DB / Storage）に保存される。Storage が Public の場合、URL を知る第三者も画像を閲覧し得る。
+- コード側: ログの ID マスク、`privacy_utils.py`、Storage パスのハッシュ化、任意で DB 全文保存オフ / 署名付き URL。
+- 運用側: バケット Private 化、キー管理、保持期間・削除、`supabase/security_recommendations.sql`。

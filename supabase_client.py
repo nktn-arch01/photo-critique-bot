@@ -1,7 +1,7 @@
 import os
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Optional
 
 try:
     from supabase import create_client, Client
@@ -10,6 +10,12 @@ except ImportError:
     Client = Any
 
 from critique_parser import parse_critique_text
+from privacy_utils import (
+    card_signed_url_seconds,
+    redact_line_user_id,
+    should_save_critique_db,
+    should_save_full_critique_text,
+)
 
 
 class SupabaseManager:
@@ -45,29 +51,44 @@ class SupabaseManager:
                 "mode": mode
             }
             self.client.table("user_settings").upsert(payload, on_conflict="user_id").execute()
-            print(f"[Supabase set_user_mode Success] user_id: {line_user_id}, mode: {mode}", flush=True)
+            print(
+                f"[Supabase set_user_mode Success] user={redact_line_user_id(line_user_id)}, mode={mode}",
+                flush=True,
+            )
             return True
         except Exception as e:
             print(f"[Supabase set_user_mode Error] {e}", flush=True)
             return False
 
-    def upload_card_image(self, card_path: Path, file_name: str, bucket_name: str = "critique-cards") -> str:
+    def _card_access_url(self, bucket_name: str, destination_path: str) -> str:
+        signed_sec = card_signed_url_seconds()
+        if signed_sec:
+            res = self.client.storage.from_(bucket_name).create_signed_url(destination_path, signed_sec)
+            if isinstance(res, dict):
+                return res.get("signedURL") or res.get("signedUrl") or ""
+            return str(res)
+        return self.client.storage.from_(bucket_name).get_public_url(destination_path)
+
+    def upload_card_image(
+        self,
+        card_path: Path,
+        storage_path: str,
+        bucket_name: str = "critique-cards",
+    ) -> str:
         if not self.client or not card_path.exists():
             return ""
-
-        destination_path = file_name
 
         try:
             with open(card_path, "rb") as f:
                 self.client.storage.from_(bucket_name).upload(
-                    path=destination_path,
+                    path=storage_path,
                     file=f,
-                    file_options={"content-type": "image/png", "x-upsert": "true"}
+                    file_options={"content-type": "image/png", "x-upsert": "true"},
                 )
-            
-            public_url = self.client.storage.from_(bucket_name).get_public_url(destination_path)
-            print(f"[Supabase Storage Success] URL: {public_url}", flush=True)
-            return public_url
+
+            url = self._card_access_url(bucket_name, storage_path)
+            print(f"[Supabase Storage Success] path={storage_path}", flush=True)
+            return url
         except Exception as e:
             print(f"[Supabase Storage Error] {e}", flush=True)
             return ""
@@ -77,14 +98,18 @@ class SupabaseManager:
         line_user_id: str,
         image_url: str,
         critique_text: str,
-        card_image_url: str = ""
+        card_image_url: str = "",
     ) -> bool:
+        if not should_save_critique_db():
+            print("[Supabase DB] CRITIQUE_SAVE_DB=false — skip insert", flush=True)
+            return True
+
         if not self.client:
             print("[Supabase DB Error] Client not initialized", flush=True)
             return False
 
-        # 共通パーサーを使用してパース漏れを完全回避
         parsed = parse_critique_text(critique_text)
+        full_text = critique_text if should_save_full_critique_text() else ""
 
         payload = {
             "line_user_id": line_user_id,
@@ -93,13 +118,13 @@ class SupabaseManager:
             "summary": parsed["summary"],
             "scores_json": json.loads(json.dumps(parsed["scores"], ensure_ascii=False)),
             "critique_summary": parsed["point_text"],
-            "full_critique_text": critique_text,
-            "card_image_url": card_image_url
+            "full_critique_text": full_text,
+            "card_image_url": card_image_url,
         }
 
         try:
-            res = self.client.table("critique_logs").insert(payload).execute()
-            print(f"[Supabase DB Success] Log saved for user: {line_user_id}", flush=True)
+            self.client.table("critique_logs").insert(payload).execute()
+            print(f"[Supabase DB Success] user={redact_line_user_id(line_user_id)}", flush=True)
             return True
         except Exception as e:
             print(f"[Supabase DB Error] {e}", flush=True)
