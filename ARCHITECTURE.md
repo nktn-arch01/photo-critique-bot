@@ -10,8 +10,9 @@
 処理の目的に応じて最適化された異なるAIプロバイダを採用しています。
 - **デスクトップ版**: OpenAI `gpt-4o-mini`（従量払い / 待機時間なしの一括バッチ）
 - **LINE Bot版（ユーザー設定で切替）**:
-  - **簡易版 (`compact`)**: Google `gemini-2.0-flash` — Phase 1 のみ（高速・Free Tier）
-  - **詳細版 (`full`)**: OpenAI `gpt-4o-mini` — Phase 1 ➔ Phase 2（Gemini full は不安定のため使用しない）
+  - **簡易版 (`compact`)**: OpenAI `gpt-4o-mini` — Phase 1 のみ
+  - **詳細版 (`full`)**: OpenAI `gpt-4o-mini` — Phase 1 ➔ Phase 2
+  - （Gemini Free Tier はプロジェクト側で `limit: 0` の 429 となり本番 LINE では使用しない。`ai_vision.py` に実装は残し、課金有効化後に `LINE_COMPACT_PROVIDER=gemini` で試験可能）
 
 ```text
 [デスクトップ版 (app_gui.py / analyze_folder.py)]
@@ -29,8 +30,8 @@
          └── 処理ステータス (.txt) [PROCESSED] 記録
 
 [LINE Bot版 (main.py / Render)]
-  ├── 講評生成: critique_engine.generate_critique_for_line(mode)
-  │      ├── compact（簡易版）➔ Gemini / Phase 1 のみ
+  ├── 講評生成: critique_engine.generate_critique_for_line(mode) — 簡易・詳細とも OpenAI
+  │      ├── compact（簡易版）➔ OpenAI / Phase 1 のみ
   │      └── full（詳細版）➔ OpenAI / Phase 1 ➔ Phase 2
   ├── 1. LINE Webhook 受信 ➔ BackgroundTasks (非同期処理)
   ├── 2. メタデータ抽出 (scanner.py / extract_file_metadata) ➔ EXIF/時間帯情報の取得
@@ -53,9 +54,9 @@
 | 実行環境 | 変数名 | 必須度 | 説明 |
 | :--- | :--- | :--- | :--- |
 | **デスクトップ (ローカル)** | `OPENAI_API_KEY` | 必須 | `~/.zshrc` または `~/.openai_api_key` から取得。`gpt-4o-mini` の呼び出しに使用。 |
-| **LINE Bot (Render)** | `GEMINI_API_KEY` | 必須 | 簡易版（compact）の Google AI Studio API キー。 |
-| **LINE Bot (Render)** | `GEMINI_MODEL` | 必須 | 簡易版モデル名（例: `gemini-2.0-flash`）。 |
-| **LINE Bot (Render)** | `OPENAI_API_KEY` | 必須 | 詳細版（full）の OpenAI API キー。 |
+| **LINE Bot (Render)** | `OPENAI_API_KEY` | 必須 | 簡易版・詳細版とも OpenAI 講評生成に使用。 |
+| **LINE Bot (Render)** | `GEMINI_API_KEY` | 任意 | `LINE_COMPACT_PROVIDER=gemini` 時のみ。通常は未使用。 |
+| **LINE Bot (Render)** | `GEMINI_MODEL` | 任意 | 上記 Gemini 試験時のモデル名。 |
 | **LINE Bot (Render)** | `SUPABASE_URL` | 必須 | Supabase プロジェクトの接続 URL。 |
 | **LINE Bot (Render)** | `SUPABASE_SERVICE_ROLE_KEY` | 必須 | Supabase の管理者権限キー（RLS非依存で安全にログ記録）。 |
 | **LINE Bot (Render)** | `LINE_CHANNEL_SECRET` | 必須 | LINE Messaging API チャンネルシークレット。 |
@@ -107,7 +108,7 @@
   
 ### 規則 2: マルチAI環境の通信・引数完全性
 - デスクトップ版（OpenAI）とクラウド版（Gemini）で利用するAIサービスが異なっても、共通パーサー（`critique_parser.py`）やカード生成（`generate_critique_card.py`）へ渡す辞書データ構造は完全に一致させること。
-- **プロバイダ選定方針（意図的な分離）**: デスクトップ一括処理は OpenAI（応答安定性・品質）。LINE 簡易版は Gemini（低レイテンシ・Free Tier）、LINE 詳細版は OpenAI full（Gemini の full はエラー多発のため不使用）。方針変更は `generate_critique_for_line()` のみ編集。プロンプトは `critique_prompts.py`、SDK/モデルは `ai_vision.py`。
+- **プロバイダ選定方針**: デスクトップ・LINE（簡易/詳細）とも本番は **OpenAI**。Gemini Free Tier は Google 側クォータ（429 / limit:0）のため LINE では呼ばない。将来課金後に `LINE_COMPACT_PROVIDER=gemini` で試験可能。方針変更は `generate_critique_for_line()`。
 
 ### 規則 3: 2段階分離生成（2フェーズアーキテクチャ）によるスコア動的化と品質担保
 - 長文講評（`mode="full"`）を生成する際は、**「Phase 1: 評価・カード用4項目（TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY）の確定」** と **「Phase 2: 確定結果を注入した長文本文（【1】〜【7】）の生成」** の2段階に通信を分離すること。

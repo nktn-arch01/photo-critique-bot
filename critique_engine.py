@@ -1,5 +1,6 @@
 """2段階講評生成のオーケストレーション（プロバイダは ai_vision 経由で差し替え）。"""
 
+import os
 import time
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from ai_vision import (
     VisionProvider,
     complete_with_image,
     get_openai_client,
+    is_quota_or_rate_limit_error,
 )
 from critique_parser import parse_critique_text
 from critique_prompts import CritiquePromptContext, build_phase1_prompt, build_phase2_prompt
@@ -63,6 +65,8 @@ def _run_two_phase_generation(
             else:
                 raise ValueError("Phase 1 API出力に必須構造が含まれませんでした。")
         except Exception as e:
+            if is_quota_or_rate_limit_error(e):
+                raise
             if attempt == max_retries:
                 raise e
             time.sleep(backoff_factor ** attempt)
@@ -90,6 +94,8 @@ def _run_two_phase_generation(
             else:
                 raise ValueError("Phase 2 API出力に本文構造が含まれませんでした。")
         except Exception as e:
+            if is_quota_or_rate_limit_error(e):
+                raise
             if attempt == max_retries:
                 raise e
             time.sleep(backoff_factor ** attempt)
@@ -178,8 +184,9 @@ def generate_critique_for_line(
 ) -> str:
     """
     LINE Bot 用エントリ（プロバイダ方針はここで一元管理）。
-    - 簡易版 (compact): Gemini / Phase 1 のみ
-    - 詳細版 (full): OpenAI / Phase 1 + 2（Gemini full は不安定のため使用しない）
+    - 簡易版 (compact): OpenAI / Phase 1 のみ（Gemini Free Tier は 429 枯渇のため本番では不使用）
+    - 詳細版 (full): OpenAI / Phase 1 + 2
+    将来 Gemini を試す場合のみ環境変数 LINE_COMPACT_PROVIDER=gemini（非推奨）。
     """
     if mode == "full":
         return generate_critique_openai(
@@ -190,7 +197,18 @@ def generate_critique_for_line(
             max_retries=max_retries,
             backoff_factor=backoff_factor,
         )
-    return generate_critique_gemini(
+
+    if os.getenv("LINE_COMPACT_PROVIDER", "openai").strip().lower() == "gemini":
+        return generate_critique_gemini(
+            image_path,
+            metadata=metadata,
+            dop_info=dop_info,
+            mode="compact",
+            max_retries=max_retries,
+            backoff_factor=backoff_factor,
+        )
+
+    return generate_critique_openai(
         image_path,
         metadata=metadata,
         dop_info=dop_info,

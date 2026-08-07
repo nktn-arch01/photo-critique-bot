@@ -175,3 +175,19 @@ def complete_with_image(
             image_path, prompt, model=model, max_tokens=max_tokens, temperature=temperature
         )
     raise ValueError(f"未対応の Vision プロバイダ: {provider}")
+
+
+def is_quota_or_rate_limit_error(exc: BaseException) -> bool:
+    """Gemini/OpenAI の 429・クォータ枯渇を判定（例外チェーンも走査）。"""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if type(current).__name__ in ("ResourceExhausted", "TooManyRequests", "RateLimitError"):
+            return True
+        msg = str(current).lower()
+        if any(k in msg for k in ("429", "quota", "rate limit", "resource exhausted", "rate_limit")):
+            return True
+        current = current.__cause__ or current.__context__  # type: ignore[assignment]
+    return False
+

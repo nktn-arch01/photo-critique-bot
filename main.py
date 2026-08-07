@@ -41,7 +41,8 @@ def log_startup_config():
     openai_key = "set" if os.getenv("OPENAI_API_KEY") else "MISSING"
     gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash (default)")
     print(
-        f"[Startup] GEMINI_API_KEY={gemini}, OPENAI_API_KEY={openai_key}, GEMINI_MODEL={gemini_model}",
+        f"[Startup] LINE compact/full -> OpenAI (override: LINE_COMPACT_PROVIDER=gemini), "
+        f"OPENAI_API_KEY={openai_key}, GEMINI_API_KEY={gemini}, GEMINI_MODEL={gemini_model}",
         flush=True,
     )
 
