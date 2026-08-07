@@ -44,8 +44,17 @@
 2. **Storage `critique-cards` を Private に** → Render に `SUPABASE_CARD_SIGNED_SECONDS=604800`  
 3. **Table Editor へのアクセス** … 信頼できるアカウントのみ、2FA 有効化  
 4. **Service Role Key** … Render のみ。GitHub・スクショに載せない  
-5. **保持期間** … 古い `critique_logs` / Storage オブジェクトを定期削除（SQL 例は同ファイル）  
+5. **保持期間** … **`retention_purge.py`** + GitHub Actions **`Monthly retention purge`**（`.github/workflows/retention-purge.yml`）で **30 日超**の `critique_logs` と `critique-cards` を毎月自動削除。手動は `DRY_RUN=true python retention_purge.py`  
 6. **利用者への説明** … LINE Bot 利用時に「写真は AI 解析・カード生成のため外部サービスに送信される」旨をプロフィールや固定文で告知  
+
+### GitHub Actions 用 Secrets（月次削除）
+
+| Secret | 内容 |
+|--------|------|
+| `SUPABASE_URL` | プロジェクト URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service Role（Render と同じキー。**リポジトリにコミットしない**） |
+
+初回: GitHub → **Actions** → **Monthly retention purge** → **Run workflow** → `dry_run=true` で件数確認 → 問題なければ `dry_run=false`。
 
 ---
 
@@ -60,7 +69,7 @@
 ### 中期的（中）
 
 - [ ] ログ保持 **`CRITIQUE_SAVE_FULL_TEXT=false`** で要約のみ保存にするか検討  
-- [ ] 不要になった Storage / DB 行の **月次削除**  
+- [ ] 不要になった Storage / DB 行の **月次削除**（`retention_purge.py` + GitHub Secrets 設定済みか確認）  
 - [ ] LINE 友だち向け **簡易プライバシー説明**（固定メッセージ）  
 
 ### 低（余裕があれば）

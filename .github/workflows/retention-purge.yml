@@ -1,0 +1,34 @@
+# 毎月1日 03:15 UTC（日本時間 12:15）に 30 日超の critique_logs / Storage を削除
+name: Monthly retention purge
+
+on:
+  schedule:
+    - cron: "15 3 1 * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true のとき削除せず件数のみ表示"
+        required: false
+        default: "false"
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Supabase client
+        run: pip install --upgrade pip supabase
+
+      - name: Purge old critique data
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RETENTION_DAYS: "30"
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          RETENTION_PURGE_ORPHANS: "true"
+        run: python retention_purge.py

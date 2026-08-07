@@ -86,6 +86,7 @@
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)
 - `main.py`: FastAPI Web サーバー。Gemini 2.0 Flash を呼び出し、LINE Webhook ハンドリング、BackgroundTasks、`/health` エンドポイントを制御。
 - `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`) 操作クライアント。環境変数 `SUPABASE_SERVICE_ROLE_KEY` を参照。
+- `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
 
 ---
 
@@ -155,4 +156,4 @@
 
 - LINE user ID・講評・カードは Supabase（DB / Storage）に保存される。Storage が Public の場合、URL を知る第三者も画像を閲覧し得る。
 - コード側: ログの ID マスク、`privacy_utils.py`、Storage パスのハッシュ化、任意で DB 全文保存オフ / 署名付き URL。
-- 運用側: バケット Private 化、キー管理、保持期間・削除、`supabase/security_recommendations.sql`。
+- 運用側: バケット Private 化、キー管理、**月次保持削除**（`retention_purge.py` / GitHub Actions）、`supabase/security_recommendations.sql`。

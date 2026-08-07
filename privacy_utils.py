@@ -28,6 +28,17 @@ def should_save_full_critique_text() -> bool:
     return os.getenv("CRITIQUE_SAVE_FULL_TEXT", "true").strip().lower() in ("1", "true", "yes")
 
 
+def storage_path_from_card_url(card_image_url: str) -> str | None:
+    """Supabase Storage の card URL からオブジェクトパス（例: abcd…/msg_card.png）を取り出す。"""
+    if not card_image_url:
+        return None
+    for marker in ("/object/sign/critique-cards/", "/object/public/critique-cards/"):
+        if marker in card_image_url:
+            rest = card_image_url.split(marker, 1)[1]
+            return rest.split("?", 1)[0].strip() or None
+    return None
+
+
 def card_signed_url_seconds() -> int | None:
     """設定時は Public URL の代わりに署名付き URL を返す（バケット非公開向け）。"""
     raw = os.getenv("SUPABASE_CARD_SIGNED_SECONDS", "").strip()

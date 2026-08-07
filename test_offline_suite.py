@@ -9,6 +9,7 @@ import tempfile
 from critique_parser import parse_critique_text, is_valid_phase2_content
 from line_messaging import split_full_critique_for_line
 from log_manager import DesktopLogManager
+from privacy_utils import storage_path_from_card_url
 
 PHASE1_SAMPLE = """
 ■TITLE: 試験タイトル
@@ -67,11 +68,23 @@ def test_line_full_split_four_parts():
     assert parts[3].startswith("## 【6.")
 
 
+def test_storage_path_from_card_url():
+    pub = "https://xxx.supabase.co/storage/v1/object/public/critique-cards/abc123/msg_card.png"
+    assert storage_path_from_card_url(pub) == "abc123/msg_card.png"
+    signed = (
+        "https://xxx.supabase.co/storage/v1/object/sign/critique-cards/"
+        "abc123/msg_card.png?token=eyJ"
+    )
+    assert storage_path_from_card_url(signed) == "abc123/msg_card.png"
+    assert storage_path_from_card_url("") is None
+
+
 def run_all():
     test_parser_phase1()
     test_parser_phase2()
     test_log_manager_processed_filename()
     test_line_full_split_four_parts()
+    test_storage_path_from_card_url()
     print("test_offline_suite: OK")
 
 

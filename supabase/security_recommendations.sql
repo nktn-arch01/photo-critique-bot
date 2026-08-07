@@ -12,5 +12,8 @@ ALTER TABLE IF EXISTS public.critique_logs ENABLE ROW LEVEL SECURITY;
 --    Render 環境変数 SUPABASE_CARD_SIGNED_SECONDS=604800 （7日）などを設定。
 --    Public バケットのままでは URL を知る第三者がカード画像を閲覧可能。
 
--- 4. 定期削除（保持期間ポリシー例・手動または pg_cron）
--- DELETE FROM public.critique_logs WHERE created_at < now() - interval '90 days';
+-- 4. 定期削除（保持 30 日・推奨）
+--    リポジトリの retention_purge.py と GitHub Actions「Monthly retention purge」を使用。
+--    手動 SQL の例（GitHub Actions 未使用時）:
+-- DELETE FROM public.critique_logs WHERE created_at < now() - interval '30 days';
+-- Storage はダッシュボードまたは retention_purge.py の Storage API 削除に合わせる。
