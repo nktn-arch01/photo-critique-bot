@@ -11,6 +11,13 @@ from tkinter import ttk, filedialog, messagebox
 from log_manager import DesktopLogManager
 from critique_engine import generate_critique, get_openai_client
 from generate_critique_card import create_critique_card
+from card_theme import (
+    CARD_THEME_DARK,
+    CARD_THEME_LIGHT,
+    DEFAULT_CARD_THEME,
+    card_theme_label,
+    normalize_card_theme,
+)
 from scanner import extract_file_metadata, SUPPORTED_IMAGE_SUFFIXES
 
 CONFIG_FILE = Path.home() / ".photo_ai_config.json"  # 仕様: ユーザーホーム直下（プロジェクト外）
@@ -20,8 +27,8 @@ class PhotoAICritiqueApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Photo AI 写真講評バッチ処理システム")
-        self.root.geometry("700x610")
-        self.root.minsize(620, 500)
+        self.root.geometry("700x660")
+        self.root.minsize(620, 540)
 
         try:
             self.root.tk.call('tk', 'scaling', 2.0)
@@ -43,16 +50,22 @@ class PhotoAICritiqueApp:
                 data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
                 return {
                     "last_dir": data.get("last_dir", default_dir),
-                    "force_overwrite": data.get("force_overwrite", False)
+                    "force_overwrite": data.get("force_overwrite", False),
+                    "card_theme": normalize_card_theme(data.get("card_theme", DEFAULT_CARD_THEME)),
                 }
             except Exception:
                 pass
-        return {"last_dir": default_dir, "force_overwrite": False}
+        return {
+            "last_dir": default_dir,
+            "force_overwrite": False,
+            "card_theme": DEFAULT_CARD_THEME,
+        }
 
     def save_config(self, target_dir_str: str):
         try:
             self.config["last_dir"] = target_dir_str
             self.config["force_overwrite"] = self.force_overwrite_var.get()
+            self.config["card_theme"] = normalize_card_theme(self.card_theme_var.get())
             tmp_file = CONFIG_FILE.with_suffix(".tmp")
             tmp_file.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding="utf-8")
             tmp_file.replace(CONFIG_FILE)
@@ -95,6 +108,30 @@ class PhotoAICritiqueApp:
             variable=self.force_overwrite_var
         )
         self.chk_overwrite.pack(anchor=tk.W)
+
+        # ---------------------------------------------------------
+        # カード背景テーマ（実行前に選択・設定に記憶）
+        # ---------------------------------------------------------
+        theme_frame = ttk.LabelFrame(main_frame, text=" カード背景テーマ ", padding="8")
+        theme_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.card_theme_var = tk.StringVar(
+            value=normalize_card_theme(self.config.get("card_theme", DEFAULT_CARD_THEME))
+        )
+        self.radio_theme_dark = ttk.Radiobutton(
+            theme_frame,
+            text="ダーク（背景ダーク・文字ライト）",
+            value=CARD_THEME_DARK,
+            variable=self.card_theme_var,
+        )
+        self.radio_theme_light = ttk.Radiobutton(
+            theme_frame,
+            text="ライト（背景白・文字黒）",
+            value=CARD_THEME_LIGHT,
+            variable=self.card_theme_var,
+        )
+        self.radio_theme_dark.pack(anchor=tk.W)
+        self.radio_theme_light.pack(anchor=tk.W)
 
         progress_frame = ttk.Frame(main_frame)
         progress_frame.pack(fill=tk.X, pady=(0, 10))
@@ -218,7 +255,16 @@ class PhotoAICritiqueApp:
                 return
 
         mode_str = "【上書き再生成モード】" if self.force_overwrite_var.get() else "【通常モード (処理済みスキップ)】"
-        if not messagebox.askyesno("実行確認", f"対象フォルダ: {target_dir.name}\n画像ファイル数: {len(image_files)} 件\n動作モード: {mode_str}\n\n処理を開始しますか？"):
+        theme = normalize_card_theme(self.card_theme_var.get())
+        theme_str = card_theme_label(theme)
+        if not messagebox.askyesno(
+            "実行確認",
+            f"対象フォルダ: {target_dir.name}\n"
+            f"画像ファイル数: {len(image_files)} 件\n"
+            f"動作モード: {mode_str}\n"
+            f"カード背景: 【{theme_str}】\n\n"
+            "処理を開始しますか？",
+        ):
             return
 
         self.save_config(str(target_dir))
@@ -230,13 +276,18 @@ class PhotoAICritiqueApp:
         self.btn_browse.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.chk_overwrite.config(state=tk.DISABLED)
+        self.radio_theme_dark.config(state=tk.DISABLED)
+        self.radio_theme_light.config(state=tk.DISABLED)
 
-        threading.Thread(target=self.run_batch, args=(target_dir, image_files), daemon=True).start()
+        threading.Thread(
+            target=self.run_batch, args=(target_dir, image_files, theme), daemon=True
+        ).start()
 
-    def run_batch(self, target_dir: Path, image_files: list):
+    def run_batch(self, target_dir: Path, image_files: list, card_theme: str = DEFAULT_CARD_THEME):
         try:
             self.log("=" * 50)
             self.log(f"🚀 講評バッチ処理を開始します (gpt-4o-mini): {target_dir.name}")
+            self.log(f"🎨 カード背景テーマ: {card_theme_label(card_theme)} ({card_theme})")
             self.log("=" * 50)
 
             log_mgr = DesktopLogManager(target_dir)
@@ -280,7 +331,9 @@ class PhotoAICritiqueApp:
 
                     self.log("   └─ 評価カード画像生成中...")
                     card_output_path = log_mgr.get_card_output_path(file_name)
-                    create_critique_card(img_path, critique_text, card_output_path)
+                    create_critique_card(
+                        img_path, critique_text, card_output_path, theme=card_theme
+                    )
 
                     self.log("   └─ Markdownノート・ログ出力中...")
                     log_mgr.save_analysis_result(file_name, metadata_block, critique_text)
@@ -313,6 +366,8 @@ class PhotoAICritiqueApp:
         self.btn_browse.config(state=tk.NORMAL)
         self.dir_entry.config(state=tk.NORMAL)
         self.chk_overwrite.config(state=tk.NORMAL)
+        self.radio_theme_dark.config(state=tk.NORMAL)
+        self.radio_theme_light.config(state=tk.NORMAL)
 
     def show_completion_dialog(self, target_dir: Path, processed: int, skipped: int, errors: int, status_str: str):
         msg = f"写真分析バッチ処理が{status_str}しました。\n\n・新規処理完了: {processed} 件\n・スキップ(処理済み): {skipped} 件\n・エラー: {errors} 件\n\n出力フォルダーを開きますか？"

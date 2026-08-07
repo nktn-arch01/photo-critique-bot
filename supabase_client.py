@@ -10,6 +10,7 @@ except ImportError:
     Client = Any
 
 from critique_parser import parse_critique_text
+from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
 from privacy_utils import (
     card_signed_url_seconds,
     redact_line_user_id,
@@ -58,6 +59,46 @@ class SupabaseManager:
             return True
         except Exception as e:
             print(f"[Supabase set_user_mode Error] {e}", flush=True)
+            return False
+
+    def get_user_card_theme(self, line_user_id: str) -> str:
+        """カード背景テーマ (dark / light)。列未作成時は DEFAULT。"""
+        if not self.client:
+            return DEFAULT_CARD_THEME
+
+        try:
+            res = (
+                self.client.table("user_settings")
+                .select("card_theme")
+                .eq("user_id", line_user_id)
+                .execute()
+            )
+            if res.data and len(res.data) > 0:
+                return normalize_card_theme(res.data[0].get("card_theme"))
+        except Exception as e:
+            print(f"[Supabase get_user_card_theme Error] {e}", flush=True)
+
+        return DEFAULT_CARD_THEME
+
+    def set_user_card_theme(self, line_user_id: str, theme: str) -> bool:
+        if not self.client:
+            return False
+
+        theme_norm = normalize_card_theme(theme)
+        try:
+            payload = {
+                "user_id": line_user_id,
+                "card_theme": theme_norm,
+            }
+            self.client.table("user_settings").upsert(payload, on_conflict="user_id").execute()
+            print(
+                f"[Supabase set_user_card_theme Success] "
+                f"user={redact_line_user_id(line_user_id)}, theme={theme_norm}",
+                flush=True,
+            )
+            return True
+        except Exception as e:
+            print(f"[Supabase set_user_card_theme Error] {e}", flush=True)
             return False
 
     def _card_access_url(self, bucket_name: str, destination_path: str) -> str:

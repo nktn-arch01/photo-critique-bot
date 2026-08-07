@@ -36,12 +36,13 @@
   ├── 1. LINE Webhook 受信 ➔ BackgroundTasks (非同期処理)
   ├── 2. メタデータ抽出 (scanner.py / extract_file_metadata) ➔ EXIF/時間帯情報の取得
   ├── 3. 共通テキスト解析 (critique_parser.py) ➔ 表記揺れを100%吸収して解析
-  ├── 4. 共通コア (generate_critique_card.py) ➔ カード画像描画
+  ├── 4. 共通コア (generate_critique_card.py) ➔ カード画像描画（`card_theme`: `dark` / `light`）
   ├── 5. SupabaseManager (supabase_client.py)
   │      ├── Storage (critique-cards) へ PNG アップロード ➔ Public URL 取得
-  │      └── DB (critique_logs / user_settings) へ ログ保存 & モード取得 (`compact` / `full`)
+  │      └── DB (critique_logs / user_settings) へ ログ保存 & モード (`compact`/`full`)・カード背景 (`dark`/`light`) 取得
   ├── 6. line_messaging.py ➔ 詳細版は ## 【1./【4./【6. 見出しで4分割して push（1リクエスト最大5通）
-  └── 7. LINE Messaging API ➔ 画像カード + テキスト Push 送信
+  ├── 7. LINE Messaging API ➔ 画像カード + テキスト Push 送信
+  └── 8. テキスト「背景」➔ QuickReply でライト/ダーク選択 ➔ `user_settings.card_theme` 保存
 
 [外部監視 (UptimeRobot)]
   └── 5分おき GET /health ➔ Render 無料枠サーバーのスリープ回避
@@ -72,12 +73,13 @@
 - `ai_vision.py`: Vision API アダプタ層。`openai` / `gemini` を環境変数・モデル名で差し替え可能。
 - `critique_engine.py`: 2段階分離生成のオーケストレーション。デスクトップは `generate_critique_openai`、LINE は `generate_critique_for_line`（compact→Gemini、full→OpenAI）。
 - `line_messaging.py`: 詳細版は講評見出し（## 【1./【4./【6.）で4通に分割。push は5通/リクエスト上限で batched 送信。
-- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。
+- `card_theme.py`: カード背景テーマ（`dark` / `light`）の識別子・パレット・正規化の**単一ソース**。
+- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 3行確保・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。
 - `scanner.py`: **【中央メタデータ解析エンジン】** 画像ファイル (JPG/PNG/HEIC) および DxO PhotoLab の `.dop` サイドカーファイルを高精度スキャンする共通モジュール。正規表現優先＋Luaパース補完の多層防御構造を採用。
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
-- `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、独立例外処理、リアルタイムログ表示、中断制御対応。
+- `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ・カード背景テーマの自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、実行前のライト/ダーク選択、独立例外処理、リアルタイムログ表示、中断制御対応。
 - `analyze_folder.py`: 月別フォルダを一括処理するCLIバッチスクリプト。
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。
 - `PhotoAICritique.command`: ダブルクリック起動シェルスクリプト（Gatekeeper属性の自動解除機能付き）。
@@ -85,7 +87,7 @@
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)
 - `main.py`: FastAPI Web サーバー。Gemini 2.0 Flash を呼び出し、LINE Webhook ハンドリング、BackgroundTasks、`/health` エンドポイントを制御。
-- `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`) 操作クライアント。環境変数 `SUPABASE_SERVICE_ROLE_KEY` を参照。
+- `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`) 操作クライアント。`mode`（compact/full）と `card_theme`（dark/light）を永続化。環境変数 `SUPABASE_SERVICE_ROLE_KEY` を参照。列追加 SQL: `supabase/add_card_theme.sql`。
 - `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
 
 ---
@@ -94,7 +96,7 @@
 
 ### 開発・運用スタイル規定
 - **開発・テスト時**: ターミナルからのコピペ一発実行（CLIテストや単体テストスクリプト）で動作確認を行う。
-- **push 前（任意・推奨）**: API キー不要の `python3 test_offline_suite.py`（パーサー・処理済み判定・LINE 4分割）。GitHub Actions `Offline tests` ワークフローが同内容を main で自動実行。
+- **push 前（任意・推奨）**: API キー不要の `python3 test_offline_suite.py`（パーサー・処理済み判定・LINE 4分割・カード生成レイアウト）。GitHub Actions `Offline tests` ワークフローが同内容を main で自動実行。カード見た目を変える変更では、同スイートのカード自動チェック（サイズ 1080×1350・破損なし・主要文字/写真の描画）を必ず更新・通過させる（規則1レビュー3）。
 - **本番の手動確認**: デスクトップ GUI または LINE で代表1枚（簡易/詳細）— OpenAI 実呼び出しは CI では行わない。
 - **本番運用時**: `PhotoAICritique.command` をダブルクリックし、GUI（`app_gui.py`）から対象フォルダを選択して実行する。
 
@@ -118,6 +120,10 @@
 
 ### 規則 4: モード別プロンプト分岐と識別子の統一 (`compact` / `full`)
 - 簡易版呼び出し時は `mode="compact"` を使用し、Phase 1 完了時点で即座にレスポンスを返すこと。LINE Bot設定、Supabase DB、共通コア間でモード識別子に `"simple"` 等の不統一な文字列を使用しないこと。
+
+### 規則 4b: カード背景テーマ識別子の統一 (`dark` / `light`)
+- カード背景は `card_theme.py` の `dark` / `light` のみを用いる（日本語ラベル「ダーク」「ライト」は表示・LINE文言用。永続化・API引数は英小文字識別子）。
+- デスクトップは GUI で実行前選択し `~/.photo_ai_config.json` の `card_theme` に保存。LINE は「背景」送信 → QuickReply → `user_settings.card_theme` に保存。描画は必ず `create_critique_card(..., theme=)` 経由。
 
 ### 規則 5: 時間帯ラベル依存の脱却と「光・陰影具象描写」プロンプト原則
 - **Phase 1（カード用要素）**: 時間帯の先入観によるAIのハルシネーションを防ぐため、プロンプトには時間帯データをあえて与えず、直接的な時間帯単語（「朝日」「夕日」「夕焼け」「夕暮れ」「夕映え」「夕景」「夜景」「黄昏」）の使用を【一切厳禁】とすること。

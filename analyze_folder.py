@@ -6,11 +6,19 @@ from scanner import scan_monthly_folder
 from critique_engine import generate_critique
 from log_manager import DesktopLogManager
 from generate_critique_card import create_critique_card
+from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
 
 def main():
     parser = argparse.ArgumentParser(description="月別フォルダ一括写真分析バッチ")
     parser.add_argument("--dir", required=True, help="対象の月別フォルダパス (例: ./202607)")
+    parser.add_argument(
+        "--theme",
+        default=DEFAULT_CARD_THEME,
+        choices=["dark", "light"],
+        help="カード背景テーマ (dark / light)",
+    )
     args = parser.parse_args()
+    card_theme = normalize_card_theme(args.theme)
 
     target_dir = Path(args.dir)
     if not target_dir.exists() or not target_dir.is_dir():
@@ -45,7 +53,8 @@ def main():
             create_critique_card(
                 image_path=item["path"],
                 critique_text=critique_text,
-                output_card_path=card_path
+                output_card_path=card_path,
+                theme=card_theme,
             )
 
             # Step 3: Markdownノート & 月間/年間テキストログの保存 (メタデータ付き)

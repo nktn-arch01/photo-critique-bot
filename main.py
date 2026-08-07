@@ -13,6 +13,7 @@ from linebot.models import (
 
 from critique_engine import generate_critique_for_line
 from generate_critique_card import create_critique_card
+from card_theme import CARD_THEME_DARK, CARD_THEME_LIGHT, card_theme_label
 from line_messaging import push_messages_in_batches, split_full_critique_for_line, split_text_for_line
 from supabase_client import SupabaseManager
 from critique_parser import parse_critique_text
@@ -82,9 +83,10 @@ def process_image_and_reply(line_user_id: str, message_id: str):
         img_path.write_bytes(image_bytes)
 
         user_mode = supabase_mgr.get_user_mode(line_user_id)
+        user_theme = supabase_mgr.get_user_card_theme(line_user_id)
         print(
             f"[LINE] user={redact_line_user_id(line_user_id)} mode={user_mode} "
-            f"image={mime} bytes={len(image_bytes)}",
+            f"theme={user_theme} image={mime} bytes={len(image_bytes)}",
             flush=True,
         )
 
@@ -97,8 +99,8 @@ def process_image_and_reply(line_user_id: str, message_id: str):
             dop_info=dop_info,
             mode=user_mode,
         )
-        
-        create_critique_card(img_path, critique_text, card_path)
+
+        create_critique_card(img_path, critique_text, card_path, theme=user_theme)
 
         storage_path = f"{storage_folder_for_user(line_user_id)}/{message_id}_card.png"
         card_public_url = supabase_mgr.upload_card_image(
@@ -180,10 +182,54 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
             reply_token,
             TextSendMessage(text="📝 講評出力モードを【詳細版】に変更しました。\n次回の写真送信からカード画像と全文講評テキストが送信されます。")
         )
+
+    elif text in ["背景", "はいけい", "カード背景"]:
+        current_theme = supabase_mgr.get_user_card_theme(line_user_id)
+        theme_label = card_theme_label(current_theme)
+        msg_text = (
+            "🎨【カード背景設定】\n\n"
+            f"現在の設定：【{theme_label}】\n\n"
+            "変更したい背景を下のボタンから選択してください。"
+        )
+        quick_reply = QuickReply(
+            items=[
+                QuickReplyButton(action=MessageAction(label="⬜ ライト", text="背景:ライト")),
+                QuickReplyButton(action=MessageAction(label="⬛ ダーク", text="背景:ダーク")),
+            ]
+        )
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(text=msg_text, quick_reply=quick_reply),
+        )
+
+    elif text in ["背景:ライト", "ライト"]:
+        supabase_mgr.set_user_card_theme(line_user_id, CARD_THEME_LIGHT)
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text="⬜ カード背景を【ライト】（白背景・黒文字）に変更しました。\n次回の写真送信から反映されます。"
+            ),
+        )
+
+    elif text in ["背景:ダーク", "ダーク"]:
+        supabase_mgr.set_user_card_theme(line_user_id, CARD_THEME_DARK)
+        line_bot_api.reply_message(
+            reply_token,
+            TextSendMessage(
+                text="⬛ カード背景を【ダーク】に変更しました。\n次回の写真送信から反映されます。"
+            ),
+        )
+
     else:
         line_bot_api.reply_message(
             reply_token,
-            TextSendMessage(text="写真を送信いただくと、AIが講評とカード画像を自動生成します📷\nモードの切り替えは「設定」と送信してください。")
+            TextSendMessage(
+                text=(
+                    "写真を送信いただくと、AIが講評とカード画像を自動生成します📷\n"
+                    "・講評モード切替 → 「設定」\n"
+                    "・カード背景切替 → 「背景」"
+                )
+            ),
         )
 
 

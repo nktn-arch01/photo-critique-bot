@@ -9,7 +9,7 @@
 | 場所 | 内容 | リスクの要点 |
 |------|------|----------------|
 | **Supabase `critique_logs`** | LINE user ID、講評全文、カード URL 等 | Table Editor で閲覧可能（プロジェクト管理者） |
-| **Supabase `user_settings`** | LINE user ID、compact/full | 同上 |
+| **Supabase `user_settings`** | LINE user ID、compact/full、card_theme (dark/light) | 同上 |
 | **Supabase Storage `critique-cards`** | 講評カード PNG | **Public バケットだと URL 漏洩で第三者も閲覧可能** |
 | **Render ログ** | エラー・処理状況（user ID はマスク済み） | Render アカウント保持者が閲覧 |
 | **OpenAI** | 送信した画像・プロンプト | [OpenAI データポリシー](https://openai.com/policies) に従う（API 利用規約の確認） |
