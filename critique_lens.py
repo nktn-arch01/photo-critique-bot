@@ -3,6 +3,10 @@
 - mode (compact/full) とは直交: mode=生成の深さ, lens=対話の型
 - v1 / v1.1: 実行時は常に self（本人の写真との対話）
 - 将来: audience（第三者・展示／コンテスト）や brief 駆動ルーブリックを追加可能
+
+スコア軸:
+- label … カード／ユーザー向け表示名（SCORES 出力ラベル）
+- meaning … AI 向け深層基準（ユーザーには提示しない）
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ class ScoreAxis:
     key: str
     label: str
     aliases: tuple[str, ...]
-    meaning: str  # プロンプト用の深層基準
+    meaning: str  # プロンプト用の深層基準（ユーザー非提示）
 
 
 @dataclass(frozen=True)
@@ -34,7 +38,7 @@ class CritiqueLens:
     display_name: str
     system_role: str
     score_axes: tuple[ScoreAxis, ...]
-    score_disclaimer: str
+    score_disclaimer: str  # 空文字ならカードに免責を出さない（N-01）
     score_definition_rule: str
     phase5_heading: str  # 【5. ...】の見出し文言
 
@@ -55,32 +59,73 @@ SELF_LENS = CritiqueLens(
     score_axes=(
         _axis(
             "framing",
-            "空間の切り取り",
-            ("空間の切り取り", "空間の切り取り（Framing）", "Framing", "構図・構成", "構図"),
-            "視線誘導の設計、幾何学的な構造美、シルエットの活用など、画面を構造化した際のアンテナの強さ。",
+            "眼差しの輪郭",
+            (
+                "眼差しの輪郭",
+                "眼差しの輪郭 (Contours of the Eyes)",
+                "Contours of the Eyes",
+                "空間の切り取り",
+                "空間の切り取り（Framing）",
+                "Framing",
+                "構図・構成",
+                "構図",
+            ),
+            "視線誘導の設計、幾何学的な構造美、シルエット、フレームの選択から、"
+            "撮影者の意識がどこに向かっていたかを読み取れるか。",
         ),
         _axis(
             "sensitivity",
-            "光への感受性",
-            ("光への感受性", "光への感受性（Sensitivity）", "Sensitivity", "光・色彩", "光"),
-            "光の照射角度、テクスチャーの強調、反射の美学など、微細な光の質感に対する鋭敏さ。",
+            "光の情動",
+            (
+                "光の情動",
+                "光の情動 (Emotion of Light)",
+                "Emotion of Light",
+                "光への感受性",
+                "光への感受性（Sensitivity）",
+                "Sensitivity",
+                "光・色彩",
+                "光",
+            ),
+            "光の照射角度、テクスチャーの強調、反射、明暗のグラデーションから、"
+            "撮影者の心がどれだけ動かされたかを読み取れるか。",
         ),
         _axis(
             "story",
-            "情景への投影",
-            ("情景への投影", "情景への投影（Story）", "Story", "ストーリー"),
-            "人物のしぐさから生まれる一瞬のドラマ、静寂の余韻、撮影者が「光を共有した」と実感した瞬間の投影度。",
+            "物語の気配",
+            (
+                "物語の気配",
+                "物語の気配 (Signs of the Story)",
+                "Signs of the Story",
+                "情景への投影",
+                "情景への投影（Story）",
+                "Story",
+                "ストーリー",
+            ),
+            "人物の感情、物語の起点、静寂、共鳴、個人的な記憶をどれだけ読み取れたか。",
         ),
         _axis(
             "technical",
-            "道具との対話",
-            ("道具との対話", "道具との対話（Technical）", "Technical", "技術・露出", "技術"),
-            "意図的な露出制御（眩しさの維持や深いアンダー）、被写界深度による主題の分離など、設定を表現の言葉として使いこなした度合い。",
+            "表現の意識",
+            (
+                "表現の意識",
+                "表現の意識 (Awareness of Expression)",
+                "Awareness of Expression",
+                "道具との対話",
+                "道具との対話（Technical）",
+                "Technical",
+                "技術・露出",
+                "技術",
+            ),
+            "意図的な露出制御（ハイライト/アンダー）、被写界深度（ボケ/シャープネス）などから、"
+            "撮影者の意識や心の動き、記憶や感情を具現化する意図がどれだけ読み取れたか。",
         ),
         _axis(
             "sense",
-            "内なる感性の純度",
+            "感性の兆し",
             (
+                "感性の兆し",
+                "感性の兆し（Signs of sensibility）",
+                "Signs of sensibility",
                 "内なる感性の純度",
                 "内なる感性の純度（Sense）",
                 "眼差しの純度",
@@ -88,14 +133,17 @@ SELF_LENS = CritiqueLens(
                 "独自・世界観",
                 "独自",
             ),
-            "他の誰でもない独自のこだわりや、曖昧さ（ブレ・ボケ）をあえて残した表現の純度。",
+            "独自のこだわり（#静寂 #反射等）、個性、癖などがどれだけ読み取れたか。",
         ),
     ),
-    score_disclaimer="これは良し悪しを測る点数ではなく、あなたの眼差しを記した目盛りである",
+    score_disclaimer="",  # N-01: 免責文は出さない
     score_definition_rule=(
         "■SCORES は技術的な出来栄えの採点ではない。"
-        "撮影者の「感性のアンテナ」がどの要素に強く向いていたかを示す「熱量や純度（感度）」として 1〜5 を算出すること。"
-        "★5 は完璧を意味せず、その要素がその一枚で表現の核となっていることを示す。"
+        "各スコアにはカード用の「表示名」と、AIだけが使う「深層基準」がある。"
+        "深層基準の文言はユーザー・カード・SCORES行に出さない。"
+        "★1〜5 は、提示写真からその深層基準がどれだけ読み取れたか、"
+        "およびその基準が講評にどれだけ影響を与えたかの度合いとする。"
+        "★5 は完璧を意味せず、その要素がその一枚で表現の核／講評の主軸になっていることを示す。"
     ),
     phase5_heading="次なる一枚への対話と提案",
 )
@@ -137,7 +185,7 @@ def score_alias_to_key(label: str, lens: CritiqueLens | None = None) -> str | No
         for c in candidates:
             if raw == c or compact == c.replace(" ", "").replace("　", ""):
                 return axis.key
-            # 「空間の切り取り（Framing）」形式
+            # 「眼差しの輪郭 (Contours of the Eyes)」形式
             if compact.startswith(c.replace(" ", "").replace("　", "")):
                 return axis.key
     return None

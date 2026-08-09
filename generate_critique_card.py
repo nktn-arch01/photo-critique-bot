@@ -19,9 +19,14 @@ BODY_LINE_HEIGHT = 30
 SCORE_ROW_HEIGHT = 36
 # self レンズ既定は5。描画はレンズ軸数を優先（将来の可変軸に備える）
 SCORE_ROW_COUNT = len(get_lens(DEFAULT_LENS).score_axes)
-DISCLAIMER_LINE_HEIGHT = 28
+DISCLAIMER_LINE_HEIGHT = 28  # 後方互換定数（N-01 以降、免責非表示なら高さに含めない）
 LINE_THICKNESS = 1
 LINE_GAP_AFTER = 18
+# N-02: タイトルを分割線側へ 5px、CRITIQUE_SUMMARY を 5px 下へ（3行目のはみ出しは余白50pxへ許容）
+TITLE_NUDGE_UP_PX = 5
+CRITIQUE_NUDGE_DOWN_PX = 5
+SUMMARY_FONT_SIZE = 26
+SCORE_FONT_SIZE = SUMMARY_FONT_SIZE  # SCORES は SUMMARY と同じサイズ
 
 
 def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
@@ -95,15 +100,20 @@ def _score_row_count(lens: str | None = None) -> int:
 
 
 def _fixed_text_block_height(lens: str | None = None) -> int:
-    """文字エリア全体の固定高さ（免責・スコア行・要約3行・ロゴ128を含む）。"""
+    """文字エリア全体の固定高さ（スコア行・要約3行・ロゴ128を含む）。
+
+    N-01: 免責文なし。N-02: CRITIQUE の +5px は固定高に含めず、必要なら下余白へはみ出す。
+    """
     rows = _score_row_count(lens)
+    show_disclaimer = bool((get_lens(lens).score_disclaimer or "").strip())
     h = 0
     h += LINE_THICKNESS + LINE_GAP_AFTER  # タイトル上の分割線
     h += 50  # title
     h += 38  # summary
     h += 4
     h += LINE_THICKNESS + LINE_GAP_AFTER  # スコア上
-    h += DISCLAIMER_LINE_HEIGHT  # スコア免責（眼差しの目盛り）
+    if show_disclaimer:
+        h += DISCLAIMER_LINE_HEIGHT
     h += rows * SCORE_ROW_HEIGHT
     h += 12
     h += LINE_THICKNESS + LINE_GAP_AFTER  # 要約上
@@ -140,7 +150,7 @@ def create_critique_card(
     """1080×1350 講評カードを生成する。
 
     theme: "dark"（既定）または "light"
-    lens: 対話レンズ（スコア軸・免責文。v1 は self）
+    lens: 対話レンズ（スコア軸。v1 は self）。Desktop / LINE 共通。
     """
     palette = get_card_palette(theme)
     lens_def = get_lens(lens)
@@ -153,8 +163,8 @@ def create_critique_card(
     draw = ImageDraw.Draw(card)
 
     font_title = load_japanese_font(42)
-    font_text = load_japanese_font(26)
-    font_score = load_japanese_font(28)
+    font_text = load_japanese_font(SUMMARY_FONT_SIZE)
+    font_score = load_japanese_font(SCORE_FONT_SIZE)
     font_body = load_japanese_font(22)
     font_disclaimer = load_japanese_font(18)
 
@@ -173,7 +183,13 @@ def create_critique_card(
     draw.line([(content_left, y), (content_right, y)], fill=line_color, width=LINE_THICKNESS)
     y += LINE_THICKNESS + LINE_GAP_AFTER
 
-    draw.text((content_left, y), parsed["title"], font=font_title, fill=palette["title"])
+    # N-02: TITLE を 5px 上へ（SUMMARY 以降の基準 y は維持）
+    draw.text(
+        (content_left, y - TITLE_NUDGE_UP_PX),
+        parsed["title"],
+        font=font_title,
+        fill=palette["title"],
+    )
     y += 50
     draw.text((content_left, y), parsed["summary"], font=font_text, fill=palette["summary"])
     y += 38
@@ -182,14 +198,16 @@ def create_critique_card(
     draw.line([(content_left, y), (content_right, y)], fill=line_color, width=LINE_THICKNESS)
     y += LINE_THICKNESS + LINE_GAP_AFTER
 
-    disclaimer = parsed.get("score_disclaimer") or lens_def.score_disclaimer
-    draw.text(
-        (content_left + 10, y),
-        disclaimer,
-        font=font_disclaimer,
-        fill=palette["summary"],
-    )
-    y += DISCLAIMER_LINE_HEIGHT
+    # N-01: 免責文が空なら描画しない
+    disclaimer = (parsed.get("score_disclaimer") or lens_def.score_disclaimer or "").strip()
+    if disclaimer:
+        draw.text(
+            (content_left + 10, y),
+            disclaimer,
+            font=font_disclaimer,
+            fill=palette["summary"],
+        )
+        y += DISCLAIMER_LINE_HEIGHT
 
     score_items = list(parsed["scores"].items())[:score_rows]
     for i in range(score_rows):
@@ -204,7 +222,7 @@ def create_critique_card(
 
     y += 12
     draw.line([(content_left, y), (content_right, y)], fill=line_color, width=LINE_THICKNESS)
-    y += LINE_THICKNESS + LINE_GAP_AFTER
+    y += LINE_THICKNESS + LINE_GAP_AFTER + CRITIQUE_NUDGE_DOWN_PX
 
     body_top = y
     logo_left = content_right - LOGO_SIZE
