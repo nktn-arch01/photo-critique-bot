@@ -14,6 +14,22 @@
 | 評価用写真 4〜8枚 | `eval/phase_d/images/` に配置（下表のスロット） |
 | 本ブランチのコード | `cursor/lumina-self-lens-prompts-e0e5` 相当 |
 
+### API キー動作確認（Cloud Agent 向け）
+
+シェルに `OPENAI_API_KEY` が出なくても、**`~/.openai_api_key` があればアプリは動く**（`ai_vision.get_openai_client()` がファイルを読む）。次の3点を確認する。
+
+```bash
+test -f ~/.openai_api_key && echo "keyfile=yes" || echo "keyfile=no"
+test -n "$OPENAI_API_KEY" && echo "OPENAI_API_KEY=set" || echo "OPENAI_API_KEY=unset"
+cd /workspace && ~/.venv/bin/python -c "from ai_vision import get_openai_client; get_openai_client(); print('key OK')"
+```
+
+| 出力の意味 | 目安 |
+|------------|------|
+| `keyfile=yes` | ファイル経路でキー利用可 |
+| `OPENAI_API_KEY=unset` | Start Script / Runtime Secrets がシェルに載らない場合あり（**問題にならない**） |
+| `key OK` | Phase D の実 API 呼び出しに進んでよい |
+
 ---
 
 ## 評価用写真の選定（推奨セット）
