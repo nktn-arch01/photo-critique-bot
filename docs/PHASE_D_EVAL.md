@@ -69,13 +69,40 @@ Mac の `/Users/.../photo_ai/...` は **自動では同期されません**（�
 
 | 方法 | 向いている人 | 手順の要点 |
 |------|--------------|------------|
-| **A. チャットに画像を添付** | いちばん簡単（おすすめ） | [cursor.com/agents](https://cursor.com/agents) または Cursor デスクトップで、このエージェントの会話に **4枚をドラッグ＆ドロップ** → 「`eval/phase_d/images/` にこの名前で保存して」と送る |
-| **B. ローカル clone にコピーして push** | デスクトップで `photo-critique-bot` を開いている人 | Mac でリポジトリの `eval/phase_d/images/` に4枚をコピー → `git add -f eval/phase_d/images/*.jpg` → commit & push → エージェントはそのブランチで作業 |
-| **C. 共有 URL** | 上記が難しいとき | 一時的な HTTPS リンク（プライベートでも可）をエージェントに渡し、VM 内で `curl` して保存してもらう |
+| **A. ローカル clone にコピーして `git add -f` → push（確実）** | デスクトップで `photo-critique-bot` を clone している人 | 下の「方法 A」参照 |
+| **B. 一時 HTTPS URL + `curl`** | Git に写真を載せたくないとき | Dropbox / Drive「リンクを知っている人」等の直リンクをエージェントに渡し、VM で保存してもらう |
+| **C. チャット添付** | 小さな画像の確認用のみ | **Phase D には向かないことが多い**。数 MB 超の JPEG は処理失敗し、成功しても **モデルが見るだけで `/workspace` にファイルが書かれない**ことがある |
 
-**注意（方法 B）:** `eval/phase_d/images/` は `.gitignore` 対象（写真を Git に載せない設計）。`-f` で push すると **GitHub 上にも写真が残る**ので、公開リポや共有に注意。プライベートリポでも履歴に残る。
+#### 方法 A（推奨・確実）
 
-**できないこと:** Finder からクラウドのフォルダツリーへ直接ドロップする UI は現状ない（ローカル IDE のファイルツリーと VM は別物）。
+Mac のターミナルで（パスは自分の clone 先に合わせる）:
+
+```bash
+# 1) 手元の4枚 → リポジトリの eval/phase_d/images/
+REPO="$HOME/path/to/photo-critique-bot"   # clone した場所
+SRC="$HOME/photo_ai/eval/phase_d/images"  # いま写真がある場所
+
+mkdir -p "$REPO/eval/phase_d/images"
+cp "$SRC"/P01_person.jpg "$SRC"/P02_light.jpg \
+   "$SRC"/P03_ambiguity.jpg "$SRC"/P04_subject_label.jpg \
+   "$REPO/eval/phase_d/images/"
+
+# 2) gitignore を越えて push（プライベートリポ向け）
+cd "$REPO"
+git checkout cursor/lumina-self-lens-prompts-e0e5   # 作業ブランチ
+git add -f eval/phase_d/images/P01_person.jpg \
+           eval/phase_d/images/P02_light.jpg \
+           eval/phase_d/images/P03_ambiguity.jpg \
+           eval/phase_d/images/P04_subject_label.jpg
+git commit -m "chore: add Phase D eval photos (force-add, gitignored path)"
+git push -u origin HEAD
+```
+
+その後 Cloud Agent に「`git pull` して Phase D を実行して」と送る。
+
+**注意:** `-f` で push すると **GitHub の履歴にも写真が残る**。公開リポでは使わない。終わったら削除コミットで消せるが、履歴には残る。
+
+**できないこと:** Finder からクラウドのフォルダツリーへ直接ドロップする UI は現状ない。
 
 ---
 
