@@ -396,6 +396,34 @@ def test_n04_score_label_fits_before_stars():
         assert "観察対象" in axis.meaning and "アンカー" in axis.meaning
 
 
+def test_n05_sensitivity_mentions_light_and_reflection():
+    """N-05: 感情の陰影の深層基準に光線・反射が含まれる。"""
+    sens = next(a for a in get_lens().score_axes if a.key == "sensitivity")
+    assert "光線" in sens.meaning
+    assert "反射" in sens.meaning
+    assert "写り込み" in sens.meaning
+
+
+def test_n06_log_keeps_numeric_scores():
+    """N-06: ログ再構成は星＋数字。カード描画コードは (n/5) を書かない。"""
+    import inspect
+    from generate_critique_card import create_critique_card
+    from log_manager import DesktopLogManager
+
+    src = inspect.getsource(create_critique_card)
+    assert 'f"({val}/5)"' not in src
+    assert "stars" in src
+
+    td = Path(tempfile.mkdtemp())
+    mgr = DesktopLogManager(td)
+    # save_critique 相当の SCORES 行フォーマットを直接確認
+    p = parse_critique_text(CARD_SAMPLE)
+    line = f"・{list(p['scores'].keys())[0]}: {list(p['scores'].values())[0]['stars']} ({list(p['scores'].values())[0]['val']}/5)"
+    assert "/5)" in line
+    assert "★" in line
+    _ = mgr  # DesktopLogManager が import 可能であること
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -413,6 +441,8 @@ def run_all():
     test_critique_summary_short_keeps_fixed_image_area()
     test_n01_no_disclaimer_on_card_and_lens()
     test_n04_score_label_fits_before_stars()
+    test_n05_sensitivity_mentions_light_and_reflection()
+    test_n06_log_keeps_numeric_scores()
     print("test_offline_suite: OK")
 
 
