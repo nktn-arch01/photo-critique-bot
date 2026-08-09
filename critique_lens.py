@@ -3,6 +3,10 @@
 - mode (compact/full) とは直交: mode=生成の深さ, lens=対話の型
 - v1 / v1.1: 実行時は常に self（本人の写真との対話）
 - 将来: audience（第三者・展示／コンテスト）や brief 駆動ルーブリックを追加可能
+
+スコア軸:
+- label … カード／ユーザー向け表示名（SCORES 出力ラベル）
+- meaning … AI 向け深層基準（ユーザーには提示しない）
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ class ScoreAxis:
     key: str
     label: str
     aliases: tuple[str, ...]
-    meaning: str  # プロンプト用の深層基準
+    meaning: str  # プロンプト用の深層基準（ユーザー非提示）
 
 
 @dataclass(frozen=True)
@@ -34,7 +38,7 @@ class CritiqueLens:
     display_name: str
     system_role: str
     score_axes: tuple[ScoreAxis, ...]
-    score_disclaimer: str
+    score_disclaimer: str  # 空文字ならカードに免責を出さない（N-01）
     score_definition_rule: str
     phase5_heading: str  # 【5. ...】の見出し文言
 
@@ -55,32 +59,91 @@ SELF_LENS = CritiqueLens(
     score_axes=(
         _axis(
             "framing",
-            "空間の切り取り",
-            ("空間の切り取り", "空間の切り取り（Framing）", "Framing", "構図・構成", "構図"),
-            "視線誘導の設計、幾何学的な構造美、シルエットの活用など、画面を構造化した際のアンテナの強さ。",
+            "眼差の輪郭 (Contours of the Eyes)",
+            (
+                "眼差の輪郭 (Contours of the Eyes)",
+                "眼差の輪郭",
+                "眼差しの輪郭 (Contours of the Eyes)",
+                "眼差しの輪郭",
+                "Contours of the Eyes",
+                "空間の切り取り",
+                "空間の切り取り（Framing）",
+                "Framing",
+                "構図・構成",
+                "構図",
+            ),
+            "観察対象: 枠内/枠外の選択、線・形・シルエット、視線誘導、余白の設計。"
+            "アンカー: ★1=切り取りの意図が弱い ★3=枠と導線が明確 ★5=枠取りが一枚の主軸。"
+            "禁止: 撮影者の心情の推測だけで点数を上げない。",
         ),
         _axis(
             "sensitivity",
-            "光への感受性",
-            ("光への感受性", "光への感受性（Sensitivity）", "Sensitivity", "光・色彩", "光"),
-            "光の照射角度、テクスチャーの強調、反射の美学など、微細な光の質感に対する鋭敏さ。",
+            "感情の陰影 (Nuances of Emotion)",
+            (
+                "感情の陰影 (Nuances of Emotion)",
+                "感情の陰影",
+                "Nuances of Emotion",
+                "Euances of Emotion",  # 入力ゆれ吸収
+                "光の情動 (Emotion of Light)",
+                "光の情動",
+                "Emotion of Light",
+                "光への感受性",
+                "光への感受性（Sensitivity）",
+                "Sensitivity",
+                "光・色彩",
+                "光",
+            ),
+            # 表示名は感情の陰影。採点は明暗・トーンが生む感情のニュアンス（観測可能）に固定。
+            "観察対象: 明暗の幅、ハイライトと影の関係、色温度やトーンの偏り、そこから読める感情のニュアンス。"
+            "アンカー: ★1=トーンの感情差が弱い ★3=陰影が気分をはっきり伝える ★5=感情の陰影が一枚の主軸。"
+            "禁止: 時間帯ラベルや「美しい光」など抽象語だけで加点しない。内心の創作で盛らない。",
         ),
         _axis(
             "story",
-            "情景への投影",
-            ("情景への投影", "情景への投影（Story）", "Story", "ストーリー"),
-            "人物のしぐさから生まれる一瞬のドラマ、静寂の余韻、撮影者が「光を共有した」と実感した瞬間の投影度。",
+            "物語の気配 (Signs of the Story)",
+            (
+                "物語の気配 (Signs of the Story)",
+                "物語の気配",
+                "Signs of the Story",
+                "情景への投影",
+                "情景への投影（Story）",
+                "Story",
+                "ストーリー",
+            ),
+            "観察対象: 画面に実際にあるしぐさ・配置・痕跡・関係性から読める「前後の時間」や気配。"
+            "人物がいない場合は物・空間の関係からのみ評価し、人物を仮定しない。"
+            "アンカー: ★1=気配が薄い ★3=一瞬の前後が想像できる ★5=物語の起点が一枚の主軸。"
+            "禁止: 写真にない人物・出来事の創作。",
         ),
         _axis(
             "technical",
-            "道具との対話",
-            ("道具との対話", "道具との対話（Technical）", "Technical", "技術・露出", "技術"),
-            "意図的な露出制御（眩しさの維持や深いアンダー）、被写界深度による主題の分離など、設定を表現の言葉として使いこなした度合い。",
+            "表現の意図 (Intent of Expression)",
+            (
+                "表現の意図 (Intent of Expression)",
+                "表現の意図",
+                "Intent of Expression",
+                "表現の意識 (Awareness of Expression)",
+                "表現の意識",
+                "Awareness of Expression",
+                "道具との対話",
+                "道具との対話（Technical）",
+                "Technical",
+                "技術・露出",
+                "技術",
+            ),
+            "観察対象: 露出の振り、被写界深度、静止/ブレなど、表現意図として読める撮影選択の痕跡。"
+            "アンカー: ★1=意図の痕跡が弱い ★3=露出やボケ等の選択が意図として読める ★5=その意図が一枚の主軸。"
+            "禁止: 機材名や設定値の正しさ採点。数値の是非ではなく表現意図への効きを見る。",
         ),
         _axis(
             "sense",
-            "内なる感性の純度",
+            "感性の兆し (Signs of Sensibility)",
             (
+                "感性の兆し (Signs of Sensibility)",
+                "感性の兆し（Signs of sensibility）",
+                "感性の兆し",
+                "Signs of Sensibility",
+                "Signs of sensibility",
                 "内なる感性の純度",
                 "内なる感性の純度（Sense）",
                 "眼差しの純度",
@@ -88,14 +151,20 @@ SELF_LENS = CritiqueLens(
                 "独自・世界観",
                 "独自",
             ),
-            "他の誰でもない独自のこだわりや、曖昧さ（ブレ・ボケ）をあえて残した表現の純度。",
+            "観察対象: 定型から外れた視点の偏り、モチーフの選び方、曖昧さの残し方、反復しそうなこだわりの痕跡。"
+            "アンカー: ★1=一般的な見栄え中心 ★3=独自の偏りが一つ明確 ★5=視点のこだわりが画面を支配。"
+            "禁止: 他軸（枠・陰影・物語・意図）の言い換えだけで高得点にしない。",
         ),
     ),
-    score_disclaimer="これは良し悪しを測る点数ではなく、あなたの眼差しを記した目盛りである",
+    score_disclaimer="",  # N-01: 免責文は出さない
     score_definition_rule=(
-        "■SCORES は技術的な出来栄えの採点ではない。"
-        "撮影者の「感性のアンテナ」がどの要素に強く向いていたかを示す「熱量や純度（感度）」として 1〜5 を算出すること。"
-        "★5 は完璧を意味せず、その要素がその一枚で表現の核となっていることを示す。"
+        "■SCORES は技術の出来栄え採点ではない。"
+        "各項目にはカード用の「表示名」（日英併記のラベル）と、AIだけが使う「深層基準」がある。"
+        "深層基準・アンカー・禁止事項の文言はユーザー／カード／SCORES行に絶対に出さない。"
+        "採点は写真上の観察可能な証拠のみ。撮影者の内心の推測だけでは上げない。"
+        "★は深層基準のアンカー（★1/★3/★5）に最も近い整数を選ぶ。迷ったら低い方へ（過大評価禁止）。"
+        "5軸はできるだけ独立に採点する（同じ理由で複数軸を★5にしない）。"
+        "人物がいない写真で story を盛らない。存在しない要素は創作せず低めに付ける。"
     ),
     phase5_heading="次なる一枚への対話と提案",
 )
@@ -137,7 +206,7 @@ def score_alias_to_key(label: str, lens: CritiqueLens | None = None) -> str | No
         for c in candidates:
             if raw == c or compact == c.replace(" ", "").replace("　", ""):
                 return axis.key
-            # 「空間の切り取り（Framing）」形式
+            # 「眼差しの輪郭 (Contours of the Eyes)」形式
             if compact.startswith(c.replace(" ", "").replace("　", "")):
                 return axis.key
     return None

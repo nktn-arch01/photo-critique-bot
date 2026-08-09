@@ -77,17 +77,26 @@ def _scores_format_block(lens: CritiqueLens) -> str:
     lines = ["■SCORES:"]
     for axis in lens.score_axes:
         lines.append(f"・{axis.label}  : [写真に応じた★評価] ([1〜5の数値]/5)")
-    example_label = lens.score_axes[0].label if lens.score_axes else "空間の切り取り"
+    example_label = (
+        lens.score_axes[0].label if lens.score_axes else "眼差の輪郭 (Contours of the Eyes)"
+    )
     lines.append(
-        f"(※SCORES出力例: ・{example_label}  : ★★★☆☆ (3/5) のように必ず★記号5文字と(数値/5)形式で出力すること)"
+        f"(※SCORES出力例: ・{example_label}  : ★★★☆☆ (3/5) のように、表示名を一字一句そのまま使い、"
+        "★記号5文字と(数値/5)形式で出力すること。深層基準・アンカーの文言をSCORES行に書かないこと)"
     )
     return "\n".join(lines)
 
 
 def _scores_meaning_block(lens: CritiqueLens) -> str:
-    lines = ["【■SCORES：感性のアンテナの深層基準】"]
+    """AI 向け深層基準。カード／ユーザーには出さない。ブレ低減のため観測対象＋アンカーを明示。"""
+    lines = [
+        "【■SCORES：深層基準（ユーザー・カードには非表示）】",
+        "手順: (1) 各軸の「観察対象」だけを写真から拾う (2) アンカー★1/★3/★5に当てはめる "
+        "(3) 表示名ラベルでSCORESを出力。禁止事項に触れた加点はしない。",
+    ]
     for axis in lens.score_axes:
-        lines.append(f"・{axis.label}: {axis.meaning}")
+        lines.append(f"・表示名「{axis.label}」")
+        lines.append(f"  深層基準: {axis.meaning}")
     return "\n".join(lines)
 
 
@@ -117,7 +126,7 @@ def build_phase1_prompt(ctx: CritiquePromptContext, lens: str | CritiqueLens | N
 ■TITLE: 15文字以内。撮影者の眼差しの正体を言い当てる詩的・仮説的なタイトル（時間帯単語は使用不可）。被写体名（「花」「空」「海」等）を使ったラベル貼りを禁止。
 ■SUMMARY: 写真の美を決定づける25文字以内のキャッチコピー。
 {_scores_format_block(L)}
-■CRITIQUE_SUMMARY: 否定的なコメント、数値、専門的な技術的表現、および「意図せず」「意識していない」「意図しない」といった言葉・フレーズは一切使用厳禁です。画面の中に自然と立ち現れている美しさや、撮影者の「無意識の意図」への仮説（「あなたは〇〇に惹かれたのでは」）、新たな気づきを与える対話のきっかけを、70〜80文字程度で記述してください。
+■CRITIQUE_SUMMARY: 否定的なコメント、数値、専門的な技術的表現、および「意図せず」「意識していない」「意図しない」といった言葉・フレーズは一切使用厳禁です。画面の中に自然と立ち現れている美しさや、新たな気づきを与える効果的な見所を主体に、読者の好奇心を煽る文章を70〜80文字程度で記述してください。
 """
 
 

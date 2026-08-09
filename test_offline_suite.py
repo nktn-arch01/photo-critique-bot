@@ -31,6 +31,7 @@ from generate_critique_card import (
     CARD_WIDTH,
     LOGO_SIZE,
     LOGO_TEXT_GAP,
+    SCORE_ROW_HEIGHT,
     create_critique_card,
     _fixed_text_block_height,
 )
@@ -42,20 +43,20 @@ CARD_SAMPLE = """
 ■TITLE: 沈黙を割る線
 ■SUMMARY: 金属に宿る眼差しの残像
 ■SCORES:
-・空間の切り取り  : ★★★★☆ (4/5)
-・光への感受性    : ★★★★★ (5/5)
-・情景への投影    : ★★★☆☆ (3/5)
-・道具との対話    : ★★★★★ (5/5)
-・内なる感性の純度: ★★★★☆ (4/5)
-■CRITIQUE_SUMMARY: あなたは境界のきらめきに惹かれたのでは。線と陰影が対話の入口になります。
+・眼差の輪郭 (Contours of the Eyes)  : ★★★★☆ (4/5)
+・感情の陰影 (Nuances of Emotion)          : ★★★★★ (5/5)
+・物語の気配 (Signs of the Story)      : ★★★☆☆ (3/5)
+・表現の意図 (Intent of Expression) : ★★★★★ (5/5)
+・感性の兆し (Signs of Sensibility)   : ★★★★☆ (4/5)
+■CRITIQUE_SUMMARY: 境界のきらめきと線の陰影が、見所として立ち上がる。好奇心を誘う一枚です。
 """
 
 PHASE1_SAMPLE = """
 ■TITLE: 試験タイトル
 ■SUMMARY: キャッチ
 ■SCORES:
-・空間の切り取り  : ★★★☆☆ (3/5)
-・光への感受性    : ★★★★☆ (4/5)
+・眼差の輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)
+・感情の陰影 (Nuances of Emotion)          : ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 要約文です。
 """
 
@@ -89,18 +90,20 @@ def test_parser_phase1():
     assert p["has_valid_phase1"]
     assert p["title"] == "試験タイトル"
     assert len(p["scores"]) >= 2
-    assert "空間の切り取り" in p["scores"]
-    assert p["scores"]["空間の切り取り"]["key"] == "framing"
+    assert "眼差の輪郭 (Contours of the Eyes)" in p["scores"]
+    assert p["scores"]["眼差の輪郭 (Contours of the Eyes)"]["key"] == "framing"
 
 
 def test_parser_legacy_score_aliases():
     p = parse_critique_text(PHASE1_LEGACY_SCORES)
     assert p["has_valid_phase1"]
     labels = list(p["scores"].keys())
-    assert labels[0] == "空間の切り取り"
-    assert labels[1] == "光への感受性"
-    assert p["scores"]["道具との対話"]["val"] == "5"
+    assert labels[0] == "眼差の輪郭 (Contours of the Eyes)"
+    assert labels[1] == "感情の陰影 (Nuances of Emotion)"
+    assert p["scores"]["表現の意図 (Intent of Expression)"]["val"] == "5"
     assert score_alias_to_key("独自・世界観") == "sense"
+    assert score_alias_to_key("空間の切り取り") == "framing"
+    assert score_alias_to_key("眼差しの輪郭") == "framing"
 
 
 def test_parser_phase2():
@@ -113,21 +116,33 @@ def test_self_lens_prompts():
     assert DEFAULT_LENS == LENS_SELF
     lens = get_lens()
     assert "良き理解者" in get_system_role()
-    assert lens.score_disclaimer.startswith("これは良し悪し")
+    assert lens.score_disclaimer == ""  # N-01: 免責削除
+    assert lens.score_axes[0].label == "眼差の輪郭 (Contours of the Eyes)"
+    assert "観察対象" in lens.score_axes[0].meaning
+    assert "アンカー" in lens.score_axes[0].meaning
     ctx = CritiquePromptContext.from_metadata(
         {"camera_model": "TestCam", "lens_model": "TestLens", "user_intent": "光を残したい"},
         {},
     )
     p1 = build_phase1_prompt(ctx)
-    assert "空間の切り取り" in p1
+    assert "眼差の輪郭 (Contours of the Eyes)" in p1
+    assert "Contours of the Eyes" in p1
+    assert "Nuances of Emotion" in p1
+    assert "深層基準" in p1
+    assert "ユーザー・カードには非表示" in p1
+    assert "過大評価禁止" in p1 or "低い方へ" in p1
     assert "構図・構成" not in p1
-    assert "感性のアンテナ" in p1
     assert "プロの写真評論家" not in p1
     assert "人物の扱い（分岐・厳守）" in p1
     assert "花の佇まい" in p1  # 禁止例がプロンプトに残っていること
     assert "一文目" in p1
     assert "撮影日時" not in p1  # Phase1 に時計を渡さない（規則5）
-    p2 = build_phase2_prompt(ctx, "■TITLE: t\n■SCORES:\n・空間の切り取り  : ★★★☆☆ (3/5)")
+    # N-03: CRITIQUE_SUMMARY プロンプトを 20260808 版へ戻す
+    assert "効果的な見所を主体に、読者の好奇心を煽る文章" in p1
+    assert "あなたは〇〇に惹かれたのでは" not in p1
+    p2 = build_phase2_prompt(
+        ctx, "■TITLE: t\n■SCORES:\n・眼差の輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)"
+    )
     assert "次なる一枚への対話と提案" in p2
     assert "ステップアップ・アドバイス" not in p2
     assert "曖昧さの肯定" in p2
@@ -309,11 +324,11 @@ def test_critique_summary_short_keeps_fixed_image_area():
 ■TITLE: 沈黙を割る線
 ■SUMMARY: 金属に宿る眼差しの残像
 ■SCORES:
-・空間の切り取り  : ★★★★☆ (4/5)
-・光への感受性    : ★★★★★ (5/5)
-・情景への投影    : ★★★☆☆ (3/5)
-・道具との対話    : ★★★★★ (5/5)
-・内なる感性の純度: ★★★★☆ (4/5)
+・眼差の輪郭 (Contours of the Eyes)  : ★★★★☆ (4/5)
+・感情の陰影 (Nuances of Emotion)          : ★★★★★ (5/5)
+・物語の気配 (Signs of the Story)      : ★★★☆☆ (3/5)
+・表現の意図 (Intent of Expression) : ★★★★★ (5/5)
+・感性の兆し (Signs of Sensibility)   : ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 短い。
 """
     create_critique_card(src, short_sample, short_out)
@@ -339,6 +354,48 @@ def test_critique_summary_short_keeps_fixed_image_area():
     assert green_band(long_out) == green_band(short_out)
 
 
+def test_n01_no_disclaimer_on_card_and_lens():
+    """N-01: 免責文はレンズ空・カードに「目盛り」文言を描かない。"""
+    assert get_lens().score_disclaimer == ""
+    # 免責を描かなくなったぶん、文字ブロックはロゴ＋スコアだけで免責行分短い
+    # （以前は +28。厳密値より「免責行を含まない」ことだけ保証）
+    h = _fixed_text_block_height()
+    assert h == (
+        1
+        + 18  # title line
+        + 50
+        + 38
+        + 4
+        + 1
+        + 18  # score line
+        + 5 * SCORE_ROW_HEIGHT
+        + 12
+        + 1
+        + 18  # critique line
+        + LOGO_SIZE
+    )
+
+
+def test_n04_score_label_fits_before_stars():
+    """N-04: 日英併記ラベルが★列（SCORE_STARS_X）に食い込まない。"""
+    from generate_critique_card import (
+        SCORE_FONT_SIZE,
+        SCORE_STARS_X,
+        SCORE_LABEL_X,
+        load_japanese_font,
+        _text_width,
+    )
+
+    font = load_japanese_font(SCORE_FONT_SIZE)
+    gap = 12
+    for axis in get_lens().score_axes:
+        w = _text_width(font, axis.label)
+        assert SCORE_LABEL_X + w + gap <= SCORE_STARS_X, (
+            f"label too wide for stars column: {axis.label!r} width={w}"
+        )
+        assert "観察対象" in axis.meaning and "アンカー" in axis.meaning
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -354,6 +411,8 @@ def run_all():
     test_create_critique_card_layout()
     test_create_critique_card_light_theme()
     test_critique_summary_short_keeps_fixed_image_area()
+    test_n01_no_disclaimer_on_card_and_lens()
+    test_n04_score_label_fits_before_stars()
     print("test_offline_suite: OK")
 
 
