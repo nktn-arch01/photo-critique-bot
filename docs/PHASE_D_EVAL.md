@@ -2,7 +2,8 @@
 
 実 API で講評品質を確認するゲート。CI では実行しない。
 
-**v1 ステータス（2026-08-09）: 合格（クローズ）。** 所見は `docs/PHASE_D_FINDINGS.md`。以降の応答品質向上は V3 以降（API 変更含む）。
+**v1 ステータス（2026-08-09）: 合格（クローズ）。** 所見は `docs/PHASE_D_FINDINGS.md`。以降の応答品質向上は V3 以降（API 変更含む）。  
+**評価用 JPEG は Git 履歴から削除済み**（作業ツリーは `images/.gitkeep` のみ。再評価時はローカル配置）。
 
 関連: `docs/PHASE_A_CHECKLIST.md` / `scripts/phase_d_eval.py`
 

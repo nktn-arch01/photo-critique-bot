@@ -154,7 +154,14 @@ v1 / 本ブランチでは追加のプロンプト追い込みを行わない。
 
 ---
 
-## 8. 記録用（再実行が必要なとき）
+## 8. 評価用写真の Git からの削除（2026-08-09）
+
+force-add していた `eval/phase_d/images/P0{1..4}_*.jpg` を **履歴ごと除去**（`git filter-repo`）。  
+最新ツリーは `.gitkeep` のみ。ローカル評価時は gitignore 配下に再配置する。
+
+---
+
+## 9. 記録用（再実行が必要なとき）
 
 1. 本ブランチを pull
 2. `python3 test_offline_suite.py`
