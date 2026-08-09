@@ -27,6 +27,10 @@ TITLE_NUDGE_UP_PX = 5
 CRITIQUE_NUDGE_DOWN_PX = 5
 SUMMARY_FONT_SIZE = 26
 SCORE_FONT_SIZE = SUMMARY_FONT_SIZE  # SCORES は SUMMARY と同じサイズ
+# N-04: 日英併記ラベルが長いため、★と (n/5) は右寄り固定（ラベル幅 ~450px @26）
+SCORE_LABEL_X = 10
+SCORE_STARS_X = 500
+SCORE_VAL_X = 780
 
 
 def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
@@ -215,9 +219,24 @@ def create_critique_card(
             label, score_info = score_items[i]
             stars = score_info["stars"]
             val = score_info["val"]
-            draw.text((content_left + 10, y), f"{label}", font=font_score, fill=palette["score_label"])
-            draw.text((content_left + 340, y), f"{stars}", font=font_score, fill=palette["stars"])
-            draw.text((content_left + 640, y), f"({val}/5)", font=font_score, fill=palette["score_val"])
+            draw.text(
+                (content_left + SCORE_LABEL_X, y),
+                f"{label}",
+                font=font_score,
+                fill=palette["score_label"],
+            )
+            draw.text(
+                (content_left + SCORE_STARS_X, y),
+                f"{stars}",
+                font=font_score,
+                fill=palette["stars"],
+            )
+            draw.text(
+                (content_left + SCORE_VAL_X, y),
+                f"({val}/5)",
+                font=font_score,
+                fill=palette["score_val"],
+            )
         y += SCORE_ROW_HEIGHT
 
     y += 12

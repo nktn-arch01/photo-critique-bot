@@ -77,22 +77,26 @@ def _scores_format_block(lens: CritiqueLens) -> str:
     lines = ["■SCORES:"]
     for axis in lens.score_axes:
         lines.append(f"・{axis.label}  : [写真に応じた★評価] ([1〜5の数値]/5)")
-    example_label = lens.score_axes[0].label if lens.score_axes else "眼差しの輪郭"
+    example_label = (
+        lens.score_axes[0].label if lens.score_axes else "眼差しの輪郭 (Contours of the Eyes)"
+    )
     lines.append(
-        f"(※SCORES出力例: ・{example_label}  : ★★★☆☆ (3/5) のように必ず★記号5文字と(数値/5)形式で出力すること。"
-        "ラベルは上記の表示名のみを使い、深層基準の説明文をSCORES行に書かないこと)"
+        f"(※SCORES出力例: ・{example_label}  : ★★★☆☆ (3/5) のように、表示名を一字一句そのまま使い、"
+        "★記号5文字と(数値/5)形式で出力すること。深層基準・アンカーの文言をSCORES行に書かないこと)"
     )
     return "\n".join(lines)
 
 
 def _scores_meaning_block(lens: CritiqueLens) -> str:
-    """AI 向け深層基準。カード／ユーザーには出さない。"""
+    """AI 向け深層基準。カード／ユーザーには出さない。ブレ低減のため観測対象＋アンカーを明示。"""
     lines = [
-        "【■SCORES：深層基準（ユーザー・カードには非表示。評価の指標のみ）】",
-        "各表示名に対応する深層基準を読み、写真からどれだけ読み取れたか／講評にどれだけ影響したかを★で返すこと。",
+        "【■SCORES：深層基準（ユーザー・カードには非表示）】",
+        "手順: (1) 各軸の「観察対象」だけを写真から拾う (2) アンカー★1/★3/★5に当てはめる "
+        "(3) 表示名ラベルでSCORESを出力。禁止事項に触れた加点はしない。",
     ]
     for axis in lens.score_axes:
-        lines.append(f"・表示名「{axis.label}」← 深層基準: {axis.meaning}")
+        lines.append(f"・表示名「{axis.label}」")
+        lines.append(f"  深層基準: {axis.meaning}")
     return "\n".join(lines)
 
 

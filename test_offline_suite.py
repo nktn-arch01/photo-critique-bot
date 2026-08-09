@@ -43,11 +43,11 @@ CARD_SAMPLE = """
 ■TITLE: 沈黙を割る線
 ■SUMMARY: 金属に宿る眼差しの残像
 ■SCORES:
-・眼差しの輪郭  : ★★★★☆ (4/5)
-・光の情動      : ★★★★★ (5/5)
-・物語の気配    : ★★★☆☆ (3/5)
-・表現の意識    : ★★★★★ (5/5)
-・感性の兆し    : ★★★★☆ (4/5)
+・眼差しの輪郭 (Contours of the Eyes)  : ★★★★☆ (4/5)
+・光の情動 (Emotion of Light)          : ★★★★★ (5/5)
+・物語の気配 (Signs of the Story)      : ★★★☆☆ (3/5)
+・表現の意識 (Awareness of Expression) : ★★★★★ (5/5)
+・感性の兆し（Signs of sensibility）   : ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 境界のきらめきと線の陰影が、見所として立ち上がる。好奇心を誘う一枚です。
 """
 
@@ -55,8 +55,8 @@ PHASE1_SAMPLE = """
 ■TITLE: 試験タイトル
 ■SUMMARY: キャッチ
 ■SCORES:
-・眼差しの輪郭  : ★★★☆☆ (3/5)
-・光の情動      : ★★★★☆ (4/5)
+・眼差しの輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)
+・光の情動 (Emotion of Light)          : ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 要約文です。
 """
 
@@ -90,19 +90,20 @@ def test_parser_phase1():
     assert p["has_valid_phase1"]
     assert p["title"] == "試験タイトル"
     assert len(p["scores"]) >= 2
-    assert "眼差しの輪郭" in p["scores"]
-    assert p["scores"]["眼差しの輪郭"]["key"] == "framing"
+    assert "眼差しの輪郭 (Contours of the Eyes)" in p["scores"]
+    assert p["scores"]["眼差しの輪郭 (Contours of the Eyes)"]["key"] == "framing"
 
 
 def test_parser_legacy_score_aliases():
     p = parse_critique_text(PHASE1_LEGACY_SCORES)
     assert p["has_valid_phase1"]
     labels = list(p["scores"].keys())
-    assert labels[0] == "眼差しの輪郭"
-    assert labels[1] == "光の情動"
-    assert p["scores"]["表現の意識"]["val"] == "5"
+    assert labels[0] == "眼差しの輪郭 (Contours of the Eyes)"
+    assert labels[1] == "光の情動 (Emotion of Light)"
+    assert p["scores"]["表現の意識 (Awareness of Expression)"]["val"] == "5"
     assert score_alias_to_key("独自・世界観") == "sense"
     assert score_alias_to_key("空間の切り取り") == "framing"
+    assert score_alias_to_key("眼差しの輪郭") == "framing"
 
 
 def test_parser_phase2():
@@ -116,26 +117,31 @@ def test_self_lens_prompts():
     lens = get_lens()
     assert "良き理解者" in get_system_role()
     assert lens.score_disclaimer == ""  # N-01: 免責削除
-    assert lens.score_axes[0].label == "眼差しの輪郭"
-    assert "視線誘導の設計" in lens.score_axes[0].meaning
+    assert lens.score_axes[0].label == "眼差しの輪郭 (Contours of the Eyes)"
+    assert "観察対象" in lens.score_axes[0].meaning
+    assert "アンカー" in lens.score_axes[0].meaning
     ctx = CritiquePromptContext.from_metadata(
         {"camera_model": "TestCam", "lens_model": "TestLens", "user_intent": "光を残したい"},
         {},
     )
     p1 = build_phase1_prompt(ctx)
-    assert "眼差しの輪郭" in p1
+    assert "眼差しの輪郭 (Contours of the Eyes)" in p1
+    assert "Contours of the Eyes" in p1
     assert "深層基準" in p1
     assert "ユーザー・カードには非表示" in p1
+    assert "過大評価禁止" in p1 or "低い方へ" in p1
     assert "構図・構成" not in p1
     assert "プロの写真評論家" not in p1
     assert "人物の扱い（分岐・厳守）" in p1
     assert "花の佇まい" in p1  # 禁止例がプロンプトに残っていること
     assert "一文目" in p1
     assert "撮影日時" not in p1  # Phase1 に時計を渡さない（規則5）
-    # N-03: 20260808 版 CRITIQUE_SUMMARY（「たのではないでしょうか」誘導をやめる）
+    # N-03: CRITIQUE_SUMMARY プロンプトを 20260808 版へ戻す
     assert "効果的な見所を主体に、読者の好奇心を煽る文章" in p1
     assert "あなたは〇〇に惹かれたのでは" not in p1
-    p2 = build_phase2_prompt(ctx, "■TITLE: t\n■SCORES:\n・眼差しの輪郭  : ★★★☆☆ (3/5)")
+    p2 = build_phase2_prompt(
+        ctx, "■TITLE: t\n■SCORES:\n・眼差しの輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)"
+    )
     assert "次なる一枚への対話と提案" in p2
     assert "ステップアップ・アドバイス" not in p2
     assert "曖昧さの肯定" in p2
@@ -317,11 +323,11 @@ def test_critique_summary_short_keeps_fixed_image_area():
 ■TITLE: 沈黙を割る線
 ■SUMMARY: 金属に宿る眼差しの残像
 ■SCORES:
-・眼差しの輪郭  : ★★★★☆ (4/5)
-・光の情動      : ★★★★★ (5/5)
-・物語の気配    : ★★★☆☆ (3/5)
-・表現の意識    : ★★★★★ (5/5)
-・感性の兆し    : ★★★★☆ (4/5)
+・眼差しの輪郭 (Contours of the Eyes)  : ★★★★☆ (4/5)
+・光の情動 (Emotion of Light)          : ★★★★★ (5/5)
+・物語の気配 (Signs of the Story)      : ★★★☆☆ (3/5)
+・表現の意識 (Awareness of Expression) : ★★★★★ (5/5)
+・感性の兆し（Signs of sensibility）   : ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 短い。
 """
     create_critique_card(src, short_sample, short_out)
@@ -369,6 +375,26 @@ def test_n01_no_disclaimer_on_card_and_lens():
     )
 
 
+def test_n04_score_label_fits_before_stars():
+    """N-04: 日英併記ラベルが★列（SCORE_STARS_X）に食い込まない。"""
+    from generate_critique_card import (
+        SCORE_FONT_SIZE,
+        SCORE_STARS_X,
+        SCORE_LABEL_X,
+        load_japanese_font,
+        _text_width,
+    )
+
+    font = load_japanese_font(SCORE_FONT_SIZE)
+    gap = 12
+    for axis in get_lens().score_axes:
+        w = _text_width(font, axis.label)
+        assert SCORE_LABEL_X + w + gap <= SCORE_STARS_X, (
+            f"label too wide for stars column: {axis.label!r} width={w}"
+        )
+        assert "観察対象" in axis.meaning and "アンカー" in axis.meaning
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -385,6 +411,7 @@ def run_all():
     test_create_critique_card_light_theme()
     test_critique_summary_short_keeps_fixed_image_area()
     test_n01_no_disclaimer_on_card_and_lens()
+    test_n04_score_label_fits_before_stars()
     print("test_offline_suite: OK")
 
 
