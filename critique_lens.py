@@ -59,8 +59,10 @@ SELF_LENS = CritiqueLens(
     score_axes=(
         _axis(
             "framing",
-            "眼差しの輪郭 (Contours of the Eyes)",
+            "眼差の輪郭 (Contours of the Eyes)",
             (
+                "眼差の輪郭 (Contours of the Eyes)",
+                "眼差の輪郭",
                 "眼差しの輪郭 (Contours of the Eyes)",
                 "眼差しの輪郭",
                 "Contours of the Eyes",
@@ -70,15 +72,18 @@ SELF_LENS = CritiqueLens(
                 "構図・構成",
                 "構図",
             ),
-            # 観測可能な枠取り証拠のみ（心の推測は禁止）。軸を直交させるため「光」「物語」は別軸へ。
             "観察対象: 枠内/枠外の選択、線・形・シルエット、視線誘導、余白の設計。"
             "アンカー: ★1=切り取りの意図が弱い ★3=枠と導線が明確 ★5=枠取りが一枚の主軸。"
             "禁止: 撮影者の心情の推測だけで点数を上げない。",
         ),
         _axis(
             "sensitivity",
-            "光の情動 (Emotion of Light)",
+            "感情の陰影 (Nuances of Emotion)",
             (
+                "感情の陰影 (Nuances of Emotion)",
+                "感情の陰影",
+                "Nuances of Emotion",
+                "Euances of Emotion",  # 入力ゆれ吸収
                 "光の情動 (Emotion of Light)",
                 "光の情動",
                 "Emotion of Light",
@@ -88,9 +93,10 @@ SELF_LENS = CritiqueLens(
                 "光・色彩",
                 "光",
             ),
-            "観察対象: 光の方向、反射、ハイライト/シャドウのグラデーション、質感の立ち方。"
-            "アンカー: ★1=光の特徴が弱い ★3=方向と質感がはっきり読める ★5=光の振る舞いが一枚の主軸。"
-            "禁止: 時間帯ラベルや「美しい光」など抽象語だけで加点しない。",
+            # 表示名は感情の陰影。採点は明暗・トーンが生む感情のニュアンス（観測可能）に固定。
+            "観察対象: 明暗の幅、ハイライトと影の関係、色温度やトーンの偏り、そこから読める感情のニュアンス。"
+            "アンカー: ★1=トーンの感情差が弱い ★3=陰影が気分をはっきり伝える ★5=感情の陰影が一枚の主軸。"
+            "禁止: 時間帯ラベルや「美しい光」など抽象語だけで加点しない。内心の創作で盛らない。",
         ),
         _axis(
             "story",
@@ -111,8 +117,11 @@ SELF_LENS = CritiqueLens(
         ),
         _axis(
             "technical",
-            "表現の意識 (Awareness of Expression)",
+            "表現の意図 (Intent of Expression)",
             (
+                "表現の意図 (Intent of Expression)",
+                "表現の意図",
+                "Intent of Expression",
                 "表現の意識 (Awareness of Expression)",
                 "表現の意識",
                 "Awareness of Expression",
@@ -122,16 +131,18 @@ SELF_LENS = CritiqueLens(
                 "技術・露出",
                 "技術",
             ),
-            "観察対象: 露出の振り（ハイキー/ローキー等）、被写界深度、静止/ブレなど「選択の痕跡」として読める効果。"
-            "アンカー: ★1=選択の痕跡が弱い ★3=露出やボケ等の選択が読める ★5=その選択が一枚の主軸。"
-            "禁止: 機材名や設定値の正しさ採点。数値の是非ではなく表現への効きを見る。",
+            "観察対象: 露出の振り、被写界深度、静止/ブレなど、表現意図として読める撮影選択の痕跡。"
+            "アンカー: ★1=意図の痕跡が弱い ★3=露出やボケ等の選択が意図として読める ★5=その意図が一枚の主軸。"
+            "禁止: 機材名や設定値の正しさ採点。数値の是非ではなく表現意図への効きを見る。",
         ),
         _axis(
             "sense",
-            "感性の兆し（Signs of sensibility）",
+            "感性の兆し (Signs of Sensibility)",
             (
+                "感性の兆し (Signs of Sensibility)",
                 "感性の兆し（Signs of sensibility）",
                 "感性の兆し",
+                "Signs of Sensibility",
                 "Signs of sensibility",
                 "内なる感性の純度",
                 "内なる感性の純度（Sense）",
@@ -142,7 +153,7 @@ SELF_LENS = CritiqueLens(
             ),
             "観察対象: 定型から外れた視点の偏り、モチーフの選び方、曖昧さの残し方、反復しそうなこだわりの痕跡。"
             "アンカー: ★1=一般的な見栄え中心 ★3=独自の偏りが一つ明確 ★5=視点のこだわりが画面を支配。"
-            "禁止: 他軸（枠・光・物語・技術）の言い換えだけで高得点にしない。",
+            "禁止: 他軸（枠・陰影・物語・意図）の言い換えだけで高得点にしない。",
         ),
     ),
     score_disclaimer="",  # N-01: 免責文は出さない

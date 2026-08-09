@@ -78,7 +78,7 @@ def _scores_format_block(lens: CritiqueLens) -> str:
     for axis in lens.score_axes:
         lines.append(f"・{axis.label}  : [写真に応じた★評価] ([1〜5の数値]/5)")
     example_label = (
-        lens.score_axes[0].label if lens.score_axes else "眼差しの輪郭 (Contours of the Eyes)"
+        lens.score_axes[0].label if lens.score_axes else "眼差の輪郭 (Contours of the Eyes)"
     )
     lines.append(
         f"(※SCORES出力例: ・{example_label}  : ★★★☆☆ (3/5) のように、表示名を一字一句そのまま使い、"

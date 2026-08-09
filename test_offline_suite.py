@@ -43,11 +43,11 @@ CARD_SAMPLE = """
 ■TITLE: 沈黙を割る線
 ■SUMMARY: 金属に宿る眼差しの残像
 ■SCORES:
-・眼差しの輪郭 (Contours of the Eyes)  : ★★★★☆ (4/5)
-・光の情動 (Emotion of Light)          : ★★★★★ (5/5)
+・眼差の輪郭 (Contours of the Eyes)  : ★★★★☆ (4/5)
+・感情の陰影 (Nuances of Emotion)          : ★★★★★ (5/5)
 ・物語の気配 (Signs of the Story)      : ★★★☆☆ (3/5)
-・表現の意識 (Awareness of Expression) : ★★★★★ (5/5)
-・感性の兆し（Signs of sensibility）   : ★★★★☆ (4/5)
+・表現の意図 (Intent of Expression) : ★★★★★ (5/5)
+・感性の兆し (Signs of Sensibility)   : ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 境界のきらめきと線の陰影が、見所として立ち上がる。好奇心を誘う一枚です。
 """
 
@@ -55,8 +55,8 @@ PHASE1_SAMPLE = """
 ■TITLE: 試験タイトル
 ■SUMMARY: キャッチ
 ■SCORES:
-・眼差しの輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)
-・光の情動 (Emotion of Light)          : ★★★★☆ (4/5)
+・眼差の輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)
+・感情の陰影 (Nuances of Emotion)          : ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 要約文です。
 """
 
@@ -90,17 +90,17 @@ def test_parser_phase1():
     assert p["has_valid_phase1"]
     assert p["title"] == "試験タイトル"
     assert len(p["scores"]) >= 2
-    assert "眼差しの輪郭 (Contours of the Eyes)" in p["scores"]
-    assert p["scores"]["眼差しの輪郭 (Contours of the Eyes)"]["key"] == "framing"
+    assert "眼差の輪郭 (Contours of the Eyes)" in p["scores"]
+    assert p["scores"]["眼差の輪郭 (Contours of the Eyes)"]["key"] == "framing"
 
 
 def test_parser_legacy_score_aliases():
     p = parse_critique_text(PHASE1_LEGACY_SCORES)
     assert p["has_valid_phase1"]
     labels = list(p["scores"].keys())
-    assert labels[0] == "眼差しの輪郭 (Contours of the Eyes)"
-    assert labels[1] == "光の情動 (Emotion of Light)"
-    assert p["scores"]["表現の意識 (Awareness of Expression)"]["val"] == "5"
+    assert labels[0] == "眼差の輪郭 (Contours of the Eyes)"
+    assert labels[1] == "感情の陰影 (Nuances of Emotion)"
+    assert p["scores"]["表現の意図 (Intent of Expression)"]["val"] == "5"
     assert score_alias_to_key("独自・世界観") == "sense"
     assert score_alias_to_key("空間の切り取り") == "framing"
     assert score_alias_to_key("眼差しの輪郭") == "framing"
@@ -117,7 +117,7 @@ def test_self_lens_prompts():
     lens = get_lens()
     assert "良き理解者" in get_system_role()
     assert lens.score_disclaimer == ""  # N-01: 免責削除
-    assert lens.score_axes[0].label == "眼差しの輪郭 (Contours of the Eyes)"
+    assert lens.score_axes[0].label == "眼差の輪郭 (Contours of the Eyes)"
     assert "観察対象" in lens.score_axes[0].meaning
     assert "アンカー" in lens.score_axes[0].meaning
     ctx = CritiquePromptContext.from_metadata(
@@ -125,8 +125,9 @@ def test_self_lens_prompts():
         {},
     )
     p1 = build_phase1_prompt(ctx)
-    assert "眼差しの輪郭 (Contours of the Eyes)" in p1
+    assert "眼差の輪郭 (Contours of the Eyes)" in p1
     assert "Contours of the Eyes" in p1
+    assert "Nuances of Emotion" in p1
     assert "深層基準" in p1
     assert "ユーザー・カードには非表示" in p1
     assert "過大評価禁止" in p1 or "低い方へ" in p1
@@ -140,7 +141,7 @@ def test_self_lens_prompts():
     assert "効果的な見所を主体に、読者の好奇心を煽る文章" in p1
     assert "あなたは〇〇に惹かれたのでは" not in p1
     p2 = build_phase2_prompt(
-        ctx, "■TITLE: t\n■SCORES:\n・眼差しの輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)"
+        ctx, "■TITLE: t\n■SCORES:\n・眼差の輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)"
     )
     assert "次なる一枚への対話と提案" in p2
     assert "ステップアップ・アドバイス" not in p2
@@ -323,11 +324,11 @@ def test_critique_summary_short_keeps_fixed_image_area():
 ■TITLE: 沈黙を割る線
 ■SUMMARY: 金属に宿る眼差しの残像
 ■SCORES:
-・眼差しの輪郭 (Contours of the Eyes)  : ★★★★☆ (4/5)
-・光の情動 (Emotion of Light)          : ★★★★★ (5/5)
+・眼差の輪郭 (Contours of the Eyes)  : ★★★★☆ (4/5)
+・感情の陰影 (Nuances of Emotion)          : ★★★★★ (5/5)
 ・物語の気配 (Signs of the Story)      : ★★★☆☆ (3/5)
-・表現の意識 (Awareness of Expression) : ★★★★★ (5/5)
-・感性の兆し（Signs of sensibility）   : ★★★★☆ (4/5)
+・表現の意図 (Intent of Expression) : ★★★★★ (5/5)
+・感性の兆し (Signs of Sensibility)   : ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 短い。
 """
     create_critique_card(src, short_sample, short_out)

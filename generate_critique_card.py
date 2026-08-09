@@ -27,10 +27,10 @@ TITLE_NUDGE_UP_PX = 5
 CRITIQUE_NUDGE_DOWN_PX = 5
 SUMMARY_FONT_SIZE = 26
 SCORE_FONT_SIZE = SUMMARY_FONT_SIZE  # SCORES は SUMMARY と同じサイズ
-# N-04: 日英併記ラベルが長いため、★と (n/5) は右寄り固定（ラベル幅 ~450px @26）
+# N-04: 日英併記（日本語4字揃え）。ラベル最大~400px @26 → ★/(n/5) を右へ固定
 SCORE_LABEL_X = 10
-SCORE_STARS_X = 500
-SCORE_VAL_X = 780
+SCORE_STARS_X = 470
+SCORE_VAL_X = 760
 
 
 def load_japanese_font(size: int) -> ImageFont.FreeTypeFont:
