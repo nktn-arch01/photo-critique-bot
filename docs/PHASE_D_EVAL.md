@@ -77,19 +77,44 @@ Mac の `/Users/.../photo_ai/...` は **自動では同期されません**（�
 
 Mac のターミナルで（パスは自分の clone 先に合わせる）:
 
+**重要:** 下の `REPO=` は **GitHub から clone した本物のフォルダ**を指す。`どこか` や `path/to` は仮書きなので、そのままコピペしない。
+
+まず Mac で clone の場所を探す（または新規 clone）:
+
 ```bash
-# 1) 手元の4枚 → リポジトリの eval/phase_d/images/
-REPO="$HOME/path/to/photo-critique-bot"   # clone した場所
-SRC="$HOME/photo_ai/eval/phase_d/images"  # いま写真がある場所
+# 既存 clone を探す（見つかればそのパスが答え）
+mdfind -name photo-critique-bot 2>/dev/null | head -20
+ls -la ~/photo-critique-bot ~/.cursor/worktrees 2>/dev/null
+# Cursor デスクトップで開いているフォルダなら、そのパスを使う
+
+# 見つからないときは新規 clone（例: ホーム直下）
+cd ~
+git clone https://github.com/nktn-arch01/photo-critique-bot.git
+REPO="$HOME/photo-critique-bot"
+```
+
+写真を入れて push:
+
+```bash
+# ★ 上で決めた本物のパスを入れる（例）
+REPO="$HOME/photo-critique-bot"
+SRC="$HOME/photo_ai/eval/phase_d/images"
+
+# 誤って作った空フォルダを消す場合（中身が写真コピーだけなら）
+# rm -rf "$HOME/どこか"
 
 mkdir -p "$REPO/eval/phase_d/images"
 cp "$SRC"/P01_person.jpg "$SRC"/P02_light.jpg \
    "$SRC"/P03_ambiguity.jpg "$SRC"/P04_subject_label.jpg \
    "$REPO/eval/phase_d/images/"
 
-# 2) gitignore を越えて push（プライベートリポ向け）
 cd "$REPO"
-git checkout cursor/lumina-self-lens-prompts-e0e5   # 作業ブランチ
+test -d .git || { echo "ERROR: ここは git リポジトリではありません: $REPO"; exit 1; }
+
+git fetch origin
+git checkout cursor/lumina-self-lens-prompts-e0e5
+git pull origin cursor/lumina-self-lens-prompts-e0e5
+
 git add -f eval/phase_d/images/P01_person.jpg \
            eval/phase_d/images/P02_light.jpg \
            eval/phase_d/images/P03_ambiguity.jpg \
