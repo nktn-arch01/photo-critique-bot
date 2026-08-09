@@ -112,4 +112,4 @@
 - [x] 方針合意（本人対話 v1 / レンズ分離 v1.1 / 動的ルーブリックは将来）
 - [x] 本チェックリストに沿った実装完了（オフライン検証まで）
 - [x] Phase D 実写真評価完了（**合格** / 2026-08-09。追加の応答品質改善は V3 以降・API 変更含む。所見: `docs/PHASE_D_FINDINGS.md`）
-- [ ] 改訂版リリース
+- [x] 改訂版リリース準備完了（評価用 JPEG は Git 履歴から削除済 / Offline tests 成功 / PR #2 ready）。**マージは GitHub 上で実施** → [PR #2](https://github.com/nktn-arch01/photo-critique-bot/pull/2)
