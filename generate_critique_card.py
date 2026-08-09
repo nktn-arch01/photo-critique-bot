@@ -1,6 +1,7 @@
 import textwrap
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from critique_lens import DEFAULT_LENS, get_lens
 from critique_parser import parse_critique_text
 from card_theme import DEFAULT_CARD_THEME, get_card_palette, normalize_card_theme
 
@@ -16,7 +17,9 @@ LOGO_TEXT_GAP = 20  # 要約テキストとロゴの最小隙間
 BODY_LINES = 3
 BODY_LINE_HEIGHT = 30
 SCORE_ROW_HEIGHT = 36
-SCORE_ROW_COUNT = 5  # プロンプト上の固定5項目
+# self レンズ既定は5。描画はレンズ軸数を優先（将来の可変軸に備える）
+SCORE_ROW_COUNT = len(get_lens(DEFAULT_LENS).score_axes)
+DISCLAIMER_LINE_HEIGHT = 28
 LINE_THICKNESS = 1
 LINE_GAP_AFTER = 18
 
@@ -87,15 +90,21 @@ def _wrap_to_pixel_width(text: str, font: ImageFont.ImageFont, max_width: int) -
     return lines or [""]
 
 
-def _fixed_text_block_height() -> int:
-    """文字エリア全体の固定高さ（要約3行・スコア5行・ロゴ128を含む）。"""
+def _score_row_count(lens: str | None = None) -> int:
+    return max(1, len(get_lens(lens).score_axes))
+
+
+def _fixed_text_block_height(lens: str | None = None) -> int:
+    """文字エリア全体の固定高さ（免責・スコア行・要約3行・ロゴ128を含む）。"""
+    rows = _score_row_count(lens)
     h = 0
     h += LINE_THICKNESS + LINE_GAP_AFTER  # タイトル上の分割線
     h += 50  # title
     h += 38  # summary
     h += 4
     h += LINE_THICKNESS + LINE_GAP_AFTER  # スコア上
-    h += SCORE_ROW_COUNT * SCORE_ROW_HEIGHT
+    h += DISCLAIMER_LINE_HEIGHT  # スコア免責（眼差しの目盛り）
+    h += rows * SCORE_ROW_HEIGHT
     h += 12
     h += LINE_THICKNESS + LINE_GAP_AFTER  # 要約上
     h += LOGO_SIZE  # 要約3行＋ロゴ行（高さはロゴに合わせ固定）
@@ -126,13 +135,17 @@ def create_critique_card(
     critique_text: str,
     output_card_path: Path,
     theme: str = DEFAULT_CARD_THEME,
+    lens: str = DEFAULT_LENS,
 ):
     """1080×1350 講評カードを生成する。
 
     theme: "dark"（既定）または "light"
+    lens: 対話レンズ（スコア軸・免責文。v1 は self）
     """
     palette = get_card_palette(theme)
-    parsed = parse_critique_text(critique_text)
+    lens_def = get_lens(lens)
+    parsed = parse_critique_text(critique_text, lens=lens_def.id)
+    score_rows = _score_row_count(lens_def.id)
 
     W, H = CARD_WIDTH, CARD_HEIGHT
     margin = CARD_MARGIN
@@ -143,6 +156,7 @@ def create_critique_card(
     font_text = load_japanese_font(26)
     font_score = load_japanese_font(28)
     font_body = load_japanese_font(22)
+    font_disclaimer = load_japanese_font(18)
 
     content_left = margin
     content_right = W - margin
@@ -150,7 +164,7 @@ def create_critique_card(
     content_bottom = H - margin
     content_width = content_right - content_left
 
-    text_height = _fixed_text_block_height()
+    text_height = _fixed_text_block_height(lens_def.id)
     text_top = content_bottom - text_height
 
     y = text_top
@@ -168,8 +182,17 @@ def create_critique_card(
     draw.line([(content_left, y), (content_right, y)], fill=line_color, width=LINE_THICKNESS)
     y += LINE_THICKNESS + LINE_GAP_AFTER
 
-    score_items = list(parsed["scores"].items())[:SCORE_ROW_COUNT]
-    for i in range(SCORE_ROW_COUNT):
+    disclaimer = parsed.get("score_disclaimer") or lens_def.score_disclaimer
+    draw.text(
+        (content_left + 10, y),
+        disclaimer,
+        font=font_disclaimer,
+        fill=palette["summary"],
+    )
+    y += DISCLAIMER_LINE_HEIGHT
+
+    score_items = list(parsed["scores"].items())[:score_rows]
+    for i in range(score_rows):
         if i < len(score_items):
             label, score_info = score_items[i]
             stars = score_info["stars"]

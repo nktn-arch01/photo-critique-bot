@@ -8,7 +8,16 @@ import tempfile
 
 from PIL import Image
 
+from critique_lens import DEFAULT_LENS, LENS_SELF, get_lens, score_alias_to_key
 from critique_parser import parse_critique_text, is_valid_phase2_content
+from critique_prompts import CritiquePromptContext, build_phase1_prompt, build_phase2_prompt, get_system_role
+from scanner import (
+    TIME_ZONE_FACT_BANNED_STEMS,
+    _determine_time_zone_fact,
+    _apply_datetime_to_meta,
+    _default_exif_meta,
+    extract_file_metadata,
+)
 from card_theme import (
     CARD_THEME_DARK,
     CARD_THEME_LIGHT,
@@ -30,24 +39,37 @@ from log_manager import DesktopLogManager
 from privacy_utils import storage_path_from_card_url
 
 CARD_SAMPLE = """
-■TITLE: 魅惑のメカニズム
-■SUMMARY: 研ぎ澄まされた金属美
+■TITLE: 沈黙を割る線
+■SUMMARY: 金属に宿る眼差しの残像
 ■SCORES:
-・構図・構成  : ★★★★☆ (4/5)
-・光・色彩    : ★★★★★ (5/5)
-・ストーリー  : ★★★☆☆ (3/5)
-・技術・露出  : ★★★★★ (5/5)
-・独自・世界観: ★★★★☆ (4/5)
-■CRITIQUE_SUMMARY: 光と質感が織りなす印象的な情景。機械的な線と陰影が新しい視点を与えます。
+・空間の切り取り  : ★★★★☆ (4/5)
+・光への感受性    : ★★★★★ (5/5)
+・情景への投影    : ★★★☆☆ (3/5)
+・道具との対話    : ★★★★★ (5/5)
+・内なる感性の純度: ★★★★☆ (4/5)
+■CRITIQUE_SUMMARY: あなたは境界のきらめきに惹かれたのでは。線と陰影が対話の入口になります。
 """
 
 PHASE1_SAMPLE = """
 ■TITLE: 試験タイトル
 ■SUMMARY: キャッチ
 ■SCORES:
+・空間の切り取り  : ★★★☆☆ (3/5)
+・光への感受性    : ★★★★☆ (4/5)
+■CRITIQUE_SUMMARY: 要約文です。
+"""
+
+# 旧ラベル互換（パーサー正規化用）
+PHASE1_LEGACY_SCORES = """
+■TITLE: 旧形式
+■SUMMARY: 互換
+■SCORES:
 ・構図・構成  : ★★★☆☆ (3/5)
 ・光・色彩    : ★★★★☆ (4/5)
-■CRITIQUE_SUMMARY: 要約文です。
+・ストーリー  : ★★☆☆☆ (2/5)
+・技術・露出  : ★★★★★ (5/5)
+・独自・世界観: ★★★★☆ (4/5)
+■CRITIQUE_SUMMARY: 旧ラベルの要約。
 """
 
 PHASE2_SAMPLE = """
@@ -67,12 +89,82 @@ def test_parser_phase1():
     assert p["has_valid_phase1"]
     assert p["title"] == "試験タイトル"
     assert len(p["scores"]) >= 2
+    assert "空間の切り取り" in p["scores"]
+    assert p["scores"]["空間の切り取り"]["key"] == "framing"
+
+
+def test_parser_legacy_score_aliases():
+    p = parse_critique_text(PHASE1_LEGACY_SCORES)
+    assert p["has_valid_phase1"]
+    labels = list(p["scores"].keys())
+    assert labels[0] == "空間の切り取り"
+    assert labels[1] == "光への感受性"
+    assert p["scores"]["道具との対話"]["val"] == "5"
+    assert score_alias_to_key("独自・世界観") == "sense"
 
 
 def test_parser_phase2():
     assert is_valid_phase2_content(PHASE2_SAMPLE)
     p = parse_critique_text(PHASE2_SAMPLE)
     assert p["has_valid_phase2"]
+
+
+def test_self_lens_prompts():
+    assert DEFAULT_LENS == LENS_SELF
+    lens = get_lens()
+    assert "良き理解者" in get_system_role()
+    assert lens.score_disclaimer.startswith("これは良し悪し")
+    ctx = CritiquePromptContext.from_metadata(
+        {"camera_model": "TestCam", "lens_model": "TestLens", "user_intent": "光を残したい"},
+        {},
+    )
+    p1 = build_phase1_prompt(ctx)
+    assert "空間の切り取り" in p1
+    assert "構図・構成" not in p1
+    assert "感性のアンテナ" in p1
+    assert "プロの写真評論家" not in p1
+    assert "人物の扱い（分岐・厳守）" in p1
+    assert "花の佇まい" in p1  # 禁止例がプロンプトに残っていること
+    assert "一文目" in p1
+    assert "撮影日時" not in p1  # Phase1 に時計を渡さない（規則5）
+    p2 = build_phase2_prompt(ctx, "■TITLE: t\n■SCORES:\n・空間の切り取り  : ★★★☆☆ (3/5)")
+    assert "次なる一枚への対話と提案" in p2
+    assert "ステップアップ・アドバイス" not in p2
+    assert "曖昧さの肯定" in p2
+    assert "DateTimeOriginal" in p2
+    assert "時計帯ヒント" in p2
+
+
+def test_time_zone_fact_labels_avoid_banned_stems():
+    import datetime as _dt
+
+    for hour in (5, 12, 17, 23):
+        label = _determine_time_zone_fact(_dt.datetime(2025, 1, 1, hour, 0, 0))
+        for stem in TIME_ZONE_FACT_BANNED_STEMS:
+            assert stem not in label, f"hour={hour} label={label!r} contains {stem!r}"
+
+
+def test_datetime_prefers_original_not_modify():
+    meta = _default_exif_meta()
+    assert _apply_datetime_to_meta(meta, "2025:11:12 05:45:22", source="DateTimeOriginal")
+    assert meta["date_time"] == "2025-11-12 05:45:22"
+    assert meta["datetime_source"] == "DateTimeOriginal"
+    assert "04-07時帯" in meta["time_zone_fact"]
+    # ModifyDate 相当を渡さないことの契約: 誤った遅い時刻を後から上書きしない
+    assert not _apply_datetime_to_meta(meta, "not-a-date", source="bad")
+
+
+def test_phase_d_p02_uses_datetime_original_not_modify():
+    path = Path("eval/phase_d/images/P02_light.jpg")
+    if not path.is_file():
+        print("skip test_phase_d_p02_uses_datetime_original_not_modify (no image)")
+        return
+    meta, _, _ = extract_file_metadata(path)
+    assert meta["date_time"].startswith("2025-11-12 05:45")
+    assert meta["datetime_source"] in ("DateTimeOriginal", "SubSecDateTimeOriginal")
+    assert "04-07時帯" in meta["time_zone_fact"]
+    for stem in TIME_ZONE_FACT_BANNED_STEMS:
+        assert stem not in meta["time_zone_fact"]
 
 
 def test_log_manager_processed_filename():
@@ -214,14 +306,14 @@ def test_critique_summary_short_keeps_fixed_image_area():
     create_critique_card(src, CARD_SAMPLE, long_out)
 
     short_sample = """
-■TITLE: 魅惑のメカニズム
-■SUMMARY: 研ぎ澄まされた金属美
+■TITLE: 沈黙を割る線
+■SUMMARY: 金属に宿る眼差しの残像
 ■SCORES:
-・構図・構成  : ★★★★☆ (4/5)
-・光・色彩    : ★★★★★ (5/5)
-・ストーリー  : ★★★☆☆ (3/5)
-・技術・露出  : ★★★★★ (5/5)
-・独自・世界観: ★★★★☆ (4/5)
+・空間の切り取り  : ★★★★☆ (4/5)
+・光への感受性    : ★★★★★ (5/5)
+・情景への投影    : ★★★☆☆ (3/5)
+・道具との対話    : ★★★★★ (5/5)
+・内なる感性の純度: ★★★★☆ (4/5)
 ■CRITIQUE_SUMMARY: 短い。
 """
     create_critique_card(src, short_sample, short_out)
@@ -249,7 +341,12 @@ def test_critique_summary_short_keeps_fixed_image_area():
 
 def run_all():
     test_parser_phase1()
+    test_parser_legacy_score_aliases()
     test_parser_phase2()
+    test_self_lens_prompts()
+    test_time_zone_fact_labels_avoid_banned_stems()
+    test_datetime_prefers_original_not_modify()
+    test_phase_d_p02_uses_datetime_original_not_modify()
     test_log_manager_processed_filename()
     test_line_full_split_four_parts()
     test_storage_path_from_card_url()
