@@ -68,15 +68,17 @@
 ### 3. ファイル役割定義 (コンポーネント構成)
 
 #### ① 共通コアモジュール (Shared Core)
-- `critique_parser.py`: **【中央テキスト解析エンジン】** AIが出力するテキスト（Phase 1 / Phase 2）をパースし、全角記号や記号揺れ（`##`、`■`、`：`、`（）`、`／`）を100%吸収して統一辞書データへ変換する単一責任モジュール。
-- `critique_prompts.py`: Phase 1 / Phase 2 プロンプトの**単一ソース**（OpenAI・Gemini 共通。出力フォーマットは `critique_parser` と整合）。
-- `ai_vision.py`: Vision API アダプタ層。`openai` / `gemini` を環境変数・モデル名で差し替え可能。
-- `critique_engine.py`: 2段階分離生成のオーケストレーション。デスクトップは `generate_critique_openai`、LINE は `generate_critique_for_line`（compact→Gemini、full→OpenAI）。
+- `critique_lens.py`: **【対話レンズ定義】** `self`（本人対話 / Lumina Notes）の system ロール・スコア軸（内部キー＋表示名）・免責文の単一ソース。`mode`（compact/full）とは直交。将来 `audience` 等を追加可能。
+- `critique_parser.py`: **【中央テキスト解析エンジン】** AIが出力するテキスト（Phase 1 / Phase 2）をパースし、全角記号や記号揺れ（`##`、`■`、`：`、`（）`、`／`）を100%吸収して統一辞書データへ変換する単一責任モジュール。スコアは旧ラベル互換のうえ正規化表示名へ揃える。
+- `critique_prompts.py`: Phase 1 / Phase 2 プロンプトの**単一ソース**（OpenAI・Gemini 共通。出力フォーマットは `critique_parser` と整合。レンズ固有スタンスは `critique_lens` から注入）。
+- `ai_vision.py`: Vision API アダプタ層。`openai` / `gemini` を環境変数・モデル名で差し替え可能。`system_prompt` で伴走者ロールを渡す。
+- `critique_engine.py`: 2段階分離生成のオーケストレーション。デスクトップは `generate_critique_openai`、LINE は `generate_critique_for_line`（本番は compact/full とも OpenAI）。`lens` 引数（既定 `self`）。
 - `line_messaging.py`: 詳細版は講評見出し（## 【1./【4./【6.）で4通に分割。push は5通/リクエスト上限で batched 送信。
 - `card_theme.py`: カード背景テーマ（`dark` / `light`）の識別子・パレット・正規化の**単一ソース**。
-- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 3行確保・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。
+- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。スコア直前にレンズ免責文を表示。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 3行確保・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。
 - `scanner.py`: **【中央メタデータ解析エンジン】** 画像ファイル (JPG/PNG/HEIC) および DxO PhotoLab の `.dop` サイドカーファイルを高精度スキャンする共通モジュール。正規表現優先＋Luaパース補完の多層防御構造を採用。
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
+- `docs/PHASE_A_CHECKLIST.md`: Lumina Notes 感性対話刷新の Phase A ゲート（v1 / v1.1 / 将来）。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
 - `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ・カード背景テーマの自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、実行前のライト/ダーク選択、独立例外処理、リアルタイムログ表示、中断制御対応。
@@ -120,6 +122,13 @@
 
 ### 規則 4: モード別プロンプト分岐と識別子の統一 (`compact` / `full`)
 - 簡易版呼び出し時は `mode="compact"` を使用し、Phase 1 完了時点で即座にレスポンスを返すこと。LINE Bot設定、Supabase DB、共通コア間でモード識別子に `"simple"` 等の不統一な文字列を使用しないこと。
+
+### 規則 4a: 対話レンズ識別子 (`lens`) — `mode` との直交
+- **`mode`**: 生成の深さ（`compact` / `full`）。**`lens`**: 対話の型（v1 は `self`＝本人の写真との対話 / Lumina Notes）。両者を混ぜない。
+- レンズ定義（system ロール・スコア軸・免責文）は `critique_lens.py` を単一ソースとする。プロンプト本文の共通フォーマットは `critique_prompts.py`、スタンスはレンズから注入。
+- スコア軸は内部キー（`framing` / `sensitivity` / `story` / `technical` / `sense`）を固定し、表示名はレンズごとに持つ。v1 表示名: 空間の切り取り / 光への感受性 / 情景への投影 / 道具との対話 / 内なる感性の純度。
+- ★は技術採点ではなく「感性のアンテナ」の向き・純度。カードには免責文「これは良し悪しを測る点数ではなく、あなたの眼差しを記した目盛りである」をスコア直前に必ず出す。
+- 将来: `audience`（第三者・展示／コンテスト）や企画文から軸を自動設計する `rubric_source=brief_generated` を追加しうる。製品形態（別アプリ vs モード切替）は未決定。詳細は `docs/PHASE_A_CHECKLIST.md`。
 
 ### 規則 4b: カード背景テーマ識別子の統一 (`dark` / `light`)
 - カード背景は `card_theme.py` の `dark` / `light` のみを用いる（日本語ラベル「ダーク」「ライト」は表示・LINE文言用。永続化・API引数は英小文字識別子）。
