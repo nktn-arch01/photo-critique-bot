@@ -75,7 +75,7 @@
 - `critique_engine.py`: 2段階分離生成のオーケストレーション。デスクトップは `generate_critique_openai`、LINE は `generate_critique_for_line`（本番は compact/full とも OpenAI）。`lens` 引数（既定 `self`）。
 - `line_messaging.py`: 詳細版は講評見出し（## 【1./【4./【6.）で4通に分割。push は5通/リクエスト上限で batched 送信。
 - `card_theme.py`: カード背景テーマ（`dark` / `light`）の識別子・パレット・正規化の**単一ソース**。
-- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。Desktop / LINE 共通。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 最大3行・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。SCORES フォントは SUMMARY と同サイズ。免責文は出さない。
+- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。Desktop / LINE 共通。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 最大3行・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。SCORES フォントは SUMMARY と同サイズ。カード上のスコアは★のみ（`(n/5)` は出さない。ログは星＋数字）。免責文は出さない。
 - `scanner.py`: **【中央メタデータ解析エンジン】** 画像ファイル (JPG/PNG/HEIC) および DxO PhotoLab の `.dop` サイドカーファイルを高精度スキャンする共通モジュール。正規表現優先＋Luaパース補完の多層防御構造を採用。
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
 - `docs/PHASE_A_CHECKLIST.md`: Lumina Notes 感性対話刷新の Phase A ゲート（v1 / v1.1 / 将来）。
@@ -128,7 +128,7 @@
 - レンズ定義（system ロール・スコア軸）は `critique_lens.py` を単一ソースとする。プロンプト本文の共通フォーマットは `critique_prompts.py`、スタンスはレンズから注入。
 - スコア軸は内部キー（`framing` / `sensitivity` / `story` / `technical` / `sense`）を固定する。**表示名**（カード・SCORES 出力・日英併記）と **深層基準**（AI のみ・観測対象＋★1/3/5アンカー・ユーザー非提示）を分離する。
 - v1 表示名: `眼差の輪郭 (Contours of the Eyes)` / `感情の陰影 (Nuances of Emotion)` / `物語の気配 (Signs of the Story)` / `表現の意図 (Intent of Expression)` / `感性の兆し (Signs of Sensibility)`。
-- ★は深層基準アンカーへの当てはめ（観測可能な証拠のみ、迷ったら低め）。カードに免責文は出さない。旧表示名はパーサー別名で受理し正規化する。
+- ★は深層基準アンカーへの当てはめ（観測可能な証拠のみ、迷ったら低め）。カードに免責文は出さない。カードのスコア行は★のみ描画し、`(n/5)` は Desktop / テキストログ側に残す。旧表示名はパーサー別名で受理し正規化する。
 
 - 将来: `audience`（第三者・展示／コンテスト）や企画文から軸を自動設計する `rubric_source=brief_generated` を追加しうる。製品形態（別アプリ vs モード切替）は未決定。詳細は `docs/PHASE_A_CHECKLIST.md`。
 
