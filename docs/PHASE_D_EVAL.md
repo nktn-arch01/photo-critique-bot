@@ -59,7 +59,23 @@ eval/phase_d/
   out/                   … 実行結果（gitignore）
 ```
 
-命名は `manifest.json` の `filename` に合わせる。拡張子は jpg / jpeg / png / heic 可。
+命名は `manifest.json` の `filename` に合わせる。拡張子は jpg / jpeg / png / heic 可。  
+`P04` だけ `P04_subject_label.jpg` のように manifest と名前が違っても、**先頭が `P04` ならスクリプトが拾う**（`scripts/phase_d_eval.py`）。
+
+### Mac の手元フォルダ → クラウド VM（`/workspace`）へ
+
+Cloud Agent のディスクは **GitHub から clone したリポジトリ**が `/workspace` です。  
+Mac の `/Users/.../photo_ai/...` は **自動では同期されません**（「Move to Cloud」も未コミットのファイルは運ばない）。
+
+| 方法 | 向いている人 | 手順の要点 |
+|------|--------------|------------|
+| **A. チャットに画像を添付** | いちばん簡単（おすすめ） | [cursor.com/agents](https://cursor.com/agents) または Cursor デスクトップで、このエージェントの会話に **4枚をドラッグ＆ドロップ** → 「`eval/phase_d/images/` にこの名前で保存して」と送る |
+| **B. ローカル clone にコピーして push** | デスクトップで `photo-critique-bot` を開いている人 | Mac でリポジトリの `eval/phase_d/images/` に4枚をコピー → `git add -f eval/phase_d/images/*.jpg` → commit & push → エージェントはそのブランチで作業 |
+| **C. 共有 URL** | 上記が難しいとき | 一時的な HTTPS リンク（プライベートでも可）をエージェントに渡し、VM 内で `curl` して保存してもらう |
+
+**注意（方法 B）:** `eval/phase_d/images/` は `.gitignore` 対象（写真を Git に載せない設計）。`-f` で push すると **GitHub 上にも写真が残る**ので、公開リポや共有に注意。プライベートリポでも履歴に残る。
+
+**できないこと:** Finder からクラウドのフォルダツリーへ直接ドロップする UI は現状ない（ローカル IDE のファイルツリーと VM は別物）。
 
 ---
 
