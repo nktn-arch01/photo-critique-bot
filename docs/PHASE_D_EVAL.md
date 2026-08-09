@@ -135,8 +135,24 @@ for f in P01_person.jpg P02_light.jpg P03_ambiguity.jpg P04_subject_label.jpg; d
   sips -Z 2000 -s formatOptions 70 "$f" --out "$f"
 done
 du -h *.jpg
-# その後、同じブランチで add -f → commit → push をやり直す
-# リトライだけなら: git config http.postBuffer 524288000 && git push -u origin HEAD
+```
+
+縮小前の大きい写真を **一度でも commit している**と、あとから縮小しても **履歴の大きい blob ごと push しようとして再び 408** になる。そのときは履歴を付け直す:
+
+```bash
+cd "$REPO"
+mkdir -p /tmp/phase_d_bak && cp eval/phase_d/images/P0*.jpg /tmp/phase_d_bak/
+du -h /tmp/phase_d_bak/*          # 合計が数 MB 以下であること
+git fetch origin
+git reset --hard origin/cursor/lumina-self-lens-prompts-e0e5
+cp /tmp/phase_d_bak/*.jpg eval/phase_d/images/
+git add -f eval/phase_d/images/P01_person.jpg \
+           eval/phase_d/images/P02_light.jpg \
+           eval/phase_d/images/P03_ambiguity.jpg \
+           eval/phase_d/images/P04_subject_label.jpg
+git commit -m "chore: add Phase D eval photos (compressed)"
+git config http.postBuffer 524288000
+git push -u origin HEAD           # Writing objects が数 MB 台なら成功しやすい
 ```
 
 **できないこと:** Finder からクラウドのフォルダツリーへ直接ドロップする UI は現状ない。
