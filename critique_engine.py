@@ -48,6 +48,10 @@ def _run_two_phase_generation(
     system_role = get_system_role(lens_id)
     prompt_phase1 = build_phase1_prompt(ctx, lens=lens_id)
 
+    # Phase1 はカードの軸になるため温度を下げ、compact/full 間の揺れを抑える
+    phase1_temperature = 0.35
+    phase2_temperature = 0.7
+
     phase1_output = ""
     for attempt in range(1, max_retries + 1):
         try:
@@ -57,6 +61,7 @@ def _run_two_phase_generation(
                 prompt_phase1,
                 model=model,
                 max_tokens=800,
+                temperature=phase1_temperature,
                 system_prompt=system_role,
             )
             parsed_check = parse_critique_text(content, lens=lens_id)
@@ -94,6 +99,7 @@ def _run_two_phase_generation(
                 prompt_phase2,
                 model=model,
                 max_tokens=2500,
+                temperature=phase2_temperature,
                 system_prompt=system_role,
             )
             if is_valid_phase2_content(content):

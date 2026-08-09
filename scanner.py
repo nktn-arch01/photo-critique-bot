@@ -130,32 +130,93 @@ def deep_find_key(obj, target_keys: list[str]) -> str | None:
     return None
 
 
+# ModifyDate / FileModifyDate は現像・書き出し時刻になりやすく、撮影時刻に使わない。
+# time_zone_fact ラベル自体に禁止語（朝日/夕景/夜景 等）を載せない（規則5との自己矛盾防止）。
+TIME_ZONE_FACT_BANNED_STEMS = (
+    "朝日",
+    "夕日",
+    "夕焼け",
+    "夕暮れ",
+    "夕映え",
+    "夕景",
+    "夜景",
+    "黄昏",
+    "早朝",
+    "夜間",
+    "深夜",
+)
+
+
 def _determine_time_zone_fact(dt: datetime.datetime | None) -> str:
-    if not dt: return "不明"
+    """撮影時刻の時計帯（視覚ラベルではない）。禁止語を含めない。"""
+    if not dt:
+        return "不明"
     hour = dt.hour
-    if 4 <= hour < 7: return "早朝・黎明（日の出前後）"
-    elif 7 <= hour < 16: return "日中・昼光"
-    elif 16 <= hour < 19: return "夕景・黄昏（日の入り前後）"
-    else: return "夜間・深夜"
+    if 4 <= hour < 7:
+        return "04-07時帯（低角度の自然光が起きやすい）"
+    if 7 <= hour < 16:
+        return "07-16時帯（太陽高度が高めの自然光）"
+    if 16 <= hour < 19:
+        return "16-19時帯（低角度の自然光・コントラスト変化）"
+    return "19-04時帯（低照度・人工光が主になりやすい）"
 
 
 def _default_exif_meta() -> dict:
     return {
-        "date_time": "不明", "time_zone_fact": "不明", "camera_model": "不明",
-        "lens_model": "不明", "f_number": "不明", "shutter_speed": "不明",
-        "iso": "不明", "focal_length": "不明", "caption": None, "copyright": None, "artist": None,
+        "date_time": "不明",
+        "time_zone_fact": "不明",
+        "datetime_source": "none",
+        "camera_model": "不明",
+        "lens_model": "不明",
+        "f_number": "不明",
+        "shutter_speed": "不明",
+        "iso": "不明",
+        "focal_length": "不明",
+        "caption": None,
+        "copyright": None,
+        "artist": None,
     }
 
 
-def _apply_datetime_to_meta(meta: dict, dt_str: str | None) -> None:
+def _normalize_exif_datetime_str(dt_str: str | None) -> str | None:
+    """exiftool/PIL の日時文字列を 'YYYY:MM:DD HH:MM:SS' に正規化。失敗時 None。"""
     if not dt_str:
-        return
+        return None
+    raw = str(dt_str).strip().replace("\x00", "")
+    if not raw:
+        return None
+    # SubSecDateTimeOriginal 等: "2025:11:12 05:45:22.96+09:00"
+    core = raw.split(".", 1)[0]
+    core = core.split("+", 1)[0].split("Z", 1)[0].strip()
+    for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            datetime.datetime.strptime(core, fmt)
+            if fmt.startswith("%Y-%"):
+                return core.replace("-", ":", 2)
+            return core
+        except ValueError:
+            continue
+    return None
+
+
+def _apply_datetime_to_meta(
+    meta: dict,
+    dt_str: str | None,
+    *,
+    source: str,
+) -> bool:
+    """撮影時刻を meta に書く。成功時 True。ModifyDate 系は呼び出さないこと。"""
+    normalized = _normalize_exif_datetime_str(dt_str)
+    if not normalized:
+        return False
     try:
-        dt = datetime.datetime.strptime(str(dt_str).strip(), "%Y:%m:%d %H:%M:%S")
-        meta["date_time"] = dt.strftime("%Y-%m-%d %H:%M:%S")
-        meta["time_zone_fact"] = _determine_time_zone_fact(dt)
-    except Exception:
-        meta["date_time"] = str(dt_str).strip()
+        dt = datetime.datetime.strptime(normalized, "%Y:%m:%d %H:%M:%S")
+    except ValueError:
+        return False
+    meta["date_time"] = dt.strftime("%Y-%m-%d %H:%M:%S")
+    meta["time_zone_fact"] = _determine_time_zone_fact(dt)
+    meta["datetime_source"] = source
+    return True
 
 
 def _extract_exif_via_exiftool(image_path: Path) -> dict | None:
@@ -177,10 +238,13 @@ def _extract_exif_via_exiftool(image_path: Path) -> dict | None:
         return None
 
     meta = _default_exif_meta()
-    _apply_datetime_to_meta(
-        meta,
-        tags.get("DateTimeOriginal") or tags.get("CreateDate") or tags.get("ModifyDate"),
-    )
+    # 撮影時刻のみ。CreateDate/ModifyDate/FileModifyDate は現像・書出でずれやすいので使わない。
+    if not _apply_datetime_to_meta(meta, tags.get("DateTimeOriginal"), source="DateTimeOriginal"):
+        _apply_datetime_to_meta(
+            meta,
+            tags.get("SubSecDateTimeOriginal"),
+            source="SubSecDateTimeOriginal",
+        )
 
     model = tags.get("Model") or tags.get("CameraModelName")
     if model:
@@ -239,9 +303,11 @@ def _extract_exif_via_pil(image_path: Path) -> dict:
             if not exif_raw:
                 return meta
             exif = {ExifTags.TAGS.get(k, k): v for k, v in exif_raw.items() if k in ExifTags.TAGS}
+            # PIL の DateTime は ModifyDate 相当になりやすいので DateTimeOriginal のみ採用
             _apply_datetime_to_meta(
                 meta,
-                exif.get("DateTimeOriginal") or exif.get("DateTime"),
+                exif.get("DateTimeOriginal"),
+                source="DateTimeOriginal",
             )
 
             meta["camera_model"] = str(exif.get("Model", "不明")).replace("\x00", "").strip()
@@ -414,6 +480,7 @@ def extract_file_metadata(file_path: Path) -> tuple[dict, dict, str]:
     meta_block = f"""=== メタデータ ===
 file_name: {file_path.name}
 date_time: {exif_info['date_time']}
+datetime_source: {exif_info.get('datetime_source', 'none')}
 time_zone_fact: {exif_info['time_zone_fact']}
 camera_model: {exif_info['camera_model']}
 lens_model: {exif_info['lens_model']}

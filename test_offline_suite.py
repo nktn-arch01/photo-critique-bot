@@ -11,6 +11,13 @@ from PIL import Image
 from critique_lens import DEFAULT_LENS, LENS_SELF, get_lens, score_alias_to_key
 from critique_parser import parse_critique_text, is_valid_phase2_content
 from critique_prompts import CritiquePromptContext, build_phase1_prompt, build_phase2_prompt, get_system_role
+from scanner import (
+    TIME_ZONE_FACT_BANNED_STEMS,
+    _determine_time_zone_fact,
+    _apply_datetime_to_meta,
+    _default_exif_meta,
+    extract_file_metadata,
+)
 from card_theme import (
     CARD_THEME_DARK,
     CARD_THEME_LIGHT,
@@ -116,10 +123,46 @@ def test_self_lens_prompts():
     assert "構図・構成" not in p1
     assert "感性のアンテナ" in p1
     assert "プロの写真評論家" not in p1
+    assert "人物の「しぐさ」の読解（必須）" in p1
+    assert "撮影日時" not in p1  # Phase1 に時計を渡さない（規則5）
     p2 = build_phase2_prompt(ctx, "■TITLE: t\n■SCORES:\n・空間の切り取り  : ★★★☆☆ (3/5)")
     assert "次なる一枚への対話と提案" in p2
     assert "ステップアップ・アドバイス" not in p2
     assert "曖昧さの肯定" in p2
+    assert "DateTimeOriginal" in p2
+    assert "時計帯ヒント" in p2
+
+
+def test_time_zone_fact_labels_avoid_banned_stems():
+    import datetime as _dt
+
+    for hour in (5, 12, 17, 23):
+        label = _determine_time_zone_fact(_dt.datetime(2025, 1, 1, hour, 0, 0))
+        for stem in TIME_ZONE_FACT_BANNED_STEMS:
+            assert stem not in label, f"hour={hour} label={label!r} contains {stem!r}"
+
+
+def test_datetime_prefers_original_not_modify():
+    meta = _default_exif_meta()
+    assert _apply_datetime_to_meta(meta, "2025:11:12 05:45:22", source="DateTimeOriginal")
+    assert meta["date_time"] == "2025-11-12 05:45:22"
+    assert meta["datetime_source"] == "DateTimeOriginal"
+    assert "04-07時帯" in meta["time_zone_fact"]
+    # ModifyDate 相当を渡さないことの契約: 誤った遅い時刻を後から上書きしない
+    assert not _apply_datetime_to_meta(meta, "not-a-date", source="bad")
+
+
+def test_phase_d_p02_uses_datetime_original_not_modify():
+    path = Path("eval/phase_d/images/P02_light.jpg")
+    if not path.is_file():
+        print("skip test_phase_d_p02_uses_datetime_original_not_modify (no image)")
+        return
+    meta, _, _ = extract_file_metadata(path)
+    assert meta["date_time"].startswith("2025-11-12 05:45")
+    assert meta["datetime_source"] in ("DateTimeOriginal", "SubSecDateTimeOriginal")
+    assert "04-07時帯" in meta["time_zone_fact"]
+    for stem in TIME_ZONE_FACT_BANNED_STEMS:
+        assert stem not in meta["time_zone_fact"]
 
 
 def test_log_manager_processed_filename():
@@ -299,6 +342,9 @@ def run_all():
     test_parser_legacy_score_aliases()
     test_parser_phase2()
     test_self_lens_prompts()
+    test_time_zone_fact_labels_avoid_banned_stems()
+    test_datetime_prefers_original_not_modify()
+    test_phase_d_p02_uses_datetime_original_not_modify()
     test_log_manager_processed_filename()
     test_line_full_split_four_parts()
     test_storage_path_from_card_url()
