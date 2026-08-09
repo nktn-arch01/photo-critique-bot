@@ -2,8 +2,14 @@
 __pycache__/
 .DS_Store
 .env
+.venv/
 archive/
 *.png
 *.jpg
 *.jpeg
 *.pdf
+
+# Phase D evaluation artifacts (keep manifest / docs; ignore photos & outputs)
+eval/phase_d/images/*
+!eval/phase_d/images/.gitkeep
+eval/phase_d/out/

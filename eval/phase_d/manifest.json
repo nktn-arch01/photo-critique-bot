@@ -1,0 +1,72 @@
+{
+  "lens": "self",
+  "version": "phase-d-v1",
+  "pass_ratio": 0.75,
+  "notes": "Place real photos under eval/phase_d/images/ using the filenames below. Minimum set: P01–P04.",
+  "slots": [
+    {
+      "id": "P01",
+      "category": "person",
+      "filename": "P01_person.jpg",
+      "intent": "人物のしぐさや視線が残るように撮った",
+      "required": true,
+      "preferred_mode": "full"
+    },
+    {
+      "id": "P02",
+      "category": "light",
+      "filename": "P02_light.jpg",
+      "intent": "光の質感を残したかった",
+      "required": true,
+      "preferred_mode": "full"
+    },
+    {
+      "id": "P03",
+      "category": "ambiguity",
+      "filename": "P03_ambiguity.jpg",
+      "intent": "ブレや露出の揺れも含めて空気を残したかった",
+      "required": true,
+      "preferred_mode": "full"
+    },
+    {
+      "id": "P04",
+      "category": "subject_label",
+      "filename": "P04_subject.jpg",
+      "intent": "被写体そのものより気配を残したかった",
+      "required": true,
+      "preferred_mode": "full"
+    },
+    {
+      "id": "P05",
+      "category": "no_person",
+      "filename": "P05_no_person.jpg",
+      "intent": "静けさを残したかった",
+      "required": false,
+      "preferred_mode": "compact"
+    },
+    {
+      "id": "P06",
+      "category": "time_temptation",
+      "filename": "P06_time.jpg",
+      "intent": "光のグラデーションを残したかった",
+      "required": false,
+      "preferred_mode": "compact"
+    },
+    {
+      "id": "P07",
+      "category": "detail",
+      "filename": "P07_detail.jpg",
+      "intent": "質感へのこだわりを残したかった",
+      "required": false,
+      "preferred_mode": "compact"
+    },
+    {
+      "id": "P08",
+      "category": "intent",
+      "filename": "P08_intent.jpg",
+      "intent": "次にまた同じ場所で撮りたくなる余韻を残したかった",
+      "required": false,
+      "preferred_mode": "full"
+    }
+  ]
+}

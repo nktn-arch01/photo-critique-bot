@@ -100,7 +100,7 @@
 2. `critique_prompts.py` + `ai_vision` / `critique_engine`（V1-01,02,05,08 / V11-02,04）  
 3. `critique_parser.py` + カード（V1-03,06,07 / V11-05）  
 4. `test_offline_suite.py` + ARCHITECTURE（V1-09,10 / V11-06）  
-5. （別作業）実写真での Phase D → 改訂リリース  
+5. 実写真での Phase D → 改訂リリース（手順: `docs/PHASE_D_EVAL.md` / 実行: `scripts/phase_d_eval.py`）  
 
 ---
 
