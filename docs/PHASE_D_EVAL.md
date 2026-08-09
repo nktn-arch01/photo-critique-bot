@@ -127,6 +127,18 @@ git push -u origin HEAD
 
 **注意:** `-f` で push すると **GitHub の履歴にも写真が残る**。公開リポでは使わない。終わったら削除コミットで消せるが、履歴には残る。
 
+**HTTP 408 / remote hung up:** 合計数十 MB の JPEG だと push がタイムアウトしやすい。Vision 評価には長辺 2000px 程度で足りるので、Mac で縮小してから push する。
+
+```bash
+cd "$REPO/eval/phase_d/images"
+for f in P01_person.jpg P02_light.jpg P03_ambiguity.jpg P04_subject_label.jpg; do
+  sips -Z 2000 -s formatOptions 70 "$f" --out "$f"
+done
+du -h *.jpg
+# その後、同じブランチで add -f → commit → push をやり直す
+# リトライだけなら: git config http.postBuffer 524288000 && git push -u origin HEAD
+```
+
 **できないこと:** Finder からクラウドのフォルダツリーへ直接ドロップする UI は現状ない。
 
 ---
