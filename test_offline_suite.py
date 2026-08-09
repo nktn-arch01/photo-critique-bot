@@ -123,7 +123,8 @@ def test_self_lens_prompts():
     assert "構図・構成" not in p1
     assert "感性のアンテナ" in p1
     assert "プロの写真評論家" not in p1
-    assert "人物の「しぐさ」の読解（必須・最優先）" in p1
+    assert "人物の扱い（分岐・厳守）" in p1
+    assert "花の佇まい" in p1  # 禁止例がプロンプトに残っていること
     assert "一文目" in p1
     assert "撮影日時" not in p1  # Phase1 に時計を渡さない（規則5）
     p2 = build_phase2_prompt(ctx, "■TITLE: t\n■SCORES:\n・空間の切り取り  : ★★★☆☆ (3/5)")
