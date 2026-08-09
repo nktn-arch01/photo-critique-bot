@@ -112,4 +112,13 @@
 - [x] 方針合意（本人対話 v1 / レンズ分離 v1.1 / 動的ルーブリックは将来）
 - [x] 本チェックリストに沿った実装完了（オフライン検証まで）
 - [x] Phase D 実写真評価完了（**合格** / 2026-08-09。追加の応答品質改善は V3 以降・API 変更含む。所見: `docs/PHASE_D_FINDINGS.md`）
-- [x] 改訂版リリース準備完了（評価用 JPEG は Git 履歴から削除済 / Offline tests 成功 / PR #2 ready）。**マージは GitHub 上で実施** → [PR #2](https://github.com/nktn-arch01/photo-critique-bot/pull/2)
+- [x] 改訂版リリース（**merged** 2026-08-09 / PR #2 → `main` @ `62e305c`）。評価用 JPEG は Git 履歴から削除済。本番の手動確認（LINE 簡易・詳細 / 必要なら Desktop）は下記「リリース後スモーク」。
+
+### リリース後スモーク（オーナー手動・CI 外）
+
+| # | 確認 | 目安 |
+|---|------|------|
+| S-1 | Render が `main` をデプロイ済み | Dashboard で最新 deploy 成功 |
+| S-2 | LINE **簡易（compact）** で1枚 | 新5軸・免責文・伴走口調。時間帯禁止語なし |
+| S-3 | LINE **詳細（full）** で同じか別の1枚 | Phase1 カード＋【1】〜【7】。人物ありならしぐさ／視線 |
+| S-4 | （任意）Desktop GUI で1枚 | カード PNG・ログが従来どおり出る |
