@@ -163,34 +163,44 @@ kept --> rejected
 rejected --> kept | recovered
 ```
 
-### 5.5 Work
+### 5.5 Work（ペア＋現像）
+
+1つの確定コマ（`stem`）に対し、Works 配下に次が揃い得る。
+
+| 役割 | ファイル規則 | 説明 |
+|------|--------------|------|
+| 撮って出し | `{stem}.jpg` / `{stem}.JPG` / `{stem}.HIF` / `{stem}.heif` 等 | カメラからのプレビュー。サフィックスなし |
+| RAW | `{stem}.ORF` / `{stem}.RAF` 等 | メーカー別。拡張子一覧は実装で単一ソース化（最低限 ORF/RAF） |
+| RAW 現像 JPEG | **`{stem}_dev.jpg`** | DxO 等の書き出し。サフィックス **`_dev` 固定（確定）** |
 
 | フィールド | 説明 |
 |------------|------|
-| `id` / `source_id` / `image_path` | 作品 |
-| `rendition` | `sooc` \| `jpeg_edit` \| `raw_export` |
-| `external_source_path` | 外部現像ファイルの元パス（任意） |
+| `id` / `source_id` / `stem` | 作品ID・元・ベース名 |
+| `sooc_path` | 撮って出しパス（任意・欠ける場合あり） |
+| `raw_path` | RAW パス（任意・JPEGのみのコマもあり得る） |
+| `dev_path` | `{stem}_dev.jpg`（現像後に埋まる） |
+| `critique_image_path` | 対話痕跡に使う1枚（§6.8 の優先順で決定） |
 | `user_comment` / `keywords` | 任意 |
 | `created_at` | 作成日時 |
 
-| rendition | 意味 | 入れ方 |
-|-----------|------|--------|
-| `sooc` | 撮って出し | コピーまたは指定 |
-| `jpeg_edit` | JPEG 補正 | 外部成果をコピー |
-| `raw_export` | RAW 現像 JPEG | DxO 等の成果をコピー |
+旧来の単一 `rendition` 枚挙は、実ファイルの三系統に置き換える。  
+「JPEG 補正のみ」を別ファイルで持つ場合は、第一波では `_dev.jpg` に載せるか撮って出し扱いとし、必要なら後続で `{stem}_edit.jpg` を足す。
 
-**週次セッションでもイベントでも、確定後は W で作品保存する。**
+**週次でもイベントでも、H3 確定後は W でペアコピー（と現像待ち）を行う。**
+
+同一フォルダに同名 `.jpg` は置けないため、「撮って出し」と「現像」は **`_dev` サフィックスで必ず区別する**。不要 JPEG の削除は必須にしない。
 
 ### 5.6 DialogueTrace
 
 | フィールド | 説明 |
 |------------|------|
 | `work_id` / `card_path` / `note_path` | 紐づけ |
+| `critique_image_path` | 実際に講評した画像（通常は `dev_path` または撮って出し） |
 | `mode` | `compact` \| `full` |
 | `lens` | `self` |
 | `ai_wording` / `user_reaction` | 言語化と反応（`agree` \| `disagree` \| `unset`） |
 
-生成: 既存 `critique_engine` → `generate_critique_card` → `DesktopLogManager` を **作品画像** に対して実行。`_lumina/works/*.json` にパスを必ず記録。
+生成: 既存 `critique_engine` → `generate_critique_card` → `DesktopLogManager` を **`critique_image_path` の1枚** に対して実行。`_lumina/works/*.json` にパスを必ず記録。
 
 ### 5.7 DecisionDelta
 
@@ -209,10 +219,11 @@ R1′-A では保存と参照ができれば合格。学習への利用は R2′
 | `id` / `library_unit_id` | 識別 |
 | `current_stage` | いまの段 |
 | `target_keep_count` | 最終目安（週 20／イベント 40 等） |
-| `status` | `running` \| `awaiting_human` \| `completed` \| `cancelled` |
+| `status` | `running` \| `awaiting_human` \| `awaiting_develop` \| `completed` \| `cancelled` |
 | `stage_results` | ShortlistStageResult の列 |
 | `created_at` | 開始 |
 
+`awaiting_develop`: ペアコピー済みで、`_dev.jpg` 待ち／対話痕跡未実行の状態。
 ---
 
 ## 6. 段階短絡フロー（R1′-A の中核）
@@ -227,7 +238,7 @@ R1′-A では保存と参照ができれば合格。学習への利用は R2′
   → H2 人の確認（任意）
   → M3 多様性・余白・執着（編集者調整）
   → H3 対話確定（言語化を見る／kept）
-  → W  作品化（週次もイベントも）＋カード／ログ
+  → W  ペアコピー（撮って出し＋RAW）→（Works 内で現像）→ 対話痕跡
   → DecisionDelta 保存・セッション完了
 ```
 
@@ -241,7 +252,7 @@ R1′-A では保存と参照ができれば合格。学習への利用は R2′
 | **H2** | — | — | 人 | 任意。明らかな不一致の除外／戻し |
 | **M3 多様性** | 50→≈20 | 100→≈40 | 編集者 | 情緒タグ等で偏りを抑え、「余白（margin）」を混ぜる。撮影者の執着・癖が強いコマは優先残存 |
 | **H3** | ≈20 確定 | ≈40 確定 | 対話 | reason_brief を見る／反応。最終 kept / reject / recover |
-| **W 作品** | 確定分 | 確定分 | 保存 | rendition 選択（DxO 等の `raw_export` 含む）→ Work 保存→ カード／ログ |
+| **W 作品** | 確定分 | 確定分 | 保存 | §6.8 のペアコピー→現像→痕跡 |
 
 ### 6.2 3観点との対応
 
@@ -286,7 +297,45 @@ R1′-A では保存と参照ができれば合格。学習への利用は R2′
 ### 6.7 コスト分離
 
 - M2/M3 は軽量パス。全枚フル講評（Phase2）は短絡中に走らせない。
-- フルカードは **W の作品確定後**。
+- フルカードは **W で `critique_image_path` が決まったあと**。
+
+### 6.8 W 詳細: ペアコピー → 現像 → 対話痕跡
+
+オリジナル側の前提:
+
+- カメラからコピーした、**同じ `stem`** の撮って出し（`.jpg` / `.HIF` 等）と RAW（`.ORF` / `.RAF` 等）が同居していることが多い。
+
+手順:
+
+```text
+[W1] 確定 stem ごとに、存在する撮って出しと RAW を Works へコピー
+     （片方しか無い場合はその片方だけ。オリジナルは触らない）
+        ↓
+[W2] ユーザーが Works 内の RAW を DxO 等で現像し、
+     出力名を {stem}_dev.jpg として Works に保存
+        ↓
+[W3] critique_image_path を決定（下記優先順）
+        ↓
+[W4] その1枚に対してカード・ノート・ログを生成／更新
+```
+
+`critique_image_path` の優先順（名前規則で判別。削除は必須でない）:
+
+1. `{stem}_dev.jpg` があればそれを使う（現像優先）  
+2. なければ撮って出し（`.jpg` / `.HIF` 等）  
+3. RAW のみでプレビューも `_dev` も無い → 痕跡生成は保留（`awaiting_develop`）
+
+DxO 等の書き出し設定は、**`{stem}_dev.jpg`** になるよう運用で合わせる（仕様上の契約）。
+
+Works 内の例:
+
+```text
+_lumina/works/
+  IMG_0001.jpg          # 撮って出し
+  IMG_0001.ORF          # RAW
+  IMG_0001_dev.jpg      # RAW 現像
+  IMG_0001.json         # メタ（各パスと critique_image_path）
+```
 
 ---
 
@@ -311,8 +360,8 @@ R1′-A では保存と参照ができれば合格。学習への利用は R2′
 2. 段の進捗（M1…H3…W）  
 3. **H1: 機械除外の回収リスト**  
 4. 候補レビュー（サムネ、理由、tier、kept/reject/recover）  
-5. 作品取り込み（週次・イベント共通。rendition と外部ファイル指定）  
-6. 痕跡生成とセッションサマリ  
+5. 作品取り込み（ペアコピーの実行、現像待ち一覧、`_dev.jpg` 検出、痕跡生成）  
+6. セッションサマリ  
 
 ダッシュボード化しない。確認リストと一枚ずつの対話が主。
 
@@ -327,14 +376,16 @@ R1′-A では保存と参照ができれば合格。学習への利用は R2′
 
 ```text
 {unit}/
-  （オリジナル）
+  （オリジナル: 同 stem の jpg/HIF + ORF/RAF 等）
   _lumina/
     sessions/
-      {session_id}.json       # session + stage_results + deltas
+      {session_id}.json
     works/
-      {work_id}_{stem}.jpg
-      {work_id}.json          # card_path / note_path 必須
-    traces/                   # 既存月次構造と併用可。紐づけは works JSON が単一参照点
+      {stem}.jpg                 # 撮って出し（例）
+      {stem}.ORF                 # RAW（例）
+      {stem}_dev.jpg             # 現像 JPEG（契約名）
+      {stem}.json                # sooc/raw/dev/critique パス
+    traces/
 ```
 
 ### 9.1 既存ログ
@@ -356,8 +407,9 @@ SourceAsset と外部現像原本をアプリから上書き・削除しない�
 | A3 | H1 で機械除外から回収できる | 回収分が最終候補に戻る |
 | A4 | M2 が絶対★ゲートに依存しない | ★5必須で落とさない |
 | A5 | M3 で余白・多様性の意図が説明できる | margin / タグ偏り是正のいずれかが痕跡として残る |
-| A6 | 週次でもイベントでも W で作品保存できる | DxO 等 `raw_export` を含む。オリジナル不変 |
-| A7 | 作品にカードとノートが紐づく | works JSON から辿れる |
+| A6 | 週次でもイベントでも、確定分の撮って出し＋RAW を Works へペアコピーできる | オリジナル不変。ORF/RAF 等 |
+| A6b | `{stem}_dev.jpg` を対話対象として優先できる | 無ければ撮って出し。RAWのみなら保留 |
+| A7 | 作品にカードとノートが紐づく | works JSON から `critique_image_path` 経由で辿れる |
 | A8 | 段またはセッションの DecisionDelta が残る | 後から比較できる |
 | A9 | 1枚失敗で全体停止しない | ログに残り継続 |
 | A10 | 既存講評バッチが回帰しない | 従来どおり動く |
@@ -397,7 +449,7 @@ SourceAsset と外部現像原本をアプリから上書き・削除しない�
 | `shortlist_mechanical.py` | M1（保護・連写圧縮）。閾値は設定化 |
 | `shortlist_antenna.py` | M2（5軸相対熱量・軽量） |
 | `shortlist_diversity.py` | M3（余白・タグ・執着） |
-| `work_store.py` | 作品コピーとメタ |
+| `work_store.py` | ペアコピー、`_dev` 検出、critique 対象決定、メタ JSON |
 | `delta_log.py` | DecisionDelta |
 | 既存コア | scanner / critique_engine / card / DesktopLogManager |
 
@@ -413,7 +465,8 @@ GUI に提案ロジックを埋め込まない。規則1（3段階レビュー�
 | ★絶対ゲート禁止・相対熱量 | 類似度・連写クラスタのアルゴリズム |
 | 意図保護の種類 | SS/F/補正の数値境界 |
 | 週次も W まで行う | 情緒タグ語彙、多様性の目的関数 |
-| フル講評は作品後 | 軽量モデルの具体プロンプト |
+| フル講評は critique 画像決定後 | 軽量モデルの具体プロンプト |
+| Works はペアコピー＋`_dev.jpg` 契約 | DxO 書き出しプリセットの作業手順書 |
 | DecisionDelta の保存 | 段スキップの UX 細部 |
 
 ---
@@ -433,3 +486,4 @@ GUI に提案ロジックを埋め込まない。規則1（3段階レビュー�
 |------|------|
 | 2026-08-10 | 初版。R1′-A 詳細、B/C 境界 |
 | 2026-08-10 | 段階短絡（M1–W）採用。週次も作品化。★絶対ゲート禁止・意図保護・多様性／執着を明記。受け入れ条件を A10 まで拡張 |
+| 2026-08-10 | W をペアコピー（jpg/HIF+RAW）＋`{stem}_dev.jpg` 判別に改訂。対話痕跡は優先順で1枚に限定 |
