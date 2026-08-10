@@ -79,6 +79,7 @@
 - `scanner.py`: **【中央メタデータ解析エンジン】** 画像ファイル (JPG/PNG/HEIC) および DxO PhotoLab の `.dop` サイドカーファイルを高精度スキャンする共通モジュール。正規表現優先＋Luaパース補完の多層防御構造を採用。
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
 - `docs/PHASE_A_CHECKLIST.md`: Lumina Notes 感性対話刷新の Phase A ゲート（v1 / v1.1 / 将来）。
+- `docs/LUMINA_NOTES_SERVICE_CONCEPT.md`: **【将来サービス構想・E1】** 二速度（速い輪＝当日〜習慣の対話／深い輪＝週・イベントの振り返りと章）。最初に届ける類型はミラーレス派。機能仕様・実装詳細は含まない。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
 - `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ・カード背景テーマの自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、実行前のライト/ダーク選択、独立例外処理、リアルタイムログ表示、中断制御対応。
