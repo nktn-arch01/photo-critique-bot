@@ -2,7 +2,7 @@
 
 更新日: 2026-08-10  
 位置づけ: **機能仕様の前段**。何を・誰に・どの順番で届けるかの構想のみ。API・DB・画面仕様は書かない。  
-関連: [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`PHASE_A_CHECKLIST.md`](PHASE_A_CHECKLIST.md) / [`PHASE_D_FINDINGS.md`](PHASE_D_FINDINGS.md)
+関連: [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`PHASE_A_CHECKLIST.md`](PHASE_A_CHECKLIST.md) / [`PHASE_D_FINDINGS.md`](PHASE_D_FINDINGS.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)
 
 ---
 
@@ -213,8 +213,8 @@ Photos/
 ## 10. 次のステップ
 
 1. 本構想のレビュー（オーナー）。  
-2. **機能仕様**は R1′（ミラーレス派・深い輪）から切り出す。  
-3. 機能仕様では、候補提案の信号、作品メタデータ、痕跡の保存形、章の成果物形を定義する（本ドキュメントの範囲外）。
+2. **機能仕様**は R1′（ミラーレス派・深い輪）から切り出す → [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)（第一波は R1′-A）。  
+3. 実装は R1′-A の受け入れ条件を満たす順に進める。R1′-B/C（章・外部分析エクスポート）は A の後続。
 
 ---
 
@@ -224,3 +224,4 @@ Photos/
 |------|------|
 | 2026-08-10 | 初版。E1 二速度、3類型、最初はミラーレス派、ライブラリ命名、Ripeness R1′〜R5′ |
 | 2026-08-10 | 表現修正（伴走者／北極星）。往復の中心文を追加。言語化支援・ログ分析レポート（NotebookLM 等）を追記 |
+| 2026-08-10 | R1′ 機能仕様へのリンクを追加 |
