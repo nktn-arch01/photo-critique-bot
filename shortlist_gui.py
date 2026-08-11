@@ -616,7 +616,7 @@ class ShortlistApp:
     def _run_trace(self, works: Path, opts: dict) -> None:
         try:
             def on_progress(p: TraceProgress) -> None:
-                self.log(f"[trace/{p.stage}] {p.message}")
+                self.log(f"[review/{p.stage}] {p.message}")
                 self._set_status(p.message)
 
             self.trace_runner = WorksTraceRunner(

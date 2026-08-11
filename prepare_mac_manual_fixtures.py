@@ -51,7 +51,7 @@ def prepare(root: Path) -> None:
     print(f"  Works 月:     {works}")
     print(f"  L4 サブ:     {buried}")
     print()
-    print("次: LuminaShortlist.command を起動し、docs/R1A_MAC_MANUAL_CHECKLIST.md を順に確認。")
+    print("次: LuminaNotesConsole.command を起動し、docs/R1A_MAC_MANUAL_CHECKLIST.md を順に確認。")
 
 
 def main() -> int:

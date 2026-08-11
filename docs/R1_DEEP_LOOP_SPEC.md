@@ -25,7 +25,7 @@
 
 補足:
 
-- スクリーニングは JPEG に Rating／Description を**書き込む**（現行コードは書き込みなし → 実装で追加）。
+- スクリーニングは JPEG に Rating／Description を**書き込む**（`iptc_rating_io` / `shortlist_pipeline`。GUI ではドライランで書き込みを抑止可能）。
 - 講評・スクリーニングの読み取りも **JPEG を正**とする（T9 実装済。`.dop` は空欄時フォールバックのみ）。
 - `_dev.jpg` を講評する場合も一次ソースは同じ（そのファイルの画素＋埋め込み撮影 EXIF）。現像で変えた見え方は**画を正**とし、EXIF は「撮影時の記録」として扱う（画素と設定の不一致があり得ることを仕様上許容し、プロンプトで画優先を明示する方向）。
 - Preset 名など `.dop` 固有情報は、第一波の必須入力にしない。
@@ -60,7 +60,7 @@
 
 1. 本アプリの **スクリーニング**が JPEG に Rating／説明を書き込み、  
 2. **DxO 等の日常アプリ**で一覧確認・Rating 修正・現像・Works への書き出しを行い、  
-3. 確定作品（主に `{stem}_dev.jpg`）に既存の Lumina Notes（カード・分析ログ）を紐づけて **対話痕跡** を残す  
+3. 確定作品（主に `{stem}_dev.jpg`）に既存の Lumina Notes（カード・分析ログ）を紐づけて **Lumina Review** を残す  
 
 ことで、ワークフローを大きく変えずに、あとから未来の自分が読み返せる素材を蓄積する。
 
@@ -90,7 +90,7 @@
 
 ### US-1 週末バッチ → DxO で確定
 
-週末、週のフォルダに対して本アプリのスクリーニングを一度走らせる。JPEG に Rating と説明が付く。いつもどおり DxO を開き、Rating を見て直し、必要ならファイル削除は任意で行う。Rating 3/4 を残し、オリジナル側で RAW 現像して `_dev.jpg` を出し、DxO から Works へ書き出す。その後、本アプリで対話痕跡（カード等）を付ける。
+週末、週のフォルダに対して本アプリのスクリーニングを一度走らせる。JPEG に Rating と説明が付く。いつもどおり DxO を開き、Rating を見て直し、必要ならファイル削除は任意で行う。Rating 3/4 を残し、オリジナル側で RAW 現像して `_dev.jpg` を出し、DxO から Works へ書き出す。その後、本アプリで Lumina Review（カード等）を付ける。
 
 ### US-2 イベントも同じ
 
@@ -198,7 +198,7 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
   → W: Rating 3/4 を Works へ（撮って出し.jpg と _dev.jpg。RAW は送らない）
 
 [本アプリ]
-  → Works（または指定フォルダ）の確定画像に対話痕跡
+  → Works（または指定フォルダ）の確定画像に Lumina Review
 ```
 
 ### 6.1 段の定義
@@ -310,7 +310,7 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 
 現像は **オリジナルフォルダ側で完了**してから Works へ出してよい。これによりデータの二重管理を防ぐ。
 
-### 7.2 対話Lumina Review の対象
+### 7.2 Lumina Review の対象
 
 優先順:
 
@@ -369,7 +369,7 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 
 スクリーニングの実行口（T6）:
 
-- **必須・主経路:** GUI [`shortlist_gui.py`](../shortlist_gui.py) / ダブルクリック [`LuminaShortlist.command`](../LuminaShortlist.command)
+- **必須・主経路:** GUI [`shortlist_gui.py`](../shortlist_gui.py) / ダブルクリック [`LuminaNotesConsole.command`](../LuminaNotesConsole.command)（旧 [`LuminaShortlist.command`](../LuminaShortlist.command) は互換スタブ）
 - 補助: CLI [`run_shortlist.py`](../run_shortlist.py)（`--dir` / `--stages` / `--dry-run`）
 
 Lumina Review（T8）:
@@ -499,7 +499,7 @@ Lumina Review（T8）:
 | 2026-08-11 | T5 `shortlist_diversity`（M3: 多様性貪欲選抜・Rating 3/4＋`[M3]`）実装 |
 | 2026-08-11 | T6 `shortlist_pipeline` + `run_shortlist.py`（M1→M2→M3・進捗・中断）実装 |
 | 2026-08-11 | T7 `delta_log`（`_lumina/sessions` 監査・再読・H3再スキャン）実装 |
-| 2026-08-11 | スクリーニング**必須GUI**（`shortlist_gui` / `LuminaShortlist.command`）。監査に `pre_h3`/`post_h3`/`h3_delta` を追加 |
+| 2026-08-11 | スクリーニング**必須GUI**（`shortlist_gui` / `LuminaNotesConsole.command`）。監査に `pre_h3`/`post_h3`/`h3_delta` を追加 |
 | 2026-08-11 | T8 `trace_from_works`（Works `_dev` 優先・コピーなし・画優先注記）。GUI／`run_trace_works` 導線 |
 | 2026-08-11 | T9 scanner／講評の **JPEG 正**（Rating/Description）。`.dop` は空欄時フォールバックのみ |
 | 2026-08-11 | T10 オフライン総仕上げ（失敗継続・画素非破壊・Works無dop・受け入れ表・CI exiftool） |

@@ -84,12 +84,12 @@
 
 ## 2. 改修の優先順（提案）
 
-### Wave 1 — 低リスク・見た目／入口（すぐやってよい）
+### Wave 1 — 低リスク・見た目／入口（**完了 2026-08-11**）
 
-1. `LuminaNotesConsole.command` 追加 + `LuminaShortlist.command` を互換スタブ化  
-2. GUI／CLI ログの `[trace/` → `[review/`  
-3. docs（SPEC §0・§7.2、ARCHITECTURE）の用語カス掃除  
-4. `app_gui` のユーザー向け「評価カード」文言を弱める（フォルダ名は Wave 2）
+1. ✅ `LuminaNotesConsole.command` 追加 + `LuminaShortlist.command` を互換スタブ化  
+2. ✅ GUI／CLI ログの `[trace/` → `[review/`  
+3. ✅ docs（SPEC §0・§7.2、ARCHITECTURE）の用語カス掃除  
+4. ✅ `app_gui` のユーザー向け「評価カード」文言を弱める（フォルダ名は Wave 2）
 
 ### Wave 2 — 出力フォルダ名（データ互換が要る）
 
@@ -140,3 +140,4 @@
 | 日付 | 内容 |
 |------|------|
 | 2026-08-11 | 初版。ウォークスルー再確認後の棚卸し |
+| 2026-08-11 | Wave 1 完了（ランチャー・ログ prefix・SPEC/ARCHITECTURE・app_gui 文言） |

@@ -67,7 +67,7 @@ def main() -> int:
         extra = ""
         if p.current is not None and p.total is not None:
             extra = f" ({p.current}/{p.total})"
-        print(f"[{p.stage}] {p.message}{extra}", flush=True)
+        print(f"[review/{p.stage}] {p.message}{extra}", flush=True)
 
     runner = WorksTraceRunner(
         TraceConfig(
