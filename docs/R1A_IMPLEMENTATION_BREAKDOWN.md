@@ -180,4 +180,10 @@ T0 検証ゲート（IPTC）
 10. ~~**T9** scanner/講評の JPEG 正への移行~~ **完了**  
 11. ~~**T10** オフラインテスト総仕上げ~~ **完了**  
 
-R1′-A 第一波（T0–T10）は実装完了。次は手動運用確認（Mac GUI／実フォルダ）と R1′-B/C。
+R1′-A 第一波（T0–T10）は実装完了。次は **Mac 手動確認**（[`R1A_MAC_MANUAL_CHECKLIST.md`](R1A_MAC_MANUAL_CHECKLIST.md)）と R1′-B/C。
+
+```bash
+python3 prepare_mac_manual_fixtures.py   # ~/Desktop/LuminaManualCheck を生成
+open LuminaShortlist.command             # またはダブルクリック
+# チェックリストに PASS/FAIL を記入
+```
