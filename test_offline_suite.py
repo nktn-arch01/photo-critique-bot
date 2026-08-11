@@ -497,6 +497,99 @@ def test_iptc_rating_description_roundtrip():
     shutil.rmtree(td, ignore_errors=True)
 
 
+def test_library_unit_naming_rules():
+    """T2: 月 YYYYMM / イベント YYYYMMDD_名前。規則外はイベントにしない。"""
+    from library_unit import (
+        is_event_folder_name,
+        is_month_folder_name,
+        try_parse_event_name,
+        try_parse_month_name,
+    )
+
+    assert is_month_folder_name("202608")
+    assert try_parse_month_name("202608") == "202608"
+    assert not is_month_folder_name("202613")  # 無効月
+    assert not is_month_folder_name("20268")
+    assert not is_month_folder_name("Photos")
+
+    assert is_event_folder_name("20260810_京都旅行")
+    parsed = try_parse_event_name("20260810_京都旅行")
+    assert parsed is not None
+    assert parsed[1] == "京都旅行"
+    assert parsed[2].isoformat() == "2026-08-10"
+
+    assert is_event_folder_name("20260822_海辺の午後")
+    assert is_event_folder_name("20260101_day-trip_v2")  # _ と - は可
+
+    # スペース・不正日付・記号はイベント扱いしない
+    assert not is_event_folder_name("20260810_京都 旅行")
+    assert not is_event_folder_name("20260810")
+    assert not is_event_folder_name("京都旅行")
+    assert not is_event_folder_name("20260230_無効日")
+    assert not is_event_folder_name("20260810_bad.name")
+    assert not is_event_folder_name("misc_folder")
+
+
+def test_library_unit_discover_and_list_jpegs():
+    """T2: 発見・月直下バラ／イベント分離・規則外サブフォルダ除外。"""
+    import shutil
+
+    from library_unit import (
+        discover_units,
+        list_event_units,
+        list_month_units,
+        list_non_event_subdirs,
+        list_source_jpegs,
+        resolve_unit,
+        unit_from_dir,
+    )
+
+    root = Path(tempfile.mkdtemp(prefix="lib_t2_"))
+    month = root / "202608"
+    event = month / "20260810_京都旅行"
+    odd = month / "raw_backup"  # イベント規則外
+    event.mkdir(parents=True)
+    odd.mkdir()
+
+    def touch_jpeg(path: Path) -> None:
+        Image.new("RGB", (32, 24), (10, 20, 30)).save(path, "JPEG", quality=85)
+
+    touch_jpeg(month / "IMG_001.JPG")
+    touch_jpeg(month / "IMG_002.jpeg")
+    (month / "notes.txt").write_text("ignore", encoding="utf-8")
+    touch_jpeg(event / "P123.JPG")
+    touch_jpeg(odd / "should_not_in_month_or_event_list.jpg")
+
+    months = list_month_units(root)
+    assert len(months) == 1
+    assert months[0].unit_id == "202608"
+
+    events = list_event_units(months[0])
+    assert len(events) == 1
+    assert events[0].display_name == "京都旅行"
+    assert events[0].month_id == "202608"
+
+    odd_dirs = list_non_event_subdirs(months[0])
+    assert any(p.name == "raw_backup" for p in odd_dirs)
+
+    month_jpegs = [p.name for p in list_source_jpegs(months[0])]
+    assert month_jpegs == ["IMG_001.JPG", "IMG_002.jpeg"]
+    assert "P123.JPG" not in month_jpegs
+    assert "should_not_in_month_or_event_list.jpg" not in month_jpegs
+
+    event_jpegs = [p.name for p in list_source_jpegs(events[0])]
+    assert event_jpegs == ["P123.JPG"]
+
+    flat = discover_units(root)
+    assert [u.unit_id for u in flat] == ["202608", "20260810_京都旅行"]
+
+    assert unit_from_dir(odd) is None
+    resolved = resolve_unit(event)
+    assert resolved.is_event and resolved.display_name == "京都旅行"
+
+    shutil.rmtree(root, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -518,6 +611,8 @@ def run_all():
     test_n06_log_keeps_numeric_scores()
     test_iptc_stage_block_upsert_preserves_user_text()
     test_iptc_rating_description_roundtrip()
+    test_library_unit_naming_rules()
+    test_library_unit_discover_and_list_jpegs()
     print("test_offline_suite: OK")
 
 
