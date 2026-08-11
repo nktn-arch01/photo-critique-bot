@@ -71,7 +71,7 @@
 | M3 | ワーカースレッドから Tk 変数再読取 → 開始時スナップショット |
 | M4 | H3 記録が UI スレッドで固まる → **ワーカー化**（コピー UI は作らない） |
 | M5 | `force_overwrite` / `card_theme` キー共有の文書化（分離しない） |
-| P1 | 短絡が `OMYYYYMM` / `OMYYYYMM_名前` を受け付ける（実運用オリジナル。M1–M5 より上流） |
+| P1 | 短絡が `XXYYYYMM` / `XXYYYYMMDD_名前` を受け付ける（`XX`=機種2文字。実運用オリジナル。M1–M5 より上流） |
 | L1 | 実行中ウィンドウ破棄後の `after` |
 | L2 | `open_sessions_folder` の mkdir 副作用 |
 | L3 | `RatingPercent` のみの JPEG で Rating が `None` |
