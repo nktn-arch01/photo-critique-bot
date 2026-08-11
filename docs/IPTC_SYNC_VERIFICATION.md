@@ -3,9 +3,9 @@
 更新日: 2026-08-11  
 関連: [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) §0
 
-## 方針（オーナー確定）
+## 方針（**運用確定**・2026-08-11）
 
-JPEG メタと DxO の同期が成立すれば **`.dop` / `.xmp` は使わない**。
+JPEG メタと DxO の同期は検証 PASS。**`.dop` / `.xmp` は使わない。**
 
 | 用途 | 一次ソース |
 |------|------------|
@@ -32,7 +32,7 @@ JPEG メタと DxO の同期が成立すれば **`.dop` / `.xmp` は使わない
 | Rating / Description 再読取 | **PASS** |
 | 成果物 | `eval/iptc_sync/roundtrip_result.json` |
 
-→ JPEG への書き込み・再読取は問題なし。残るのは **DxO 画面で見えるか**。
+→ JPEG への書き込み・再読取は問題なし。DxO／プレビュー確認は **§B9 PASS**。
 
 ---
 
@@ -168,7 +168,7 @@ exiftool -G1 -s -Rating -XMP:Rating -ImageDescription -Description -Caption-Abst
 | 一方向 説明（書込→DxO表示） | **PASS**（IPTC コンテンツ「説明」に `[M2]…` / `[M3]…`） |
 | クロスチェック | macOS プレビュー IPTC でも StarRating=3・説明同一を確認 **PASS** |
 | 双方向（努力） | 未実施（必須ではない） |
-| 証拠 | オーナー提供スクリーンショット（DxO 黒、プレビュー白） |
+| 証拠 | オーナー提供スクショ（2026-08-11）: **黒バック＝DxO**（レーティング★★★・IPTC説明）、**白バック＝Macプレビュー IPTC**（StarRating=3・同一説明） |
 
 **判定: A PASS かつ B 一方向（Rating・説明）PASS → §0 を運用確定。`.dop` / `.xmp` は使わない。**
 

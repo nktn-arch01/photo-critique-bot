@@ -1,13 +1,13 @@
 {
   "jpeg": "eval/iptc_sync/roundtrip_sample.jpg",
-  "expected_rating": 4,
-  "expected_description": "[M2] antenna brief\n[M3] margin keep",
+  "expected_rating": 2,
+  "expected_description": "[M2] recheck",
   "read_tags": {
-    "Rating": "4",
-    "RatingPercent": "80",
-    "ImageDescription": "[M2] antenna brief\n[M3] margin keep",
-    "Description": "[M2] antenna brief\n[M3] margin keep",
-    "Caption-Abstract": "[M2] antenna brief\n[M3] margin keep"
+    "Rating": "2",
+    "RatingPercent": "40",
+    "ImageDescription": "[M2] recheck",
+    "Description": "[M2] recheck",
+    "Caption-Abstract": "[M2] recheck"
   },
   "rating_ok": true,
   "description_ok": true,
