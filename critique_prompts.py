@@ -50,6 +50,17 @@ class CritiquePromptContext:
         dop_info = dop_info or {}
         if pixel_priority is None:
             pixel_priority = bool(metadata.get("pixel_priority"))
+
+        def _pick(*keys_and_sources: object) -> str:
+            """metadata 優先、ついで dop_info。空は sanitize で「なし」。"""
+            for val in keys_and_sources:
+                if val is None:
+                    continue
+                text = str(val).replace("\x00", "").strip()
+                if text:
+                    return sanitize_str(text)
+            return "なし"
+
         return cls(
             user_intent=sanitize_str(metadata.get("user_intent")),
             camera_model=sanitize_str(metadata.get("camera_model")),
@@ -60,12 +71,17 @@ class CritiquePromptContext:
             focal_length=sanitize_str(metadata.get("focal_length")),
             date_time=sanitize_str(metadata.get("date_time")),
             time_zone_fact=sanitize_str(metadata.get("time_zone_fact")),
-            content_headline=sanitize_str(dop_info.get("content_headline")),
-            category=sanitize_str(dop_info.get("category")),
-            other_categories=sanitize_str(dop_info.get("other_categories")),
-            keywords=sanitize_str(dop_info.get("keywords")),
-            rating_str=sanitize_str(dop_info.get("rating_str")),
-            preset_name=sanitize_str(dop_info.get("preset_name")),
+            content_headline=_pick(metadata.get("content_headline"), dop_info.get("content_headline")),
+            category=_pick(metadata.get("category"), dop_info.get("category")),
+            other_categories=_pick(metadata.get("other_categories"), dop_info.get("other_categories")),
+            keywords=_pick(metadata.get("keywords"), dop_info.get("keywords")),
+            rating_str=_pick(metadata.get("rating_str"), dop_info.get("rating_str")),
+            # Preset は必須入力ではない（§0）
+            preset_name=sanitize_str(
+                metadata.get("preset_name")
+                or dop_info.get("preset_name")
+                or "標準/未指定"
+            ),
             pixel_priority=bool(pixel_priority),
         )
 
@@ -179,7 +195,7 @@ def build_phase2_prompt(
 - 時計帯ヒント（視覚ラベルではない）: {ctx.time_zone_fact}
 - カメラ: {ctx.camera_model} / レンズ: {ctx.lens_model}
 - 撮影設定: {ctx.f_number} | {ctx.shutter_speed} | {ctx.iso} | 焦点距離: {ctx.focal_length}
-- DxO評価/Preset: {ctx.rating_str} | Preset: {ctx.preset_name}
+- Rating（JPEG 正）: {ctx.rating_str} | Preset（参考・必須ではない）: {ctx.preset_name}
 {_pixel_priority_block(ctx, phase=2)}
 【撮影者が付与したメタデータ (IPTC)】
 - 作品タイトル/見出し (Headline): {ctx.content_headline}

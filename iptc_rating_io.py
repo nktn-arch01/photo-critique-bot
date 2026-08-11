@@ -206,6 +206,29 @@ def parse_stage_blocks(description: str) -> dict[StageLabel, str]:
     return found
 
 
+def format_rating_display(rating: int | None) -> str:
+    """講評／ログ表示用の ★ 文字列。None は「なし」。"""
+    if rating is None:
+        return "なし"
+    if not isinstance(rating, int) or rating < 0 or rating > 5:
+        return "なし"
+    return "★" * rating + "☆" * (5 - rating) + f" ({rating}/5)"
+
+
+def strip_stage_reason_lines(description: str) -> str:
+    """説明から [M2]/[M3] 行を除き、ユーザー文・その他だけを残す（講評の意図注入用）。"""
+    if not description:
+        return ""
+    kept: list[str] = []
+    for line in description.splitlines():
+        if _STAGE_LINE_RE.match(line.strip()):
+            continue
+        kept.append(line)
+    # 前後の空行を整理（中間の空行は維持）
+    text = "\n".join(kept).strip()
+    return text
+
+
 def upsert_stage_reason(description: str, stage: StageLabel, reason: str) -> str:
     """段ラベル行をブロック置換。他行（ユーザー文・他段）は残す。"""
     if stage not in STAGE_LABELS:

@@ -17,7 +17,7 @@
 ```text
 [デスクトップ版 (app_gui.py / analyze_folder.py)]
   ├── AIプロバイダ: OpenAI API (gpt-4o-mini / 後払い従量課金)
-  ├── 1. メタデータ抽出 (scanner.py / extract_file_metadata) ➔ EXIF + .dop(正規表現優先+Luaパース補完)
+  ├── 1. メタデータ抽出 (scanner.py / extract_file_metadata) ➔ 撮影 EXIF ＋ **JPEG Rating/Description（§0 正）** ＋ `.dop` は空欄時のみフォールバック
   ├── 2. コア生成エンジン (critique_engine.py) ➔ 2段階分離生成 (mode="full")
   │      ├── Phase 1: 時間帯非依存で評価・カード項目 (TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY) 確定
   │      └── Phase 2: 時間帯ファクト保持＋光・陰影具象描写による長文講評本文 (【1】〜【7】) 生成
@@ -76,13 +76,13 @@
 - `line_messaging.py`: 詳細版は講評見出し（## 【1./【4./【6.）で4通に分割。push は5通/リクエスト上限で batched 送信。
 - `card_theme.py`: カード背景テーマ（`dark` / `light`）の識別子・パレット・正規化の**単一ソース**。
 - `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。Desktop / LINE 共通。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 最大3行・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。SCORES フォントは SUMMARY と同サイズ。カード上のスコアは★のみ（`(n/5)` は出さない。ログは星＋数字）。免責文は出さない。
-- `scanner.py`: **【中央メタデータ解析エンジン】** 画像ファイル (JPG/PNG/HEIC) および DxO PhotoLab の `.dop` サイドカーファイルを高精度スキャンする共通モジュール。正規表現優先＋Luaパース補完の多層防御構造を採用。
+- `scanner.py`: **【中央メタデータ解析エンジン】** 撮影 EXIF（exiftool→PIL）と講評用メタの単一入口。**Rating / user_intent は JPEG 正**（`iptc_rating_io`）。`.dop` は空欄時フォールバックのみ（正規表現＋Lua）。
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
 - `docs/PHASE_A_CHECKLIST.md`: Lumina Notes 感性対話刷新の Phase A ゲート（v1 / v1.1 / 将来）。
 - `docs/LUMINA_NOTES_SERVICE_CONCEPT.md`: **【将来サービス構想・E1】** 二速度（速い輪＝当日〜習慣の対話／深い輪＝週・イベントの振り返りと章）。最初に届ける類型はミラーレス派。機能仕様・実装詳細は含まない。
 - `docs/R1_DEEP_LOOP_SPEC.md`: **【R1′ 深い輪 機能仕様】** 第一波 R1′-A は JPEG への IPTC Rating／説明書き込みバッチが中心。人の確認と Works 書き出しは DxO 等。メタ一次ソースは JPEG（同期成立時は dop/xmp 不使用）。
 - `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向＋双方向 PASS（2026-08-11）。§0 運用確定。**
-- `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。T0–T8 完了。
+- `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。T0–T9 完了。
 - `iptc_rating_io.py`: **【短絡メタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM` / イベント `YYYYMMDD_名前` の識別・列挙と直下 JPEG 一覧。規則外サブフォルダはイベントにしない。
 - `shortlist_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。
@@ -166,8 +166,11 @@
 ### 規則 7: テキスト解析の一元化原則 (DRY原則)
 - AI出力テキストのパース処理（見出し、スコア、要約、本文の抽出）はすべて `critique_parser.py` の `parse_critique_text()` を経由すること。各ファイルで個別に `re.search` を記述しないこと。
 
-### 規則 8: メタデータ抽出の一元化原則 (DRY原則) と多層防御解析
-- 写真ファイルからの EXIF 情報および `.dop` サイドカーファイルの抽出処理は、すべて `scanner.py` の `extract_file_metadata()` を経由すること。`metadata_extractor.py` は後方互換ラッパのみ（新規コードから呼ばない）。DxO PhotoLab のバージョン更新に備え、`.dop` の抽出処理は「テキスト直読の正規表現（Regex）を最優先とし、`LuaTableParser` で二次補完する多層防御構造」を維持すること。
+### 規則 8: メタデータ抽出の一元化原則 (DRY原則) と JPEG 正
+- 写真ファイルからのメタ抽出は、すべて `scanner.py` の `extract_file_metadata()` を経由すること。`metadata_extractor.py` は後方互換ラッパのみ（新規コードから呼ばない）。
+- **Rating / Description（user_intent）は JPEG 内を一次ソース**とする（`iptc_rating_io.read_shortlist_meta`）。§0 同期 PASS 後、`.dop` / `.xmp` は講評必須経路に使わない。
+- `.dop` は JPEG 側が空のときの**フォールバックのみ**（レガシー資産）。抽出実装は正規表現優先＋ `LuaTableParser` 補完を維持する。
+- 講評プロンプト注入（`CritiquePromptContext`）は `metadata`（JPEG 正）を優先し、`dop_info` は補助とする。
 
 ### 規則 9: GUIコンソールの操作安全性・一括処理堅牢性・設定永続化
 - デスクトップGUI（`app_gui.py`）は、選択フォルダの自動記憶（`~/.photo_ai_config.json`）、確認ダイアログ、リアルタイムログ表示、中断制御を保持すること。一括処理ループ内の1枚でエラーが発生しても全体を停止させず、次の画像処理へ継続させる独立 `try...except` 構造にすること。
@@ -180,7 +183,7 @@
 - `/health` エンドポイントを設け、外部監視（UptimeRobot等）から 5分間隔で GET アクセスを送信させること。
 
 ### 規則 12: メタデータ抽出の二重フォールバック構造
-- メタデータ解析時は `scanner.py` 内で **`exiftool -json -n` を第一候補**とし、未インストールまたは失敗時は **PIL（`_getexif`）** へフォールバックすること。`.dop` は正規表現優先＋ `LuaTableParser` 補完（規則8）。
+- 撮影 EXIF 解析時は `scanner.py` 内で **`exiftool -json -n` を第一候補**とし、未インストールまたは失敗時は **PIL（`_getexif`）** へフォールバックすること。Rating/Description は規則8（JPEG 正）。`.dop` フォールバックは規則8。
 
 ### 規則 13: DBキー名および権限管理の安定性維持
 - Supabase 接続時の環境変数には `SUPABASE_SERVICE_ROLE_KEY` を優先使用し、バックエンドからの書き込み権限エラー（RLSブロック）を防止すること。既存のコードベースと環境変数の命名互換性を損なわない設計を維持すること。

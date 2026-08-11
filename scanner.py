@@ -175,6 +175,12 @@ def _default_exif_meta() -> dict:
         "caption": None,
         "copyright": None,
         "artist": None,
+        # JPEG IPTC/XMP（講評注入。§0 / T9 で dop より優先）
+        "content_headline": None,
+        "category": None,
+        "other_categories": None,
+        "keywords": None,
+        "subject_code": None,
     }
 
 
@@ -284,12 +290,28 @@ def _extract_exif_via_exiftool(image_path: Path) -> dict | None:
     for tag, key in (
         ("ImageDescription", "caption"),
         ("Description", "caption"),
+        ("Caption-Abstract", "caption"),
         ("Artist", "artist"),
         ("Copyright", "copyright"),
+        ("Headline", "content_headline"),
+        ("Title", "content_headline"),
+        ("Category", "category"),
+        ("SupplementalCategories", "other_categories"),
+        ("Keywords", "keywords"),
+        ("SubjectCode", "subject_code"),
+        ("IPTCSubjectCode", "subject_code"),
     ):
         val = tags.get(tag)
-        if val and not meta.get(key):
-            meta[key] = str(val).replace("\x00", "").strip()
+        if val is None:
+            continue
+        if isinstance(val, list):
+            joined = ", ".join(str(x).replace("\x00", "").strip() for x in val if str(x).strip())
+            if joined and not meta.get(key):
+                meta[key] = joined
+            continue
+        text = str(val).replace("\x00", "").strip()
+        if text and not meta.get(key):
+            meta[key] = text
 
     return meta
 
@@ -459,23 +481,93 @@ def _extract_dop_data(image_path: Path) -> dict:
     return dop_meta
 
 
+def _coalesce_text(*candidates: str | None, default: str = "なし") -> str:
+    for val in candidates:
+        if val is None:
+            continue
+        text = str(val).replace("\x00", "").strip()
+        if text and text != "なし":
+            return text
+    return default
+
+
+def _read_jpeg_rating_description(file_path: Path) -> tuple[int | None, str, str]:
+    """JPEG 内 Rating / Description（§0 一次ソース）。失敗時は (None, '', reason)。"""
+    try:
+        from iptc_rating_io import ExifToolError, ExifToolNotFoundError, IptcIoError, read_shortlist_meta
+
+        meta = read_shortlist_meta(file_path)
+        return meta.rating, meta.description or "", "jpeg_iptc"
+    except ExifToolNotFoundError:
+        return None, "", "exiftool_missing"
+    except (ExifToolError, IptcIoError, OSError, ValueError, json.JSONDecodeError):
+        return None, "", "jpeg_read_failed"
+    except Exception:
+        return None, "", "jpeg_read_failed"
+
+
 def extract_file_metadata(file_path: Path) -> tuple[dict, dict, str]:
-    """単一の写真ファイルからEXIFおよび.dopメタデータを高精度に抽出する共通関数"""
+    """単一写真から撮影 EXIF と講評用メタを抽出（§0 / T9: JPEG 正）.
+
+    - ``user_intent`` / Rating 表示: JPEG Description / Rating を一次ソース
+    - ``.dop`` は上記が空のときのみフォールバック（同期成立後は通常不要）
+    - 撮影 EXIF（日時・絞り等）は従来どおり画像埋め込みを使用
+    """
     ensure_heif_support()
     exif_info = _extract_exif_data(file_path)
     dop_info = _extract_dop_data(file_path)
 
-    final_user_intent = dop_info["caption"] or exif_info["caption"] or "なし"
+    jpeg_rating, jpeg_description, jpeg_meta_status = _read_jpeg_rating_description(file_path)
 
-    headline = dop_info["content_headline"] or "なし"
-    category = dop_info["category"] or "なし"
-    other_cats = dop_info["other_categories"] or "なし"
-    subj_code = dop_info["subject_code"] or "なし"
-    keywords = dop_info["keywords"] or "なし"
-    byline = dop_info["byline"] or exif_info["artist"] or "なし"
-    copyright_str = dop_info["copyright"] or exif_info["copyright"] or "なし"
+    from iptc_rating_io import format_rating_display, strip_stage_reason_lines
 
-    dop_status_str = f"あり [評価: {dop_info['rating_str']}] [Preset: {dop_info['preset_name']}]" if dop_info['dop_found'] else "なし"
+    # --- user_intent: JPEG Description → EXIF caption → dop caption ---
+    intent_source = "none"
+    intent_raw = ""
+    if jpeg_description.strip():
+        intent_raw = jpeg_description
+        intent_source = "jpeg_description"
+    elif exif_info.get("caption"):
+        intent_raw = str(exif_info["caption"])
+        intent_source = "exif_caption"
+    elif dop_info.get("caption"):
+        intent_raw = str(dop_info["caption"])
+        intent_source = "dop_fallback"
+
+    user_prose = strip_stage_reason_lines(intent_raw) if intent_raw else ""
+    final_user_intent = user_prose if user_prose else "なし"
+
+    # --- Rating 表示: JPEG → dop フォールバック ---
+    if jpeg_rating is not None:
+        rating_str = format_rating_display(jpeg_rating)
+        rating_source = "jpeg"
+    elif dop_info.get("rating_str") and dop_info["rating_str"] != "なし":
+        rating_str = dop_info["rating_str"]
+        rating_source = "dop_fallback"
+    else:
+        rating_str = "なし"
+        rating_source = "none"
+
+    # IPTC 補助フィールド: JPEG/EXIF 優先、dop は空欄時のみ
+    headline = _coalesce_text(exif_info.get("content_headline"), dop_info.get("content_headline"))
+    category = _coalesce_text(exif_info.get("category"), dop_info.get("category"))
+    other_cats = _coalesce_text(exif_info.get("other_categories"), dop_info.get("other_categories"))
+    subj_code = _coalesce_text(exif_info.get("subject_code"), dop_info.get("subject_code"))
+    keywords = _coalesce_text(exif_info.get("keywords"), dop_info.get("keywords"))
+    byline = _coalesce_text(exif_info.get("artist"), dop_info.get("byline"))
+    copyright_str = _coalesce_text(exif_info.get("copyright"), dop_info.get("copyright"))
+    # Preset は .dop 固有。第一波の必須入力ではない（§0）
+    preset_name = dop_info.get("preset_name") or "標準/未指定"
+    if rating_source != "dop_fallback" and intent_source != "dop_fallback":
+        # 講評必須経路が JPEG 正のときは Preset も必須扱いにしない
+        if not dop_info.get("dop_found"):
+            preset_name = "標準/未指定"
+
+    dop_status_str = (
+        f"あり [評価: {dop_info['rating_str']}] [Preset: {dop_info['preset_name']}]（Rating/意図は JPEG 正）"
+        if dop_info["dop_found"]
+        else "なし（未使用可）"
+    )
 
     meta_block = f"""=== メタデータ ===
 file_name: {file_path.name}
@@ -488,9 +580,13 @@ f_number: {exif_info['f_number']}
 shutter_speed: {exif_info['shutter_speed']}
 iso: {exif_info['iso']}
 focal_length: {exif_info['focal_length']}
+rating: {rating_str}
+rating_source: {rating_source}
+jpeg_meta_status: {jpeg_meta_status}
+user_intent: {final_user_intent}
+user_intent_source: {intent_source}
 dxo_dop_sidecar: {dop_status_str}
 contentHeadline: {headline}
-user_intent: {final_user_intent}
 Category: {category}
 OtherCategories: {other_cats}
 SubjectCode: {subj_code}
@@ -498,7 +594,38 @@ Keywords: {keywords}
 Byline: {byline}
 Copyright: {copyright_str}"""
 
-    metadata_dict = {**exif_info, "user_intent": final_user_intent}
+    # 講評プロンプト注入用（CritiquePromptContext は metadata を優先）
+    metadata_dict = {
+        **exif_info,
+        "user_intent": final_user_intent,
+        "user_intent_source": intent_source,
+        "rating": jpeg_rating,
+        "rating_str": rating_str,
+        "rating_source": rating_source,
+        "jpeg_meta_status": jpeg_meta_status,
+        "jpeg_description": jpeg_description,
+        "content_headline": None if headline == "なし" else headline,
+        "category": None if category == "なし" else category,
+        "other_categories": None if other_cats == "なし" else other_cats,
+        "keywords": None if keywords == "なし" else keywords,
+        "subject_code": None if subj_code == "なし" else subj_code,
+        "preset_name": preset_name,
+    }
+
+    # 後方互換: dop_info にも JPEG 正の rating/caption を載せる（旧呼び出し向け）
+    dop_info = {
+        **dop_info,
+        "rating_str": rating_str,
+        "caption": final_user_intent if final_user_intent != "なし" else dop_info.get("caption"),
+        "content_headline": None if headline == "なし" else headline,
+        "category": None if category == "なし" else category,
+        "other_categories": None if other_cats == "なし" else other_cats,
+        "keywords": None if keywords == "なし" else keywords,
+        "subject_code": None if subj_code == "なし" else subj_code,
+        "preset_name": preset_name,
+        "meta_source_policy": "jpeg_primary",
+    }
+
     return metadata_dict, dop_info, meta_block
 
 

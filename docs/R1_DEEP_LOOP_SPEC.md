@@ -26,7 +26,7 @@
 補足:
 
 - 短絡バッチは JPEG に Rating／Description を**書き込む**（現行コードは書き込みなし → 実装で追加）。
-- 講評・短絡の読み取りも、同期成立後は **JPEG を正**とする（現行の `.dop` 優先 Rating／意図は移行完了後に廃止またはフォールバックのみ）。
+- 講評・短絡の読み取りも **JPEG を正**とする（T9 実装済。`.dop` は空欄時フォールバックのみ）。
 - `_dev.jpg` を講評する場合も一次ソースは同じ（そのファイルの画素＋埋め込み撮影 EXIF）。現像で変えた見え方は**画を正**とし、EXIF は「撮影時の記録」として扱う（画素と設定の不一致があり得ることを仕様上許容し、プロンプトで画優先を明示する方向）。
 - Preset 名など `.dop` 固有情報は、第一波の必須入力にしない。
 
@@ -456,7 +456,7 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 | `iptc_rating_io.py` | JPEG の Rating／説明 読み書き単一ソース（exiftool）。`[M2]`/`[M3]` ブロック置換 API |
 | `delta_log.py` | 監査 |
 | `trace_from_works.py` | Works 指定の痕跡生成 |
-| 既存コア | scanner（撮影 EXIF）/ critique_engine / card / DesktopLogManager。scanner の `.dop` 優先は同期確立後に JPEG 正へ移行 |
+| 既存コア | scanner（撮影 EXIF＋**JPEG 正の Rating/Description**）/ critique_engine / card / DesktopLogManager。`.dop` は空欄時フォールバックのみ（T9） |
 
 ---
 
@@ -501,3 +501,4 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 | 2026-08-11 | T7 `delta_log`（`_lumina/sessions` 監査・再読・H3再スキャン）実装 |
 | 2026-08-11 | 短絡**必須GUI**（`shortlist_gui` / `LuminaShortlist.command`）。監査に `pre_h3`/`post_h3`/`h3_delta` を追加 |
 | 2026-08-11 | T8 `trace_from_works`（Works `_dev` 優先・コピーなし・画優先注記）。GUI／`run_trace_works` 導線 |
+| 2026-08-11 | T9 scanner／講評の **JPEG 正**（Rating/Description）。`.dop` は空欄時フォールバックのみ |

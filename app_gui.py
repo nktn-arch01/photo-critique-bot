@@ -318,7 +318,7 @@ class PhotoAICritiqueApp:
                 self.log(f"📸 [{idx}/{total}] 処理中: {file_name}")
 
                 try:
-                    self.log("   └─ EXIF / .dop メタデータ抽出中 (scanner.py)...")
+                    self.log("   └─ EXIF / JPEG Rating・説明 抽出中 (scanner.py, JPEG正)...")
                     exif_meta, dop_info, metadata_block = extract_file_metadata(img_path)
 
                     self.log("   └─ AI講評生成中 (OpenAI gpt-4o-mini)...")

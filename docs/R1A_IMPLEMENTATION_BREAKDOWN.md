@@ -127,6 +127,7 @@ T0 検証ゲート（IPTC）
 | 内容 | `user_intent` / Rating 表示を JPEG Description / Rating から取得。`.dop` 優先を廃止またはフォールバックのみ |
 | 完了条件 | Phase2 注入が JPEG 一次ソースと一致。オフライン／手動で確認 |
 | 依存 | T0 PASS, T1 |
+| 実装 | **完了** — `scanner.extract_file_metadata` が `iptc_rating_io` 経由で JPEG 正。衝突 `.dop` より JPEG 優先。空欄時のみ dop フォールバック。`[M2]`/`[M3]` は講評意図から除外。`CritiquePromptContext` も metadata 優先 |
 
 ### T10 — オフラインテスト
 
@@ -175,5 +176,5 @@ T0 検証ゲート（IPTC）
 7. ~~T6 `shortlist_pipeline` + `run_shortlist.py`~~ **完了**  
 8. ~~T7 `delta_log`~~ **完了**  
 9. ~~**T8 痕跡生成（Works）**~~ **完了**  
-10. **T9** scanner/講評の JPEG 正への移行 ← **次ここ**  
-11. **T10** オフラインテスト総仕上げ（必要なら）
+10. ~~**T9** scanner/講評の JPEG 正への移行~~ **完了**  
+11. **T10** オフラインテスト総仕上げ（必要なら） ← **次ここ**

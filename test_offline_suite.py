@@ -1258,6 +1258,90 @@ def test_works_trace_dev_preference_and_no_copy():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_scanner_jpeg_primary_over_dop_for_intent_and_rating():
+    """T9: user_intent / Rating は JPEG 正。衝突する .dop があっても JPEG が勝つ。"""
+    import shutil
+    import tempfile
+
+    from PIL import Image
+
+    from critique_prompts import CritiquePromptContext, build_phase2_prompt
+    from iptc_rating_io import (
+        ExifToolNotFoundError,
+        format_rating_display,
+        require_exiftool,
+        strip_stage_reason_lines,
+        write_shortlist_decision,
+    )
+    from scanner import extract_file_metadata
+
+    assert format_rating_display(3) == "★★★☆☆ (3/5)"
+    assert format_rating_display(None) == "なし"
+    assert strip_stage_reason_lines("光を残したい\n[M2] heat\n[M3] top\nメモ") == "光を残したい\nメモ"
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_scanner_jpeg_primary_over_dop_for_intent_and_rating: exiftool missing")
+        return
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_t9_"))
+    try:
+        jpeg = root / "T9_sample.jpg"
+        Image.new("RGB", (48, 32), color=(20, 40, 60)).save(jpeg, quality=90)
+
+        desc = "夕景ではなく光の角度を見たい\n[M2] relative heat note\n[M3] diversity pick"
+        write_shortlist_decision(jpeg, rating=4, description=desc)
+
+        # 衝突する .dop（古い／誤った値）を隣に置く
+        dop = root / "T9_sample.jpg.dop"
+        dop.write_text(
+            'Rating = 1\n'
+            'contentDescription = "dop側の古い意図"\n'
+            'contentHeadline = "DOP見出し"\n'
+            'AppliedPresetDisplayName = "FakePreset"\n',
+            encoding="utf-8",
+        )
+
+        meta, dop_info, block = extract_file_metadata(jpeg)
+        assert meta["rating"] == 4
+        assert meta["rating_source"] == "jpeg"
+        assert "★★★★☆" in meta["rating_str"]
+        assert meta["user_intent_source"] == "jpeg_description"
+        # [M2]/[M3] は講評の意図から除外
+        assert "[M2]" not in meta["user_intent"]
+        assert "[M3]" not in meta["user_intent"]
+        assert "光の角度を見たい" in meta["user_intent"]
+        assert "dop側の古い意図" not in meta["user_intent"]
+        assert "rating_source: jpeg" in block
+        assert "user_intent_source: jpeg_description" in block
+        assert dop_info.get("meta_source_policy") == "jpeg_primary"
+
+        ctx = CritiquePromptContext.from_metadata(meta, dop_info)
+        assert "★★★★☆" in ctx.rating_str
+        assert "光の角度" in ctx.user_intent
+        assert "dop側" not in ctx.user_intent
+        p2 = build_phase2_prompt(ctx, "■TITLE: t\n■SUMMARY: s")
+        assert "★★★★☆" in p2 or "4/5" in p2
+        assert "光の角度" in p2
+
+        # JPEG に説明が無いときだけ dop フォールバック
+        bare = root / "T9_bare.jpg"
+        Image.new("RGB", (40, 30), color=(1, 2, 3)).save(bare, quality=90)
+        (root / "T9_bare.jpg.dop").write_text(
+            'contentDescription = "dopだけの意図"\nRating = 2\n',
+            encoding="utf-8",
+        )
+        meta2, _, block2 = extract_file_metadata(bare)
+        assert meta2["user_intent_source"] == "dop_fallback"
+        assert meta2["user_intent"] == "dopだけの意図"
+        assert meta2["rating_source"] == "dop_fallback"
+        assert "★★☆☆☆" in meta2["rating_str"]
+        assert "user_intent_source: dop_fallback" in block2
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -1288,6 +1372,7 @@ def run_all():
     test_delta_log_session_reload_and_summary()
     test_h3_delta_builder_for_judgment_improvement()
     test_works_trace_dev_preference_and_no_copy()
+    test_scanner_jpeg_primary_over_dop_for_intent_and_rating()
     print("test_offline_suite: OK")
 
 
