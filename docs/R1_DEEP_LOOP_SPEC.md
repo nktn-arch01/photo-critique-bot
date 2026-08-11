@@ -224,6 +224,21 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 | Lumina Notes 観点 | M2 | 5軸相対熱量。★絶対ゲート禁止 |
 | 多様性調整 | M3 | 余白=3、上位=4。執着の癖を優先しうる |
 
+実装: [`shortlist_diversity.py`](../shortlist_diversity.py)
+
+- 入力 Rating≥2。残す比率 `keep_ratio`（既定 0.40 ≒ 最終10%ガイド）
+- 画素の色相・輝度ビン＋軽量 Vision（quality / attachment / tags）
+- 貪欲法で品質と多様性を両立。残したうち `top_ratio` を Rating=4、残りを 3
+- 非残しは Rating=2 のまま。語彙は `DiversityConfig.tag_vocab`
+
+#### 6.2.1 使用上の注意（M3）
+
+- 似たコマが並ぶ単位では、品質が少し低くても違うタグ／色のコマが残りやすい。
+- 執着ブーストで「偏り」の強いコマが上位に入りうる（仕様どおり）。
+- タグは既定語彙外を採用しない。語彙は設定で差し替え。
+- H3 で 3/4 の入れ替えは正規運用。
+
+
 ### 6.3 M2 の5軸（既存レンズ）
 
 `framing` / `sensitivity` / `story` / `technical` / `sense`  
@@ -457,3 +472,4 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 | 2026-08-11 | T3 `shortlist_mechanical`（M1: 足切り＋意図保護、Rating 0/1）実装 |
 | 2026-08-11 | §6.4.1 に M1 使用上の注意（星空・流し撮り等の誤判定想定）を追記 |
 | 2026-08-11 | T4 `shortlist_antenna`（M2: 軽量 Vision・相対熱量・Rating 2＋`[M2]`）実装 |
+| 2026-08-11 | T5 `shortlist_diversity`（M3: 多様性貪欲選抜・Rating 3/4＋`[M3]`）実装 |

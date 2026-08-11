@@ -807,6 +807,119 @@ def test_antenna_m2_relative_heat_no_star_gate():
     shutil.rmtree(td, ignore_errors=True)
 
 
+def test_diversity_m3_margin_top_and_bias_control():
+    """T5: 多様性貪欲法で余白3/上位4。[M3]書き込み。Rating<2はスキップ。"""
+    import shutil
+
+    from iptc_rating_io import (
+        ExifToolNotFoundError,
+        read_shortlist_meta,
+        require_exiftool,
+        write_rating,
+    )
+    from shortlist_diversity import (
+        DiversityConfig,
+        DiversityFeature,
+        diversity_distance,
+        greedy_diversity_select,
+        parse_diversity_response,
+        run_diversity_on_paths,
+        select_keep_count,
+        select_top_count,
+    )
+
+    assert select_keep_count(50, DiversityConfig(keep_ratio=0.40)) == 20
+    assert select_top_count(20, DiversityConfig(top_ratio=0.40)) == 8
+
+    parsed = parse_diversity_response(
+        '{"quality":4,"attachment":5,"tags":["海","光"],"reason":"青い執着"}',
+        hue_bin=3,
+        luma_bin=2,
+    )
+    assert parsed.quality == 4
+    assert parsed.attachment == 5
+    assert parsed.tags == ("海", "光")
+
+    # 類似タグは距離が小さい
+    a = DiversityFeature(0, 2, ("海",), 4, 3, "a")
+    b = DiversityFeature(0, 2, ("海",), 4, 3, "b")
+    c = DiversityFeature(6, 4, ("都市", "夜"), 3, 3, "c")
+    assert diversity_distance(a, b) < diversity_distance(a, c)
+
+    # 貪欲: 高品質の海が2枚あっても、2枠目は都市を取りやすい
+    items = [
+        (Path("p0"), 2, DiversityFeature(0, 2, ("海",), 5.0, 3.0, "海1")),
+        (Path("p1"), 2, DiversityFeature(0, 2, ("海",), 4.8, 3.0, "海2")),
+        (Path("p2"), 2, DiversityFeature(6, 3, ("都市",), 4.0, 4.0, "都市")),
+        (Path("p3"), 2, DiversityFeature(8, 1, ("静物",), 3.5, 5.0, "静物執着")),
+        (Path("p4"), 2, DiversityFeature(1, 2, ("海", "光"), 4.5, 3.0, "海3")),
+    ]
+    picked = greedy_diversity_select(
+        items, DiversityConfig(keep_ratio=0.4, top_ratio=0.5, diversity_weight=0.7, quality_weight=0.3)
+    )
+    kept = [d for d in picked if d.passed]
+    assert len(kept) == 2
+    kept_names = {d.path.name for d in kept}
+    assert "p0" in kept_names  # 最初は最高品質
+    assert "p1" not in kept_names or "p2" in kept_names or "p3" in kept_names
+    # 2枠目は同系海より都市/静物側が入りやすい
+    assert kept_names != {"p0", "p1"}
+    tops = [d for d in kept if d.slot == "top"]
+    margins = [d for d in kept if d.slot == "margin"]
+    assert len(tops) == 1 and len(margins) == 1
+    assert tops[0].rating == 4 and margins[0].rating == 3
+
+    td = Path(tempfile.mkdtemp(prefix="m3_t5_"))
+    paths = []
+    for i in range(5):
+        p = td / f"d{i}.jpg"
+        Image.new("RGB", (64, 48), (30 + i * 25, 50, 80)).save(p, "JPEG", quality=90)
+        paths.append(p)
+
+    feats = {
+        paths[0]: DiversityFeature(0, 2, ("海",), 5.0, 3.0, "海トップ"),
+        paths[1]: DiversityFeature(0, 2, ("海",), 4.7, 3.0, "海似"),
+        paths[2]: DiversityFeature(6, 3, ("都市",), 4.2, 3.0, "都市余白"),
+        paths[3]: DiversityFeature(9, 1, ("静物",), 3.8, 5.0, "執着静物"),
+        paths[4]: DiversityFeature(2, 2, ("自然",), 3.5, 3.0, "自然"),
+    }
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip m3 write check: exiftool missing")
+        shutil.rmtree(td, ignore_errors=True)
+        return
+
+    for p in paths:
+        write_rating(p, 2)
+    low = td / "low.jpg"
+    Image.new("RGB", (64, 48), (10, 10, 10)).save(low, "JPEG", quality=90)
+    write_rating(low, 1)
+
+    batch = run_diversity_on_paths(
+        list(paths) + [low],
+        DiversityConfig(keep_ratio=0.4, top_ratio=0.5, diversity_weight=0.65, quality_weight=0.35),
+        write=True,
+        feature_fn=lambda p: feats[p],
+    )
+    assert batch.skipped == 1
+    assert batch.pass_count == 2
+    assert batch.top_count == 1
+    assert batch.margin_count == 1
+    assert batch.written == 2
+
+    ratings = {p.name: read_shortlist_meta(p).rating for p in paths}
+    assert 4 in ratings.values()
+    assert 3 in ratings.values()
+    assert read_shortlist_meta(paths[0]).stage_reason("M3")
+    assert read_shortlist_meta(low).rating == 1
+    # 非合格は2のままが残る
+    assert sum(1 for r in ratings.values() if r == 2) == 3
+
+    shutil.rmtree(td, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -832,6 +945,7 @@ def run_all():
     test_library_unit_discover_and_list_jpegs()
     test_mechanical_m1_blur_and_intent_protect()
     test_antenna_m2_relative_heat_no_star_gate()
+    test_diversity_m3_margin_top_and_bias_control()
     print("test_offline_suite: OK")
 
 
