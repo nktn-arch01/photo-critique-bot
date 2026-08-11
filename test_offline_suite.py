@@ -1342,6 +1342,274 @@ def test_scanner_jpeg_primary_over_dop_for_intent_and_rating():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _pixel_digest(path: Path) -> str:
+    """画素のみのダイジェスト（メタ変更検知用。A5）。"""
+    import hashlib
+
+    with Image.open(path) as im:
+        rgb = im.convert("RGB")
+        return hashlib.sha256(rgb.tobytes()).hexdigest()
+
+
+def test_r1a_t10_shortlist_write_preserves_pixels():
+    """T10 / A5: Rating・Description 書き込みで画素が変わらない。"""
+    import shutil
+
+    from iptc_rating_io import (
+        ExifToolNotFoundError,
+        read_shortlist_meta,
+        require_exiftool,
+        write_shortlist_decision,
+    )
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_r1a_t10_shortlist_write_preserves_pixels: exiftool missing")
+        return
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_t10_pix_"))
+    try:
+        jpeg = root / "pix.jpg"
+        Image.new("RGB", (64, 48), color=(12, 34, 56)).save(jpeg, quality=92)
+        before = _pixel_digest(jpeg)
+        size_before = jpeg.stat().st_size
+
+        write_shortlist_decision(
+            jpeg,
+            rating=3,
+            description="ユーザー文\n[M2] antenna\n[M3] diversity",
+        )
+        after = _pixel_digest(jpeg)
+        assert before == after, "画素ダイジェストが変わった（画素破壊の疑い）"
+        meta = read_shortlist_meta(jpeg)
+        assert meta.rating == 3
+        assert "[M2]" in meta.description
+        # メタ追記でファイルサイズは変わり得るが、極端な縮小（再エンコード破壊）はしない
+        assert jpeg.stat().st_size >= size_before * 0.5
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_r1a_t10_pipeline_continues_on_item_failure():
+    """T10: 1枚の失敗でパイプライン全体を止めない。"""
+    import shutil
+
+    from iptc_rating_io import ExifToolNotFoundError, require_exiftool, write_rating
+    from shortlist_antenna import AntennaConfig, AntennaScore
+    from shortlist_pipeline import PipelineConfig, ShortlistPipeline
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_r1a_t10_pipeline_continues_on_item_failure: exiftool missing")
+        return
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_t10_fail_"))
+    try:
+        month = root / "202608"
+        month.mkdir()
+        for i in range(4):
+            p = month / f"q{i}.jpg"
+            _make_grid_image((120, 90)).save(p, "JPEG", quality=95)
+            write_rating(p, 1)
+
+        def m2_fn(path: Path) -> AntennaScore:
+            if path.name == "q1.jpg":
+                raise RuntimeError("simulated per-item failure")
+            n = int(path.stem.replace("q", ""))
+            return AntennaScore(
+                {
+                    "framing": 3 + (n % 2),
+                    "sensitivity": 3,
+                    "story": 2,
+                    "technical": 2,
+                    "sense": 3,
+                },
+                f"ok-{n}",
+            )
+
+        pipe = ShortlistPipeline(
+            PipelineConfig(
+                write=True,
+                run_m1=False,
+                run_m2=True,
+                run_m3=False,
+                m2_score_fn=m2_fn,
+                antenna=AntennaConfig(pass_ratio=0.5),
+                persist_session=True,
+            )
+        )
+        result = pipe.run_on_dir(month)
+        assert result.status == "completed", result.error
+        assert result.m2 is not None
+        assert result.m2.errors >= 1
+        okish = [d for d in result.m2.decisions if d.error is None and not d.skipped]
+        assert len(okish) >= 2
+        failed = [d for d in result.m2.decisions if d.error]
+        assert any("simulated" in (d.error or "") for d in failed)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_r1a_t10_dry_run_does_not_write_rating():
+    """T10: dry-run（write=False）では Rating を書き換えない。"""
+    import shutil
+
+    from iptc_rating_io import ExifToolNotFoundError, read_shortlist_meta, require_exiftool, write_rating
+    from shortlist_pipeline import PipelineConfig, ShortlistPipeline
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_r1a_t10_dry_run_does_not_write_rating: exiftool missing")
+        return
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_t10_dry_"))
+    try:
+        month = root / "202609"
+        month.mkdir()
+        p = month / "blur.jpg"
+        Image.new("RGB", (80, 60), color=(128, 128, 128)).save(p, quality=50)
+        write_rating(p, 2)
+        before = read_shortlist_meta(p).rating
+
+        pipe = ShortlistPipeline(
+            PipelineConfig(
+                write=False,
+                run_m1=True,
+                run_m2=False,
+                run_m3=False,
+                persist_session=True,
+            )
+        )
+        result = pipe.run_on_dir(month)
+        assert result.status == "completed"
+        assert read_shortlist_meta(p).rating == before == 2
+        assert result.session_path is not None
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_r1a_t10_works_without_dop_no_error():
+    """T10: Works に .dop が無くても痕跡対象列挙・メタ抽出はエラーにならない。"""
+    import shutil
+
+    from scanner import extract_file_metadata
+    from trace_from_works import list_works_trace_targets
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_t10_works_"))
+    try:
+        works = root / "Works"
+        works.mkdir()
+        sooc = works / "W1.jpg"
+        dev = works / "W1_dev.jpg"
+        only = works / "W2.jpg"
+        Image.new("RGB", (40, 30), color=(9, 9, 9)).save(sooc, quality=90)
+        Image.new("RGB", (40, 30), color=(19, 19, 19)).save(dev, quality=90)
+        Image.new("RGB", (40, 30), color=(29, 29, 29)).save(only, quality=90)
+
+        targets = list_works_trace_targets(works)
+        assert [p.name for p in targets] == ["W1_dev.jpg", "W2.jpg"]
+        assert not any(works.glob("*.dop"))
+
+        meta, dop_info, block = extract_file_metadata(dev)
+        assert dop_info.get("dop_found") is False
+        assert meta.get("rating_source") in {"jpeg", "none"}
+        assert meta.get("user_intent") is not None
+        assert "dxo_dop_sidecar:" in block
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_r1a_t10_iptc_sync_verify_script_roundtrip():
+    """T10: scripts/iptc_sync_verify.verify_roundtrip 相当の I/O。"""
+    import importlib.util
+    import shutil
+
+    from iptc_rating_io import ExifToolNotFoundError, require_exiftool
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_r1a_t10_iptc_sync_verify_script_roundtrip: exiftool missing")
+        return
+
+    script = Path(__file__).resolve().parent / "scripts" / "iptc_sync_verify.py"
+    assert script.is_file()
+    spec = importlib.util.spec_from_file_location("iptc_sync_verify_mod", script)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_t10_verify_"))
+    try:
+        jpeg = root / "verify.jpg"
+        mod.make_sample_jpeg(jpeg)
+        result = mod.verify_roundtrip(
+            jpeg,
+            rating=3,
+            description="[M2] IPTC sync verify\n[M3] diversity note",
+        )
+        assert result["passed"] is True
+        assert result["rating_ok"] is True
+        assert result["description_ok"] is True
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_r1a_t10_no_works_copy_surface():
+    """T10 / A6: Works コピー API を持たない（痕跡は読取のみ）。"""
+    import inspect
+
+    import trace_from_works as tw
+    from trace_from_works import TraceBatchResult
+
+    src = inspect.getsource(tw)
+    assert "shutil.copy" not in src
+    assert "shutil.move" not in src
+    assert "copy2" not in src
+    assert hasattr(tw, "list_works_trace_targets")
+    assert hasattr(tw, "WorksTraceRunner")
+    empty = TraceBatchResult(works_dir="/tmp", status="completed", created_at="x")
+    assert empty.to_dict()["copy_performed"] is False
+
+
+def test_r1a_t10_acceptance_offline_matrix():
+    """T10: R1′-A 受け入れ A1–A10 のオフライン対応表（回帰の錨）。"""
+    import delta_log
+    import iptc_rating_io
+    import library_unit
+    import shortlist_antenna
+    import shortlist_diversity
+    import shortlist_mechanical
+    import shortlist_pipeline
+    import trace_from_works
+
+    matrix = {
+        "A1": (library_unit, shortlist_pipeline),
+        "A2": (shortlist_mechanical,),
+        "A3": (shortlist_antenna,),
+        "A4": (shortlist_diversity,),
+        "A5": (iptc_rating_io,),
+        "A6": (trace_from_works,),
+        "A7": (trace_from_works,),
+        "A8": (delta_log,),
+        "A9": ("app_gui.py", "analyze_folder.py"),
+        "A10": ("docs/IPTC_SYNC_VERIFICATION.md", "scripts/iptc_sync_verify.py"),
+    }
+    root = Path(__file__).resolve().parent
+    for key, refs in matrix.items():
+        for ref in refs:
+            if isinstance(ref, str):
+                assert (root / ref).exists(), f"{key}: missing {ref}"
+            else:
+                assert ref is not None, f"{key}: module missing"
+    assert library_unit.is_month_folder_name("202608")
+    assert library_unit.is_event_folder_name("20260810_京都")
+    assert not library_unit.is_month_folder_name("Works")
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -1373,6 +1641,13 @@ def run_all():
     test_h3_delta_builder_for_judgment_improvement()
     test_works_trace_dev_preference_and_no_copy()
     test_scanner_jpeg_primary_over_dop_for_intent_and_rating()
+    test_r1a_t10_shortlist_write_preserves_pixels()
+    test_r1a_t10_pipeline_continues_on_item_failure()
+    test_r1a_t10_dry_run_does_not_write_rating()
+    test_r1a_t10_works_without_dop_no_error()
+    test_r1a_t10_iptc_sync_verify_script_roundtrip()
+    test_r1a_t10_no_works_copy_surface()
+    test_r1a_t10_acceptance_offline_matrix()
     print("test_offline_suite: OK")
 
 
