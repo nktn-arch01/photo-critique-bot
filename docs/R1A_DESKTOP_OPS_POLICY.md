@@ -141,6 +141,16 @@ Works が月のみなら、現行 `DesktopLogManager`（`year_str = name[:4]`、
 |----|------|------|
 | **P1** | `library_unit` / 短絡 GUI が `XXYYYYMM`・`XXYYYYMMDD_名前` を受け付ける | **対応済み** |
 
+### 低優先（L1–L5）
+
+| ID | 方針 | 状態 |
+|----|------|------|
+| **L1** | ウィンドウ破棄後の `after` を安全化 | **対応済み**（`desktop_ui.schedule_on_ui`） |
+| **L2** | 監査フォルダを開くとき未作成なら mkdir しない | **対応済み** |
+| **L3** | `RatingPercent` のみでも Rating 復元 | **対応済み** |
+| **L4** | Works は直下のみ維持。サブフォルダ JPEG は案内 | **対応済み**（再帰はしない＝運用契約） |
+| **L5** | プロンプト注入で哨兵「なし」をスキップ | **対応済み** |
+
 ---
 
 ## 8. やらないこと（再確認）
@@ -161,3 +171,4 @@ Works が月のみなら、現行 `DesktopLogManager`（`year_str = name[:4]`、
 | 2026-08-11 | **Works は月 `YYYYMM` のみ**（イベントフォルダ非作成）。M1 を簡略化 |
 | 2026-08-11 | オリジナル命名を一般化: **`XXYYYY` / `XXYYYYMM` / `XXYYYYMMDD_イベント`**（`XX`=機種コード） |
 | 2026-08-11 | **P1 + M1–M5 実装**: 接頭辞付き unit 受付、Works YYYYMM ゲート、H3 target 正＋ワーカー、開始時スナップショット、共有キー文書化 |
+| 2026-08-11 | **L1–L5 実装**: UI after 安全化、監査 mkdir 撤廃、RatingPercent フォールバック、Works 直下案内、哨兵「なし」スキップ |

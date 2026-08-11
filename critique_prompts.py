@@ -11,11 +11,31 @@ from dataclasses import dataclass
 from critique_lens import DEFAULT_LENS, CritiqueLens, get_lens, normalize_lens
 
 
+PROMPT_MISSING = "なし"
+
+
 def sanitize_str(val: str) -> str:
     if not val:
-        return "なし"
+        return PROMPT_MISSING
     clean = str(val).replace("\x00", "").strip()
-    return clean if clean else "なし"
+    return clean if clean else PROMPT_MISSING
+
+
+def is_prompt_missing(val: object) -> bool:
+    """空・None・哨兵「なし」は未設定扱い（L5 / scanner._coalesce_text と揃える）。"""
+    if val is None:
+        return True
+    text = str(val).replace("\x00", "").strip()
+    return (not text) or text == PROMPT_MISSING
+
+
+def coalesce_prompt_text(*candidates: object, default: str = PROMPT_MISSING) -> str:
+    """最初の有値を返す。哨兵「なし」はスキップする。"""
+    for val in candidates:
+        if is_prompt_missing(val):
+            continue
+        return sanitize_str(val)
+    return default
 
 
 @dataclass(frozen=True)
@@ -51,16 +71,6 @@ class CritiquePromptContext:
         if pixel_priority is None:
             pixel_priority = bool(metadata.get("pixel_priority"))
 
-        def _pick(*keys_and_sources: object) -> str:
-            """metadata 優先、ついで dop_info。空は sanitize で「なし」。"""
-            for val in keys_and_sources:
-                if val is None:
-                    continue
-                text = str(val).replace("\x00", "").strip()
-                if text:
-                    return sanitize_str(text)
-            return "なし"
-
         return cls(
             user_intent=sanitize_str(metadata.get("user_intent")),
             camera_model=sanitize_str(metadata.get("camera_model")),
@@ -71,11 +81,17 @@ class CritiquePromptContext:
             focal_length=sanitize_str(metadata.get("focal_length")),
             date_time=sanitize_str(metadata.get("date_time")),
             time_zone_fact=sanitize_str(metadata.get("time_zone_fact")),
-            content_headline=_pick(metadata.get("content_headline"), dop_info.get("content_headline")),
-            category=_pick(metadata.get("category"), dop_info.get("category")),
-            other_categories=_pick(metadata.get("other_categories"), dop_info.get("other_categories")),
-            keywords=_pick(metadata.get("keywords"), dop_info.get("keywords")),
-            rating_str=_pick(metadata.get("rating_str"), dop_info.get("rating_str")),
+            content_headline=coalesce_prompt_text(
+                metadata.get("content_headline"), dop_info.get("content_headline")
+            ),
+            category=coalesce_prompt_text(metadata.get("category"), dop_info.get("category")),
+            other_categories=coalesce_prompt_text(
+                metadata.get("other_categories"), dop_info.get("other_categories")
+            ),
+            keywords=coalesce_prompt_text(metadata.get("keywords"), dop_info.get("keywords")),
+            rating_str=coalesce_prompt_text(
+                metadata.get("rating_str"), dop_info.get("rating_str")
+            ),
             # Preset は必須入力ではない（§0）
             preset_name=sanitize_str(
                 metadata.get("preset_name")

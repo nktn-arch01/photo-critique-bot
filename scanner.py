@@ -482,13 +482,10 @@ def _extract_dop_data(image_path: Path) -> dict:
 
 
 def _coalesce_text(*candidates: str | None, default: str = "なし") -> str:
-    for val in candidates:
-        if val is None:
-            continue
-        text = str(val).replace("\x00", "").strip()
-        if text and text != "なし":
-            return text
-    return default
+    """空・哨兵「なし」をスキップ（critique_prompts と共通）。"""
+    from critique_prompts import coalesce_prompt_text
+
+    return coalesce_prompt_text(*candidates, default=default)
 
 
 def _read_jpeg_rating_description(file_path: Path) -> tuple[int | None, str, str]:

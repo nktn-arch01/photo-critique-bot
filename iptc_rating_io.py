@@ -87,6 +87,25 @@ def rating_to_percent(rating: int) -> int:
     return rating * 20
 
 
+def percent_to_rating(percent: object) -> int | None:
+    """RatingPercent → 0–5（``rating_to_percent`` の逆。近い値は四捨五入）.
+
+    ``Rating`` / ``XMP:Rating`` が無い JPEG（Windows 互換など）向けのフォールバック。
+    """
+    if percent is None:
+        return None
+    try:
+        p = int(round(float(str(percent).strip())))
+    except (TypeError, ValueError):
+        return None
+    if p < 0 or p > 100:
+        return None
+    rating = int(round(p / 20.0))
+    if 0 <= rating <= 5:
+        return rating
+    return None
+
+
 def _run_exiftool(args: list[str]) -> subprocess.CompletedProcess[str]:
     exiftool = require_exiftool()
     proc = subprocess.run(
@@ -120,6 +139,7 @@ def read_raw_tags(path: Path | str) -> dict[str, str]:
 
 
 def _parse_rating(raw: dict[str, str]) -> int | None:
+    """Rating / XMP:Rating を優先。無ければ RatingPercent から復元（L3）。"""
     for key in ("Rating", "XMP:Rating"):
         val = raw.get(key)
         if val is None:
@@ -130,6 +150,10 @@ def _parse_rating(raw: dict[str, str]) -> int | None:
             continue
         if 0 <= n <= 5:
             return n
+    for key in ("RatingPercent",):
+        got = percent_to_rating(raw.get(key))
+        if got is not None:
+            return got
     return None
 
 

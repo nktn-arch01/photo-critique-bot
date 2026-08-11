@@ -1825,6 +1825,140 @@ def test_hotfix_exception_lambda_captures_message():
     assert caught == ["simulated-ui-error"]
 
 
+def test_low_priority_schedule_on_ui_skips_destroyed_root():
+    """L1: 破棄済み root への after 予約は例外を出さず False。"""
+    from desktop_ui import _TclError, schedule_on_ui
+
+    class FakeRoot:
+        def winfo_exists(self):
+            return False
+
+        def after(self, *_a, **_k):
+            raise AssertionError("after must not be called")
+
+    assert schedule_on_ui(FakeRoot(), lambda: None) is False
+
+    class DeadRoot:
+        def winfo_exists(self):
+            raise _TclError("application has been destroyed")
+
+        def after(self, *_a, **_k):
+            raise AssertionError("after must not be called")
+
+    assert schedule_on_ui(DeadRoot(), lambda: None) is False
+
+    called = {"n": 0}
+
+    class LiveRoot:
+        def winfo_exists(self):
+            return True
+
+        def after(self, _ms, fn):
+            called["n"] += 1
+            fn()
+
+    assert schedule_on_ui(LiveRoot(), lambda: None) is True
+    assert called["n"] == 1
+
+
+def test_low_priority_sessions_open_does_not_mkdir():
+    """L2: 監査フォルダが無いとき mkdir しない（sessions_dir はパス計算のみ）。"""
+    import shutil
+
+    from delta_log import sessions_dir
+
+    root = Path(tempfile.mkdtemp(prefix="l2_sess_"))
+    try:
+        unit = root / "OM202606"
+        unit.mkdir()
+        sess = sessions_dir(unit)
+        assert not sess.exists()
+        assert not (unit / "_lumina").exists()
+        assert sess.name == "sessions"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_low_priority_rating_percent_fallback():
+    """L3: RatingPercent のみでも 0–5 に復元。Rating があれば優先。"""
+    from iptc_rating_io import _parse_rating, percent_to_rating, rating_to_percent
+
+    assert percent_to_rating(60) == 3
+    assert percent_to_rating(0) == 0
+    assert percent_to_rating(100) == 5
+    assert percent_to_rating(55) == 3
+    assert percent_to_rating(-1) is None
+    assert percent_to_rating(101) is None
+    for n in range(0, 6):
+        assert percent_to_rating(rating_to_percent(n)) == n
+
+    assert _parse_rating({"RatingPercent": "80"}) == 4
+    assert _parse_rating({"Rating": "2", "RatingPercent": "80"}) == 2
+    assert _parse_rating({}) is None
+
+
+def test_low_priority_works_subdir_hint():
+    """L4: 直下0枚でもサブフォルダに JPEG があれば案内。再帰列挙はしない。"""
+    import shutil
+
+    from PIL import Image
+
+    from trace_from_works import (
+        count_jpegs_in_immediate_subdirs,
+        list_works_trace_targets,
+        works_empty_targets_hint,
+    )
+
+    root = Path(tempfile.mkdtemp(prefix="l4_works_"))
+    try:
+        works = root / "202606"
+        nested = works / "event_like"
+        nested.mkdir(parents=True)
+        Image.new("RGB", (16, 12), (1, 2, 3)).save(nested / "hidden.jpg", quality=85)
+
+        assert list_works_trace_targets(works) == []
+        assert count_jpegs_in_immediate_subdirs(works) == 1
+        hint = works_empty_targets_hint(works)
+        assert "サブフォルダ" in hint
+        assert "1 枚" in hint
+
+        Image.new("RGB", (16, 12), (4, 5, 6)).save(works / "P1_dev.jpg", quality=85)
+        assert [p.name for p in list_works_trace_targets(works)] == ["P1_dev.jpg"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_low_priority_prompt_pick_skips_sentinel_nashi():
+    """L5: metadata の哨兵「なし」はスキップし dop_info を採用。"""
+    from critique_prompts import CritiquePromptContext, coalesce_prompt_text, is_prompt_missing
+
+    assert is_prompt_missing("なし")
+    assert is_prompt_missing("")
+    assert is_prompt_missing(None)
+    assert not is_prompt_missing("光")
+
+    assert coalesce_prompt_text("なし", "★★★☆☆ (3/5)") == "★★★☆☆ (3/5)"
+    assert coalesce_prompt_text("なし", "なし") == "なし"
+
+    ctx = CritiquePromptContext.from_metadata(
+        {"rating_str": "なし", "keywords": "なし", "content_headline": "なし"},
+        {
+            "rating_str": "★★★☆☆ (3/5)",
+            "keywords": "旅,光",
+            "content_headline": "夕方の川",
+        },
+    )
+    assert ctx.rating_str == "★★★☆☆ (3/5)"
+    assert ctx.keywords == "旅,光"
+    assert ctx.content_headline == "夕方の川"
+
+    ctx2 = CritiquePromptContext.from_metadata(
+        {"rating_str": "★★★★★ (5/5)"},
+        {"rating_str": "★★★☆☆ (3/5)"},
+    )
+    assert ctx2.rating_str == "★★★★★ (5/5)"
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -1847,6 +1981,8 @@ def run_all():
     test_iptc_stage_block_upsert_preserves_user_text()
     test_iptc_rating_description_roundtrip()
     test_library_unit_naming_rules()
+    test_library_unit_prefixed_unit_from_dir()
+    test_resolve_session_for_unit_prefers_target_sessions()
     test_library_unit_discover_and_list_jpegs()
     test_mechanical_m1_blur_and_intent_protect()
     test_antenna_m2_relative_heat_no_star_gate()
@@ -1866,6 +2002,11 @@ def run_all():
     test_hotfix_desktop_config_merge_preserves_shortlist_keys()
     test_hotfix_m2_m3_skip_none_rating()
     test_hotfix_exception_lambda_captures_message()
+    test_low_priority_schedule_on_ui_skips_destroyed_root()
+    test_low_priority_sessions_open_does_not_mkdir()
+    test_low_priority_rating_percent_fallback()
+    test_low_priority_works_subdir_hint()
+    test_low_priority_prompt_pick_skips_sentinel_nashi()
     print("test_offline_suite: OK")
 
 

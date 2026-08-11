@@ -18,6 +18,7 @@ from card_theme import (
     normalize_card_theme,
 )
 from desktop_config import load_config as load_shared_config, save_config_merge
+from desktop_ui import schedule_on_ui
 from scanner import extract_file_metadata, SUPPORTED_IMAGE_SUFFIXES
 
 
@@ -187,6 +188,10 @@ class PhotoAICritiqueApp:
             self.save_config(selected)
             self.log(f"📁 処理対象フォルダを変更しました: {selected}")
 
+    def _ui(self, fn) -> None:
+        """ワーカー→UI。ウィンドウ破棄後は何もしない（L1）。"""
+        schedule_on_ui(self.root, fn)
+
     def log(self, message: str):
         def _append():
             self.log_text.config(state=tk.NORMAL)
@@ -198,7 +203,7 @@ class PhotoAICritiqueApp:
                 
             self.log_text.see(tk.END)
             self.log_text.config(state=tk.DISABLED)
-        self.root.after(0, _append)
+        self._ui(_append)
 
     def request_cancel(self):
         if self.is_running:
@@ -301,7 +306,7 @@ class PhotoAICritiqueApp:
                 file_name = img_path.name
                 
                 progress_pct = (idx / total) * 100
-                self.root.after(0, lambda p=progress_pct, i=idx, t=total, fn=file_name: [
+                self._ui(lambda p=progress_pct, i=idx, t=total, fn=file_name: [
                     self.progress_bar.config(value=p),
                     self.status_label.config(text=f"処理中... ({i}/{t}): {fn}")
                 ])
@@ -346,13 +351,13 @@ class PhotoAICritiqueApp:
             self.log(f"🎉 バッチ処理{status_text_res}! (新規処理: {processed_count} / スキップ: {skipped_count} / エラー: {error_count})")
             self.log("=" * 50)
 
-            self.root.after(0, lambda p=processed_count, s=skipped_count, e=error_count, st=status_text_res: [
+            self._ui(lambda p=processed_count, s=skipped_count, e=error_count, st=status_text_res: [
                 self.status_label.config(text=f"処理{st} (新規: {p} 件 / スキップ: {s} 件 / エラー: {e} 件)"),
                 self.show_completion_dialog(target_dir, p, s, e, st)
             ])
 
         finally:
-            self.root.after(0, self.reset_ui)
+            self._ui(self.reset_ui)
 
     def reset_ui(self):
         self.is_running = False

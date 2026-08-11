@@ -83,9 +83,9 @@
 - `docs/R1_DEEP_LOOP_SPEC.md`: **【R1′ 深い輪 機能仕様】** 第一波 R1′-A は JPEG への IPTC Rating／説明書き込みバッチが中心。人の確認と Works 書き出しは DxO 等。メタ一次ソースは JPEG（同期成立時は dop/xmp 不使用）。
 - `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向＋双方向 PASS（2026-08-11）。§0 運用確定。**
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
-- `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5 対応済み、L1–L5 は未着手。
+- `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。
 - `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `XX` 機種接頭辞、Works 月 `YYYYMM` のみ・手動、コピーなし、痕跡ログ配置、記録 UI。
-- `iptc_rating_io.py`: **【短絡メタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
+- `iptc_rating_io.py`: **【短絡メタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`RatingPercent` のみでも復元。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM|XXYYYYMM` / イベント `YYYYMMDD_名前|XXYYYYMMDD_名前`。Works は `YYYYMM` のみ。規則外サブフォルダはイベントにしない。
 - `shortlist_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。
 - `shortlist_antenna.py`: **【M2 アンテナ】** 5軸軽量 Vision＋バッチ内相対熱量。合格 Rating=2＋`[M2]`。★絶対ゲート禁止。
@@ -93,6 +93,7 @@
 - `shortlist_pipeline.py`: **【短絡パイプライン】** M1→M2→M3 オーケストレーション。進捗・中断。講評バッチとは別導線。
 - `delta_log.py`: **【監査ログ】** `{unit}/_lumina/sessions/{id}.json`。`pre_h3` / `post_h3` / `h3_delta`（DxO前後・判定改善）。
 - `desktop_config.py`: **【共有設定】** `~/.photo_ai_config.json` の merge 読書き。`card_theme` / `force_overwrite` は講評／痕跡で共有。
+- `desktop_ui.py`: **【UI安全予約】** ウィンドウ破棄後の `after` を握りつぶす（短絡／講評 GUI 共通）。
 - `shortlist_gui.py`: **【短絡必須GUI】** フォルダ選択・実行・中断・DxO修正後記録・Works 痕跡生成。講評 `app_gui` とは別。
 - `LuminaShortlist.command`: 短絡 GUI のダブルクリック起動。
 - `run_shortlist.py`: 短絡バッチ CLI（補助）。

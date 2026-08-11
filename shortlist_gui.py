@@ -22,6 +22,7 @@ from delta_log import (
     summarize_session,
 )
 from desktop_config import load_config as load_shared_config, save_config_merge
+from desktop_ui import schedule_on_ui
 from library_unit import (
     is_works_month_folder_name,
     list_source_jpegs,
@@ -30,7 +31,13 @@ from library_unit import (
     unit_from_dir,
 )
 from shortlist_pipeline import PipelineConfig, PipelineProgress, ShortlistPipeline
-from trace_from_works import TraceConfig, TraceProgress, WorksTraceRunner, list_works_trace_targets
+from trace_from_works import (
+    TraceConfig,
+    TraceProgress,
+    WorksTraceRunner,
+    list_works_trace_targets,
+    works_empty_targets_hint,
+)
 
 
 class ShortlistApp:
@@ -267,10 +274,16 @@ class ShortlistApp:
                     f"Works フォルダ: {selected}（注意: 名前が YYYYMM ではありません: {name}）"
                 )
             try:
-                n = len(list_works_trace_targets(Path(selected)))
-                self.log(f"Works フォルダ: {selected}（痕跡対象 {n} 枚）")
+                works_path = Path(selected)
+                n = len(list_works_trace_targets(works_path))
+                hint = works_empty_targets_hint(works_path) if n == 0 else ""
+                self.log(f"Works フォルダ: {selected}（痕跡対象 {n} 枚）{hint.strip()}")
             except Exception as e:
                 self.log(f"Works フォルダ: {selected}（列挙注意: {e}）")
+
+    def _ui(self, fn) -> None:
+        """ワーカー→UI。ウィンドウ破棄後は何もしない（L1）。"""
+        schedule_on_ui(self.root, fn)
 
     def log(self, message: str) -> None:
         def _append() -> None:
@@ -282,10 +295,10 @@ class ShortlistApp:
             self.log_text.see(tk.END)
             self.log_text.config(state=tk.DISABLED)
 
-        self.root.after(0, _append)
+        self._ui(_append)
 
     def _set_status(self, text: str) -> None:
-        self.root.after(0, lambda: self.status_label.config(text=text))
+        self._ui(lambda: self.status_label.config(text=text))
 
     def _refresh_session_label(self, unit_dir: Path) -> None:
         """表示用: この unit 配下の最新セッション。"""
@@ -425,13 +438,13 @@ class ShortlistApp:
                 )
                 messagebox.showinfo("完了", msg)
 
-            self.root.after(0, _done)
+            self._ui(_done)
         except Exception as e:
             err_msg = str(e)
             self.log(f"エラー: {err_msg}")
-            self.root.after(0, lambda msg=err_msg: messagebox.showerror("エラー", msg))
+            self._ui(lambda msg=err_msg: messagebox.showerror("エラー", msg))
         finally:
-            self.root.after(0, self.reset_ui)
+            self._ui(self.reset_ui)
 
     def reset_ui(self) -> None:
         self.is_running = False
@@ -470,7 +483,8 @@ class ShortlistApp:
             messagebox.showwarning(
                 "対象なし",
                 "痕跡対象の JPEG がありません。\n"
-                "{stem}_dev.jpg または撮って出し .jpg を置いてください。",
+                "{stem}_dev.jpg または撮って出し .jpg を月フォルダ直下に置いてください。"
+                + works_empty_targets_hint(works),
             )
             return
 
@@ -540,13 +554,13 @@ class ShortlistApp:
                     f"出力先:\n{works}",
                 )
 
-            self.root.after(0, _done)
+            self._ui(_done)
         except Exception as e:
             err_msg = str(e)
             self.log(f"痕跡エラー: {err_msg}")
-            self.root.after(0, lambda msg=err_msg: messagebox.showerror("エラー", msg))
+            self._ui(lambda msg=err_msg: messagebox.showerror("エラー", msg))
         finally:
-            self.root.after(0, self.reset_ui)
+            self._ui(self.reset_ui)
 
     def record_h3_after(self) -> None:
         if self.is_running:
@@ -616,18 +630,31 @@ class ShortlistApp:
                     f"ファイル:\n{session}",
                 )
 
-            self.root.after(0, _done)
+            self._ui(_done)
         except Exception as e:
             err_msg = str(e)
             self.log(f"H3記録エラー: {err_msg}")
-            self.root.after(0, lambda msg=err_msg: messagebox.showerror("エラー", msg))
+            self._ui(lambda msg=err_msg: messagebox.showerror("エラー", msg))
         finally:
-            self.root.after(0, self.reset_ui)
+            self._ui(self.reset_ui)
 
     def open_sessions_folder(self) -> None:
+        """監査フォルダを開く。未作成なら mkdir せず案内のみ（L2）。"""
+        from delta_log import sessions_dir
+
         target = Path(self.dir_var.get().strip())
-        sess = target / "_lumina" / "sessions"
-        sess.mkdir(parents=True, exist_ok=True)
+        if not target.is_dir():
+            messagebox.showerror("エラー", "先に対象フォルダを選んでください。")
+            return
+        sess = sessions_dir(target)
+        if not sess.is_dir():
+            messagebox.showinfo(
+                "監査フォルダなし",
+                "まだ短絡セッションがありません。\n"
+                "先に短絡バッチを実行すると、次の場所に作られます。\n\n"
+                f"{sess}",
+            )
+            return
         try:
             subprocess.run(["open", str(sess.resolve())], check=False)
         except Exception:

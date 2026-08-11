@@ -118,6 +118,8 @@ def list_works_trace_targets(works_dir: Path) -> list[Path]:
     1. ``{stem}_dev.jpg``
     2. なければ撮って出し ``.jpg`` / ``.jpeg``
     3. どちらも無ければその stem は対象外（保留相当＝リストに出さない）
+
+    運用契約どおり **直下のみ**（サブフォルダは再帰しない）。
     """
     root = Path(works_dir)
     if not root.is_dir():
@@ -151,6 +153,39 @@ def list_works_trace_targets(works_dir: Path) -> list[Path]:
         elif slot["sooc"] is not None:
             targets.append(slot["sooc"])
     return targets
+
+
+def count_jpegs_in_immediate_subdirs(works_dir: Path | str) -> int:
+    """直下サブフォルダ内の JPEG 枚数（L4 案内用。再帰は1段のみ）。"""
+    root = Path(works_dir)
+    if not root.is_dir():
+        return 0
+    total = 0
+    for child in root.iterdir():
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        if child.name.startswith("_"):
+            continue
+        for path in child.iterdir():
+            if not path.is_file():
+                continue
+            if path.name.startswith("._"):
+                continue
+            if path.suffix.lower() in JPEG_SUFFIXES:
+                total += 1
+    return total
+
+
+def works_empty_targets_hint(works_dir: Path | str) -> str:
+    """対象0枚のときのユーザー向け追記（サブフォルダに JPEG がある場合）。"""
+    n = count_jpegs_in_immediate_subdirs(works_dir)
+    if n <= 0:
+        return ""
+    return (
+        f"\n\n注意: サブフォルダ内に JPEG が {n} 枚ありますが、"
+        "Works 痕跡の対象は月フォルダ直下のみです。"
+        "イベント用サブフォルダは使わず、直下へ置いてください。"
+    )
 
 
 def _note_path_for(log_mgr: DesktopLogManager, file_name: str) -> Path:

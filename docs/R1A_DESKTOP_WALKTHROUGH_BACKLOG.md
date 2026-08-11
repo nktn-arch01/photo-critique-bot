@@ -72,11 +72,11 @@
 | M4 | H3 記録が UI スレッドで固まる → **ワーカー化**（コピー UI は作らない） | **対応済み 2026-08-11** |
 | M5 | `force_overwrite` / `card_theme` キー共有の文書化（分離しない） | **対応済み 2026-08-11** |
 | P1 | 短絡が `XXYYYYMM` / `XXYYYYMMDD_名前` を受け付ける（`XX`=機種2文字。実運用オリジナル。M1–M5 より上流） | **対応済み 2026-08-11** |
-| L1 | 実行中ウィンドウ破棄後の `after` | |
-| L2 | `open_sessions_folder` の mkdir 副作用 | |
-| L3 | `RatingPercent` のみの JPEG で Rating が `None` | |
-| L4 | Works ルート非再帰（サブフォルダのみだと 0 枚） | |
-| L5 | `CritiquePromptContext._pick` が哨兵「なし」を有値扱い | |
+| L1 | 実行中ウィンドウ破棄後の `after` | **対応済み 2026-08-11**（`desktop_ui.schedule_on_ui`） |
+| L2 | `open_sessions_folder` の mkdir 副作用 | **対応済み 2026-08-11**（未作成なら案内のみ） |
+| L3 | `RatingPercent` のみの JPEG で Rating が `None` | **対応済み 2026-08-11**（`percent_to_rating` フォールバック） |
+| L4 | Works ルート非再帰（サブフォルダのみだと 0 枚） | **対応済み 2026-08-11**（直下維持＋サブフォルダ案内） |
+| L5 | `CritiquePromptContext._pick` が哨兵「なし」を有値扱い | **対応済み 2026-08-11**（`coalesce_prompt_text`） |
 
 ---
 
