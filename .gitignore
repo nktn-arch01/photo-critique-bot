@@ -13,3 +13,7 @@ archive/
 eval/phase_d/images/*
 !eval/phase_d/images/.gitkeep
 eval/phase_d/out/
+
+# IPTC sync verification (keep docs/json; ignore generated JPEGs — already covered by *.jpg)
+eval/iptc_sync/*.json
+!eval/iptc_sync/.gitkeep

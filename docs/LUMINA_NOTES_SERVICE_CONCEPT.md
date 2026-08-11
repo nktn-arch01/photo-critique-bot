@@ -2,7 +2,7 @@
 
 更新日: 2026-08-10  
 位置づけ: **機能仕様の前段**。何を・誰に・どの順番で届けるかの構想のみ。API・DB・画面仕様は書かない。  
-関連: [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`PHASE_A_CHECKLIST.md`](PHASE_A_CHECKLIST.md) / [`PHASE_D_FINDINGS.md`](PHASE_D_FINDINGS.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)
+関連: [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`PHASE_A_CHECKLIST.md`](PHASE_A_CHECKLIST.md) / [`PHASE_D_FINDINGS.md`](PHASE_D_FINDINGS.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) / [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) / [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md)
 
 ---
 
@@ -214,7 +214,7 @@ Photos/
 
 1. 本構想のレビュー（オーナー）。  
 2. **機能仕様**は R1′ → [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)（R1′-A: IPTC Rating／説明バッチ＋DxO 側 H3/W。**メタ一次ソースは JPEG**（同期成立時は dop/xmp 不使用。§0））。  
-3. **IPTC 同期検証**のあと実装へ。R1′-B/C は A の後続。
+3. **IPTC 同期検証**（ファイル側済・DxO UI はオーナー）のあと [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) に沿って実装。R1′-B/C は A の後続。
 
 ---
 

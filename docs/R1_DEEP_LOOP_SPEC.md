@@ -1,11 +1,15 @@
 # R1′ 深い輪 機能仕様書
 
-更新日: 2026-08-10  
+更新日: 2026-08-11  
 親構想: [`LUMINA_NOTES_SERVICE_CONCEPT.md`](LUMINA_NOTES_SERVICE_CONCEPT.md)  
+検証: [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md)  
+実装分解: [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md)  
 位置づけ: **実装前の機能仕様**。API 実装コードは含まない。第一波の詳細は **R1′-A**。  
 短絡アルゴリズムの数値閾値・実装手法は実装段階で詳細化する。本仕様は段の目的・順序・禁止事項・入出力・責任分界を固定する。
 
-**前提（要検証）:** DxO PhotoLab 等の画像処理アプリが、外部から書き換えた JPEG の **Rating / 説明（IPTC 等）** を同期・再表示できること。未検証の間は仮定として扱う。同期が**不合格**の場合は、本節の「`.dop` / `.xmp` 不使用」を見直し、フォールバックを別途決める。
+**前提:** DxO PhotoLab 等が、外部から書き換えた JPEG の **Rating / 説明** を表示できること。  
+- ファイル側ラウンドトリップ: **確認済み**（`scripts/iptc_sync_verify.py` / [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) §A）  
+- DxO UI 表示: **オーナー手動・未実施**（同 §B）。不合格時は `.dop` フォールバックを再検討。
 
 ---
 
@@ -27,13 +31,22 @@
 
 ### 0.1 IPTC 同期検証チェック（A10）
 
-合格条件の例:
+詳細手順・結果表: [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md)
 
-1. 本アプリ（または exiftool）で JPEG に Rating と Description を書く  
-2. DxO PhotoLab で当該フォルダを開き、**一覧またはインスペクタに同じ Rating／説明が見える**（必要なら再読込手順付き）  
-3. DxO 側で Rating を変更 → ファイルを再読すると変更が残る（双方向の確認は努力目標、最低限 1→2 の一方向は必須）  
+合格条件:
 
-不合格時: `.dop` 読みフォールバックの要否を再検討（本方針の例外）。
+1. exiftool／検証スクリプトで JPEG に Rating と Description を書く → **ファイル再読取 PASS（実施済）**  
+2. DxO PhotoLab で同じ Rating／説明が見える → **オーナー手動**  
+3. （努力）DxO 側変更がファイルに残る  
+
+書き込みタグ契約（ファイル側）:
+
+| 目的 | タグ |
+|------|------|
+| Rating | `Rating` / `XMP:Rating` / `RatingPercent` |
+| 説明 | `ImageDescription` / `XMP-dc:Description` / `IPTC:Caption-Abstract` |
+
+不合格時（DxO UI）: `.dop` 読みフォールバックの要否を再検討。
 
 ---
 
@@ -385,8 +398,8 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 
 ## 16. 次の工程
 
-1. **IPTC 同期の検証**（§0.1 / A10）を実施し、合格なら §0 を運用確定、不合格なら `.dop` フォールバックを検討  
-2. 合格後: R1′-A 実装タスク分解（JPEG reader/writer → M1 → M2 → M3 → 監査 → 痕跡。scanner の dop 依存を外す）  
+1. オーナーが [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) §B（DxO UI）を実施し、結果を記入する  
+2. PASS 後: [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の T1 から実装  
 3. R1′-B/C は A が日常で回ったあと  
 
 ---
@@ -398,3 +411,4 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 | 2026-08-10 | 初版〜段階短絡・ペアコピー・`_dev.jpg` |
 | 2026-08-10 | **IPTC Rating／説明駆動に大改訂**。H1/H2 廃止、H3/W は DxO 等。Works コピーは本アプリ非対象。Rating0=除外マーク。確定は 3/4。同期は要検証 |
 | 2026-08-11 | **§0 メタ一次ソースを確定方針として追記**（短絡=JPEG Rating+Description、講評=画+撮影EXIF、同期成立時は dop/xmp 不使用）。検証チェックリスト追加 |
+| 2026-08-11 | ファイル側 IPTC ラウンドトリップ検証済。検証ドキュメント・R1′-A 実装タスク分解を追加 |
