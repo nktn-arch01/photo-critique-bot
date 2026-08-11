@@ -84,6 +84,7 @@
 - `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向＋双方向 PASS（2026-08-11）。§0 運用確定。**
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
 - `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。今後の改修前に参照。
+- `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `OM` 接頭辞、Works 手動、コピーなし、痕跡ログ配置、記録 UI。
 - `iptc_rating_io.py`: **【短絡メタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM` / イベント `YYYYMMDD_名前` の識別・列挙と直下 JPEG 一覧。規則外サブフォルダはイベントにしない。
 - `shortlist_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。

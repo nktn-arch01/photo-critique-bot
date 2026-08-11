@@ -4,7 +4,7 @@
 位置づけ: **今後の検討・改修バックログ**（実装必須ではないが忘れないための記録）。  
 根拠: R1′-A 完了後のコンセプト／UX／潜在バグ・ウォークスルー。
 
-関連: [`LUMINA_NOTES_SERVICE_CONCEPT.md`](LUMINA_NOTES_SERVICE_CONCEPT.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md)
+関連: [`LUMINA_NOTES_SERVICE_CONCEPT.md`](LUMINA_NOTES_SERVICE_CONCEPT.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / **[`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md)（運用方針・確定）**
 
 ---
 
@@ -15,6 +15,7 @@
 | コンセプト（R1′-A 深い輪） | 大きな矛盾なし。ブランド語彙と速い輪欠如は表層・後続スコープの緊張 |
 | UX | 手順は通るが初心者には重い（二アプリ、Rating 意味、DxO hop） |
 | 潜在バグ | 高優先3件は別途修正対象（本ドキュメント外のホットフィックス） |
+| 運用契約 | **2026-08-11 確定** → [`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md) |
 
 ---
 
@@ -61,13 +62,16 @@
 
 ### 中〜低（今後）
 
+運用確定後の読み替えは [`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md) §7 を正とする。
+
 | ID | 内容 |
 |----|------|
-| M1 | Works 非 YYYYMM 名での `DesktopLogManager` 年次ログ配置 |
-| M2 | H3 記録時、Entry 手編集と `last_session_path` の不一致 |
-| M3 | ワーカースレッドから Tk 変数再読取 |
-| M4 | H3 記録が UI スレッドで exiftool 連打し固まりうる |
-| M5 | `force_overwrite` / `card_theme` キー共有の文書化または分離 |
+| M1 | 痕跡の年次ログを **年フォルダ**へ（年番号はフォルダ名先頭4文字）。イベントが月の下にあっても `~/YYYY/` に集約 |
+| M2 | H3 記録時、Entry 手編集と `last_session_path` の不一致 → **target 配下セッションを正** |
+| M3 | ワーカースレッドから Tk 変数再読取 → 開始時スナップショット |
+| M4 | H3 記録が UI スレッドで固まる → **ワーカー化**（コピー UI は作らない） |
+| M5 | `force_overwrite` / `card_theme` キー共有の文書化（分離しない） |
+| P1 | 短絡が `OMYYYYMM` / `OMYYYYMM_名前` を受け付ける（実運用オリジナル。M1–M5 より上流） |
 | L1 | 実行中ウィンドウ破棄後の `after` |
 | L2 | `open_sessions_folder` の mkdir 副作用 |
 | L3 | `RatingPercent` のみの JPEG で Rating が `None` |
