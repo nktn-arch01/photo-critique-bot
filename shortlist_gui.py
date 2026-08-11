@@ -40,43 +40,59 @@ from trace_from_works import (
 )
 
 
-# 主要アクションボタン（macOS でも bg が効くよう clam + flat）
+# 主要アクションボタン（macOS では tk.Button の bg が無視されるため ttk+clam）
 BTN_DARK_BLUE = "#003d82"
 BTN_DARK_BLUE_ACTIVE = "#002655"
 BTN_DARK_BLUE_DISABLED = "#5a6d7d"
 BTN_FG = "#ffffff"
+ACTION_STYLE = "ConsoleAction.TButton"
+ACTION_SMALL_STYLE = "ConsoleActionSmall.TButton"
 
 
-def _configure_console_button_theme(root: tk.Tk) -> None:
-    """macOS Aqua でもカスタム背景色が効くようにする。"""
-    import sys
+def _configure_console_button_theme(root: tk.Tk) -> ttk.Style:
+    """白文字＋ダークブルーの ttk ボタンスタイル（macOS 対応）。"""
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
 
-    if sys.platform == "darwin":
-        try:
-            ttk.Style(root).theme_use("clam")
-        except tk.TclError:
-            pass
-    root.option_add("*Button.highlightThickness", 0)
-    root.option_add("*Button.borderWidth", 0)
+    for style_name, font_size, padding in (
+        (ACTION_STYLE, 12, (16, 10)),
+        (ACTION_SMALL_STYLE, 11, (16, 8)),
+    ):
+        style.configure(
+            style_name,
+            font=("Helvetica", font_size, "bold"),
+            foreground=BTN_FG,
+            background=BTN_DARK_BLUE,
+            padding=padding,
+            borderwidth=0,
+            focusthickness=0,
+            focuscolor=BTN_DARK_BLUE,
+        )
+        style.map(
+            style_name,
+            foreground=[("disabled", "#e8eef5"), ("active", BTN_FG), ("pressed", BTN_FG)],
+            background=[
+                ("disabled", BTN_DARK_BLUE_DISABLED),
+                ("active", BTN_DARK_BLUE_ACTIVE),
+                ("pressed", BTN_DARK_BLUE_ACTIVE),
+            ],
+        )
+    return style
 
 
-def _action_button(parent: tk.Misc, **kwargs: object) -> tk.Button:
-    """白文字＋ダークブルーの主要ボタン。"""
-    bg = str(kwargs.pop("bg", BTN_DARK_BLUE))
-    active_bg = str(kwargs.pop("activebackground", BTN_DARK_BLUE_ACTIVE))
-    return tk.Button(
-        parent,
-        fg=BTN_FG,
-        bg=bg,
-        activebackground=active_bg,
-        activeforeground=BTN_FG,
-        disabledforeground=BTN_FG,
-        highlightthickness=0,
-        borderwidth=0,
-        relief=tk.FLAT,
-        cursor="hand2",
-        **kwargs,
-    )
+def _action_button(parent: tk.Misc, *, small: bool = False, **kwargs: object) -> ttk.Button:
+    """白文字＋ダークブルーの主要ボタン（ttk）。"""
+    for key in ("bg", "activebackground", "fg", "activeforeground", "disabledforeground", "pady", "padx"):
+        kwargs.pop(key, None)
+    style_name = ACTION_SMALL_STYLE if small else ACTION_STYLE
+    return ttk.Button(parent, style=style_name, **kwargs)
+
+
+def _set_action_button_enabled(btn: ttk.Button, enabled: bool) -> None:
+    btn.state(["!disabled"] if enabled else ["disabled"])
 
 
 class ShortlistApp:
@@ -185,19 +201,15 @@ class ShortlistApp:
         self.btn_start = _action_button(
             actions,
             text="スクリーニングを開始",
-            font=("Helvetica", 12, "bold"),
-            pady=8,
             command=self.start_batch_thread,
         )
         self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         self.btn_cancel = _action_button(
             actions,
             text="中止",
-            font=("Helvetica", 12, "bold"),
-            state=tk.DISABLED,
-            pady=8,
             command=self.request_cancel,
         )
+        self.btn_cancel.state(["disabled"])
         self.btn_cancel.pack(side=tk.RIGHT)
 
         h3 = ttk.LabelFrame(main, text=" DxO 修正後の記録（判定改善用） ", padding="8")
@@ -269,8 +281,7 @@ class ShortlistApp:
         self.btn_trace = _action_button(
             works_btns,
             text="Lumina Review を開始",
-            font=("Helvetica", 11, "bold"),
-            pady=6,
+            small=True,
             command=self.start_trace_thread,
         )
         self.btn_trace.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -344,7 +355,7 @@ class ShortlistApp:
             if self.trace_runner:
                 self.trace_runner.request_cancel()
             self.log("中止リクエストを受け付けました…")
-            self.btn_cancel.config(state=tk.DISABLED)
+            self.btn_cancel.state(["disabled"])
 
     def on_closing(self) -> None:
         if self.is_running:
@@ -409,11 +420,11 @@ class ShortlistApp:
 
         self.save_config(str(target))
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
-        self.btn_cancel.config(state=tk.NORMAL)
+        _set_action_button_enabled(self.btn_start, False)
+        _set_action_button_enabled(self.btn_cancel, True)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
+        _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
@@ -479,11 +490,11 @@ class ShortlistApp:
         self.pipeline = None
         self.trace_runner = None
         self.progress.stop()
-        self.btn_start.config(state=tk.NORMAL, bg=BTN_DARK_BLUE)
-        self.btn_cancel.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
+        _set_action_button_enabled(self.btn_start, True)
+        _set_action_button_enabled(self.btn_cancel, False)
         self.btn_browse.config(state=tk.NORMAL)
         self.btn_h3.config(state=tk.NORMAL)
-        self.btn_trace.config(state=tk.NORMAL, bg="#34c759")
+        _set_action_button_enabled(self.btn_trace, True)
         self.btn_browse_works.config(state=tk.NORMAL)
         self.dir_entry.config(state=tk.NORMAL)
         self.works_entry.config(state=tk.NORMAL)
@@ -535,11 +546,11 @@ class ShortlistApp:
         self.config["force_overwrite"] = opts["force"]
         self.save_config(works_dir=str(works))
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
-        self.btn_cancel.config(state=tk.NORMAL)
+        _set_action_button_enabled(self.btn_start, False)
+        _set_action_button_enabled(self.btn_cancel, True)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
+        _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
@@ -618,11 +629,11 @@ class ShortlistApp:
             return
 
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
-        self.btn_cancel.config(state=tk.DISABLED)
+        _set_action_button_enabled(self.btn_start, False)
+        _set_action_button_enabled(self.btn_cancel, False)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
+        _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
