@@ -8,14 +8,14 @@
 短絡アルゴリズムの数値閾値・実装手法は実装段階で詳細化する。本仕様は段の目的・順序・禁止事項・入出力・責任分界を固定する。
 
 **前提:** DxO PhotoLab 等が、外部から書き換えた JPEG の **Rating / 説明** を表示できること。  
-- ファイル側ラウンドトリップ: **確認済み**（`scripts/iptc_sync_verify.py` / [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) §A）  
-- DxO UI 表示: **オーナー手動・未実施**（同 §B）。不合格時は `.dop` フォールバックを再検討。
+- ファイル側ラウンドトリップ: **PASS**（`scripts/iptc_sync_verify.py` / [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) §A）  
+- DxO UI 表示（一方向）: **PASS・運用確定**（同 §B9。プレビュー IPTC でも一致確認）。`.dop` / `.xmp` は使わない。
 
 ---
 
-## 0. メタデータ一次ソース（オーナー確定方針・2026-08-11）
+## 0. メタデータ一次ソース（**運用確定**・2026-08-11）
 
-**JPEG メタと DxO の同期が成立すれば、`.dop` / `.xmp` は使わない。**
+**JPEG メタと DxO の同期は検証 PASS。`.dop` / `.xmp` は使わない。**
 
 | 用途 | 一次ソース | 明示的に使わないもの |
 |------|------------|----------------------|
@@ -46,7 +46,8 @@
 | Rating | `Rating` / `XMP:Rating` / `RatingPercent` |
 | 説明 | `ImageDescription` / `XMP-dc:Description` / `IPTC:Caption-Abstract` |
 
-不合格時（DxO UI）: `.dop` 読みフォールバックの要否を再検討。
+不合格時（DxO UI）: `.dop` 読みフォールバックの要否を再検討。  
+**現状:** 不合格には該当せず（§B9 PASS）。
 
 ---
 
@@ -398,8 +399,8 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 
 ## 16. 次の工程
 
-1. オーナーが [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) §B（DxO UI）を実施し、結果を記入する  
-2. PASS 後: [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の T1 から実装  
+1. ~~オーナー DxO UI 検証~~ → **PASS（2026-08-11）**  
+2. [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T1** から実装  
 3. R1′-B/C は A が日常で回ったあと  
 
 ---
@@ -412,3 +413,4 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 | 2026-08-10 | **IPTC Rating／説明駆動に大改訂**。H1/H2 廃止、H3/W は DxO 等。Works コピーは本アプリ非対象。Rating0=除外マーク。確定は 3/4。同期は要検証 |
 | 2026-08-11 | **§0 メタ一次ソースを確定方針として追記**（短絡=JPEG Rating+Description、講評=画+撮影EXIF、同期成立時は dop/xmp 不使用）。検証チェックリスト追加 |
 | 2026-08-11 | ファイル側 IPTC ラウンドトリップ検証済。検証ドキュメント・R1′-A 実装タスク分解を追加 |
+| 2026-08-11 | **DxO／プレビュー一方向 PASS。§0 運用確定**（dop/xmp 不使用） |

@@ -81,7 +81,7 @@
 - `docs/PHASE_A_CHECKLIST.md`: Lumina Notes 感性対話刷新の Phase A ゲート（v1 / v1.1 / 将来）。
 - `docs/LUMINA_NOTES_SERVICE_CONCEPT.md`: **【将来サービス構想・E1】** 二速度（速い輪＝当日〜習慣の対話／深い輪＝週・イベントの振り返りと章）。最初に届ける類型はミラーレス派。機能仕様・実装詳細は含まない。
 - `docs/R1_DEEP_LOOP_SPEC.md`: **【R1′ 深い輪 機能仕様】** 第一波 R1′-A は JPEG への IPTC Rating／説明書き込みバッチが中心。人の確認と Works 書き出しは DxO 等。メタ一次ソースは JPEG（同期成立時は dop/xmp 不使用）。
-- `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description のファイル側検証結果と DxO UI 手動チェックリスト。
+- `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向 PASS（2026-08-11）。§0 運用確定。**
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。
 - `scripts/iptc_sync_verify.py`: exiftool による Rating/Description ラウンドトリップ検証。
 

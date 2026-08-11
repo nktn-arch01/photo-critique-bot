@@ -33,8 +33,9 @@ T0 検証ゲート（IPTC）
 
 | 項目 | 内容 |
 |------|------|
-| 内容 | [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) の A（済）＋ B（オーナー DxO） |
-| 完了条件 | B 一方向 PASS で §0 運用確定。FAIL ならフォールバック設計を差し込む |
+| 内容 | [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) の A＋B |
+| 状態 | **完了（2026-08-11）** — ファイル側 PASS、DxO／プレビュー一方向 PASS。§0 運用確定 |
+| 完了条件 | B 一方向 PASS で §0 運用確定（達成） |
 | 依存 | なし |
 
 ### T1 — `iptc_rating_io`（単一ソース）
@@ -155,8 +156,8 @@ T0 検証ゲート（IPTC）
 
 ## 次の開発スプリント提案
 
-1. **T0-B** オーナー DxO 確認（ブロッカー）  
-2. **T1 + T2 + T10 の I/O 部分**（API キー不要）  
+1. ~~T0-B オーナー DxO 確認~~ **完了**  
+2. **T1 + T2 + T10 の I/O 部分**（API キー不要）← **次ここ**  
 3. **T3**（機械。Vision 不要なら先に）  
 4. **T4 → T5 → T6 → T7**  
 5. **T8 + T9**

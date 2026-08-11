@@ -36,7 +36,7 @@ JPEG メタと DxO の同期が成立すれば **`.dop` / `.xmp` は使わない
 
 ---
 
-## B. DxO PhotoLab 手順（オーナー手動・詳細）
+## B. DxO PhotoLab UI（手順は下記。結果は B9）
 
 所要: だいたい 10〜15 分。初めてでも上から順に進めてください。
 
@@ -147,29 +147,36 @@ exiftool -G1 -s -Rating -XMP:Rating -ImageDescription -Description -Caption-Abst
 
 4. Rating が DxO で変えた値になっていれば双方向 PASS  
 
-### B8. 結果をこの表に記入する
+### B8. 結果記入用テンプレ（実施前）
 
-| 項目 | 結果（オーナー記入） |
-|------|----------------------|
+| 項目 | 結果 |
+|------|------|
 | DxO バージョン | |
 | OS | |
-| 一方向 Rating（書込→DxO表示） | 未実施 / PASS / FAIL |
-| 一方向 説明（書込→DxO表示） | 未実施 / PASS / FAIL / 部分 |
-| 再読込が必要だったか | はい / いいえ（手順: ） |
+| 一方向 Rating | 未実施 / PASS / FAIL |
+| 一方向 説明 | 未実施 / PASS / FAIL / 部分 |
+| 再読込が必要だったか | |
 | 双方向（努力） | 未実施 / PASS / FAIL |
 | メモ | |
 
-**判定**
+### B9. 実施結果（オーナー・2026-08-11）— **PASS / 運用確定**
 
-- A PASS かつ **Rating の一方向 PASS** → §0 を運用確定（`.dop` / `.xmp` 不使用）  
-- 説明だけ FAIL でも Rating PASS なら、短絡の星運用は前進可。説明タグは実装で調整  
-- Rating も FAIL → `.dop` フォールバック等を再検討  
+| 項目 | 結果 |
+|------|------|
+| OS | macOS（Mac mini） |
+| 一方向 Rating（書込→DxO表示） | **PASS**（レーティング ★★★☆☆ = 3） |
+| 一方向 説明（書込→DxO表示） | **PASS**（IPTC コンテンツ「説明」に `[M2]…` / `[M3]…`） |
+| クロスチェック | macOS プレビュー IPTC でも StarRating=3・説明同一を確認 **PASS** |
+| 双方向（努力） | 未実施（必須ではない） |
+| 証拠 | オーナー提供スクリーンショット（DxO 黒、プレビュー白） |
 
-結果をチャットで共有してもらえれば、仕様の「運用確定／例外」をこちらで更新します。
+**判定: A PASS かつ B 一方向（Rating・説明）PASS → §0 を運用確定。`.dop` / `.xmp` は使わない。**
+
+次工程: [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T1（JPEG Rating/Description I/O）** から実装可能。
 
 ---
 
 ## 現行コードとの差分（実装時）
 
 - 現状: メタ書き込みなし。Rating 等は主に `.dop` から読取  
-- 同期運用確定後: JPEG への書き込み＋JPEG からの読取を正とする
+- **同期運用確定（2026-08-11）:** JPEG への書き込み＋JPEG からの読取を正とする。講評の User Intent / Rating 注入も JPEG 側へ移行
