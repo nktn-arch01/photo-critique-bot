@@ -96,8 +96,8 @@
 - `desktop_config.py`: **【共有設定】** `~/.photo_ai_config.json` の merge 読書き。`card_theme` / `force_overwrite` は講評／Lumina Reviewで共有。
 - `desktop_ui.py`: **【UI安全予約】** ウィンドウ破棄後の `after` を握りつぶす（スクリーニング／講評 GUI 共通）。
 - `prepare_mac_manual_fixtures.py`: Mac 手動確認用の最小フォルダ／JPEG を Desktop に生成。
-- `shortlist_gui.py`: **【スクリーニング必須GUI】** フォルダ選択・実行・中断・DxO修正後記録・Works Lumina Review。講評 `app_gui` とは別。
-- `LuminaShortlist.command`: スクリーニング GUI のダブルクリック起動。
+- `shortlist_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI。講評 `app_gui` とは別。
+- `LuminaShortlist.command`: Lumina Notes Console のダブルクリック起動。
 - `run_shortlist.py`: スクリーニング CLI（補助）。
 - `trace_from_works.py`: **【Works Lumina Review】** `{stem}_dev.jpg` 優先／撮って出しフォールバック。既存 critique コア再利用。コピーなし。
 - `run_trace_works.py`: Works Lumina Review CLI（補助）。
@@ -108,7 +108,7 @@
 - `analyze_folder.py`: 月別フォルダを一括処理するCLIバッチスクリプト。
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。
 - `PhotoAICritique.command`: 講評バッチのダブルクリック起動（Gatekeeper属性の自動解除機能付き）。
-- `LuminaShortlist.command`: **スクリーニング**のダブルクリック起動。
+- `LuminaShortlist.command`: **Lumina Notes Console** のダブルクリック起動。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)

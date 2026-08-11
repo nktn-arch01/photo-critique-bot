@@ -4,7 +4,7 @@
 位置づけ: **オーナーが Mac 実機で GUI／実フォルダを確認する手順**。Cloud Agent では実行不可。  
 関連: [`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md) / [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) / [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md)
 
-**用語（2026-08-11）:** 旧「短絡／短絡バッチ」→ **スクリーニング**、旧「痕跡生成」→ **Lumina Review**。
+**用語（2026-08-11）:** ウィンドウ名 **Lumina Notes Console**（スクリーニング + Lumina Review）。旧「短絡／短絡バッチ」→ **スクリーニング**、旧「痕跡生成」→ **Lumina Review**。
 
 結果の書き方: 各行の **結果** に `PASS` / `FAIL` / `SKIP` と短いメモを書く。完了したら本ファイルか PR コメントに貼る。
 
