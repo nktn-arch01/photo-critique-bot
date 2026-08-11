@@ -1,0 +1,339 @@
+"""短絡バッチの監査ログ（DecisionDelta / BatchSession）.
+
+保存先（仕様 §10）:
+  {library_unit}/_lumina/sessions/{session_id}.json
+
+内容:
+- セッション識別・状態・時刻
+- ファイルごとの段（M1/M2/M3）判定・Rating・説明要点
+- counts_by_rating（バッチ結果＋任意で JPEG 再スキャン）
+
+H3 後の最終 Rating 追記は第一波の努力目標（``append_h3_rescan``）。
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from iptc_rating_io import read_shortlist_meta
+from library_unit import LibraryUnit, list_source_jpegs
+
+if TYPE_CHECKING:
+    from shortlist_pipeline import PipelineResult
+
+LUMINA_DIRNAME = "_lumina"
+SESSIONS_DIRNAME = "sessions"
+
+
+def sessions_dir(unit_path: Path | str) -> Path:
+    return Path(unit_path) / LUMINA_DIRNAME / SESSIONS_DIRNAME
+
+
+def session_path(unit_path: Path | str, session_id: str) -> Path:
+    return sessions_dir(unit_path) / f"{session_id}.json"
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _rel_name(unit_path: Path, file_path: Path) -> str:
+    try:
+        return str(file_path.resolve().relative_to(unit_path.resolve()))
+    except Exception:
+        return file_path.name
+
+
+def build_file_deltas(result: PipelineResult) -> list[dict[str, Any]]:
+    """PipelineResult からファイル単位の DecisionDelta 一覧を作る。"""
+    unit_path = result.unit.path
+    by_key: dict[str, dict[str, Any]] = {}
+
+    def bucket(path: Path) -> dict[str, Any]:
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key not in by_key:
+            by_key[key] = {
+                "file_name": path.name,
+                "relative_path": _rel_name(unit_path, path),
+                "path": str(path),
+                "stages": [],
+                "final_rating": None,
+                "description_blocks": {},
+                "errors": [],
+            }
+        return by_key[key]
+
+    if result.m1:
+        for d in result.m1.decisions:
+            rec = bucket(Path(d.path))
+            rec["stages"].append(
+                {
+                    "stage": "M1",
+                    "rating": d.rating,
+                    "passed": d.passed,
+                    "reason_codes": list(d.reason_codes),
+                    "intent_protected": d.intent_protected,
+                    "error": d.error,
+                }
+            )
+            if d.error:
+                rec["errors"].append(f"M1: {d.error}")
+            else:
+                rec["final_rating"] = d.rating
+
+    if result.m2:
+        for d in result.m2.decisions:
+            rec = bucket(Path(d.path))
+            entry = {
+                "stage": "M2",
+                "rating": d.rating,
+                "passed": d.passed,
+                "skipped": d.skipped,
+                "reason_brief": d.reason_brief,
+                "heat": d.heat,
+                "rank": d.rank,
+                "scores": d.score.scores if d.score else None,
+                "error": d.error,
+            }
+            rec["stages"].append(entry)
+            if d.error:
+                rec["errors"].append(f"M2: {d.error}")
+            elif d.skipped:
+                continue
+            else:
+                rec["final_rating"] = d.rating
+                if d.passed and d.reason_brief:
+                    rec["description_blocks"]["M2"] = d.reason_brief
+
+    if result.m3:
+        for d in result.m3.decisions:
+            rec = bucket(Path(d.path))
+            entry = {
+                "stage": "M3",
+                "rating": d.rating,
+                "passed": d.passed,
+                "skipped": d.skipped,
+                "slot": d.slot,
+                "reason_brief": d.reason_brief,
+                "keep_rank": d.keep_rank,
+                "tags": list(d.feature.tags) if d.feature else None,
+                "error": d.error,
+            }
+            rec["stages"].append(entry)
+            if d.error:
+                rec["errors"].append(f"M3: {d.error}")
+            elif d.skipped:
+                continue
+            else:
+                rec["final_rating"] = d.rating
+                if d.passed and d.reason_brief:
+                    rec["description_blocks"]["M3"] = d.reason_brief
+
+    # 安定順: 相対パス
+    return sorted(by_key.values(), key=lambda r: r["relative_path"])
+
+
+def count_ratings_from_deltas(files: list[dict[str, Any]]) -> dict[str, int]:
+    out = {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "unknown": 0}
+    for rec in files:
+        r = rec.get("final_rating")
+        if r is None:
+            out["unknown"] += 1
+            continue
+        key = str(r)
+        if key in out:
+            out[key] += 1
+        else:
+            out["unknown"] += 1
+    return out
+
+
+def rescan_counts_by_rating(unit: LibraryUnit) -> dict[str, int]:
+    """単位内 JPEG を読み直し、現在の Rating 件数を返す（H3 後確認用）。"""
+    out = {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "none": 0, "other": 0}
+    for path in list_source_jpegs(unit):
+        try:
+            meta = read_shortlist_meta(path)
+        except Exception:
+            out["other"] += 1
+            continue
+        if meta.rating is None:
+            out["none"] += 1
+        elif 0 <= meta.rating <= 4:
+            out[str(meta.rating)] += 1
+        else:
+            out["other"] += 1
+    return out
+
+
+def build_session_document(
+    result: PipelineResult,
+    *,
+    include_jpeg_rescan: bool = True,
+) -> dict[str, Any]:
+    """BatchSession + DecisionDelta を1つの JSON 文書にする。"""
+    files = build_file_deltas(result)
+    doc: dict[str, Any] = {
+        "schema": "lumina.shortlist_session.v1",
+        "id": result.session_id,
+        "library_unit_id": result.unit.unit_id,
+        "library_unit_kind": result.unit.kind,
+        "library_unit_path": str(result.unit.path),
+        "status": result.status,
+        "created_at": result.created_at,
+        "finished_at": result.finished_at,
+        "cancelled": result.cancelled,
+        "error": result.error,
+        "jpeg_count": result.jpeg_count,
+        "write_meta": None,  # 呼び出し側で埋めてもよい
+        "counts_by_rating": count_ratings_from_deltas(files),
+        "counts_by_rating_hint": result.counts_by_rating_hint(),
+        "stage_summary": {
+            "m1": result.m1.to_dict() if result.m1 else None,
+            "m2": {
+                "pass_count": result.m2.pass_count,
+                "skipped": result.m2.skipped,
+                "errors": result.m2.errors,
+                "cancelled": result.m2.cancelled,
+            }
+            if result.m2
+            else None,
+            "m3": {
+                "pass_count": result.m3.pass_count,
+                "top_count": result.m3.top_count,
+                "margin_count": result.m3.margin_count,
+                "skipped": result.m3.skipped,
+                "errors": result.m3.errors,
+                "cancelled": result.m3.cancelled,
+            }
+            if result.m3
+            else None,
+        },
+        "files": files,
+        "h3_rescan": None,
+    }
+    if include_jpeg_rescan and result.unit.path.is_dir():
+        try:
+            doc["jpeg_rescan_counts"] = rescan_counts_by_rating(result.unit)
+            doc["jpeg_rescan_at"] = _now_iso()
+        except Exception as exc:
+            doc["jpeg_rescan_counts"] = None
+            doc["jpeg_rescan_error"] = str(exc)
+    return doc
+
+
+def write_session_document(unit_path: Path | str, document: dict[str, Any]) -> Path:
+    """セッション JSON を書き込む。"""
+    session_id = str(document.get("id") or "unknown")
+    path = session_path(unit_path, session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def save_pipeline_session(
+    result: PipelineResult,
+    *,
+    write_meta: bool | None = None,
+    include_jpeg_rescan: bool = True,
+) -> Path:
+    """PipelineResult から監査ログを保存し、パスを返す。"""
+    doc = build_session_document(result, include_jpeg_rescan=include_jpeg_rescan)
+    if write_meta is not None:
+        doc["write_meta"] = write_meta
+    return write_session_document(result.unit.path, doc)
+
+
+def load_session(path: Path | str) -> dict[str, Any]:
+    p = Path(path)
+    data = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"invalid session JSON: {p}")
+    return data
+
+
+def list_session_paths(unit_path: Path | str) -> list[Path]:
+    root = sessions_dir(unit_path)
+    if not root.is_dir():
+        return []
+    return sorted(root.glob("*.json"), key=lambda p: p.name)
+
+
+def summarize_session(document: dict[str, Any]) -> dict[str, Any]:
+    """再読用の短いサマリ。"""
+    files = document.get("files") or []
+    return {
+        "id": document.get("id"),
+        "library_unit_id": document.get("library_unit_id"),
+        "status": document.get("status"),
+        "created_at": document.get("created_at"),
+        "finished_at": document.get("finished_at"),
+        "jpeg_count": document.get("jpeg_count"),
+        "file_delta_count": len(files),
+        "counts_by_rating": document.get("counts_by_rating"),
+        "jpeg_rescan_counts": document.get("jpeg_rescan_counts"),
+        "stage_summary": document.get("stage_summary"),
+        "h3_rescan": document.get("h3_rescan"),
+    }
+
+
+def append_h3_rescan(session_file: Path | str, unit: LibraryUnit | None = None) -> dict[str, Any]:
+    """努力目標: H3 後に JPEG を再スキャンしてセッションへ追記。"""
+    path = Path(session_file)
+    doc = load_session(path)
+    if unit is None:
+        unit_path = Path(doc["library_unit_path"])
+        from library_unit import unit_from_dir
+
+        unit = unit_from_dir(unit_path)
+        if unit is None:
+            raise ValueError(f"library unit を解釈できません: {unit_path}")
+    counts = rescan_counts_by_rating(unit)
+    doc["h3_rescan"] = {
+        "at": _now_iso(),
+        "counts_by_rating": counts,
+    }
+    # ファイル単位の現在 Rating も付記（監査強化）
+    file_ratings = []
+    for jpeg in list_source_jpegs(unit):
+        try:
+            meta = read_shortlist_meta(jpeg)
+            file_ratings.append(
+                {
+                    "file_name": jpeg.name,
+                    "rating": meta.rating,
+                    "description_blocks": {
+                        k: v for k, v in (
+                            ("M2", meta.stage_reason("M2")),
+                            ("M3", meta.stage_reason("M3")),
+                        )
+                        if v
+                    },
+                }
+            )
+        except Exception as exc:
+            file_ratings.append({"file_name": jpeg.name, "error": str(exc)})
+    doc["h3_rescan"]["files"] = file_ratings
+    write_session_document(unit.path, doc)
+    return doc
+
+
+@dataclass(frozen=True)
+class SessionSummary:
+    path: Path
+    summary: dict[str, Any]
+
+
+def load_unit_session_summaries(unit_path: Path | str) -> list[SessionSummary]:
+    out: list[SessionSummary] = []
+    for path in list_session_paths(unit_path):
+        try:
+            doc = load_session(path)
+            out.append(SessionSummary(path=path, summary=summarize_session(doc)))
+        except Exception:
+            continue
+    return out

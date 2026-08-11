@@ -182,7 +182,7 @@ H3 想定どおり、DxO 上で Rating 修正とコメント（説明）書き�
 
 **判定: A PASS かつ B 一方向 PASS かつ双方向 PASS → §0 を運用確定。`.dop` / `.xmp` は使わない。**
 
-実装: T1–T5 モジュール＋[`shortlist_pipeline.py`](../shortlist_pipeline.py) / [`run_shortlist.py`](../run_shortlist.py)（T6）。次は [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T7** 以降。
+実装: T1–T6 ＋[`delta_log.py`](../delta_log.py)（T7 監査）。次は [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T8** 以降。
 
 ---
 

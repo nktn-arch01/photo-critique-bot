@@ -4,7 +4,7 @@
 - 進捗コールバック・中断フラグ
 - 1枚失敗で全体停止しない（各段の方針を継承）
 - 既存講評バッチ（app_gui / analyze_folder）とは別導線
-- 監査 JSON の永続化は T7（本モジュールは結果オブジェクトまで）
+- 監査 JSON は ``delta_log`` により ``_lumina/sessions/`` へ保存（T7）
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from delta_log import save_pipeline_session
 from library_unit import LibraryUnit, list_source_jpegs, resolve_unit
 from shortlist_antenna import (
     AntennaBatchResult,
@@ -56,6 +57,8 @@ class PipelineConfig:
     run_m1: bool = True
     run_m2: bool = True
     run_m3: bool = True
+    persist_session: bool = True
+    session_jpeg_rescan: bool = True
     mechanical: MechanicalConfig = field(default_factory=MechanicalConfig)
     antenna: AntennaConfig = field(default_factory=AntennaConfig)
     diversity: DiversityConfig = field(default_factory=DiversityConfig)
@@ -77,9 +80,10 @@ class PipelineResult:
     m3: DiversityBatchResult | None = None
     error: str | None = None
     cancelled: bool = False
+    session_path: Path | None = None
 
     def counts_by_rating_hint(self) -> dict[str, int]:
-        """各段結果からの粗い件数（最終 Rating 再スキャンは T7 で強化）。"""
+        """各段結果からの粗い件数。正確な件数は session の counts / jpeg_rescan を参照。"""
         out = {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0}
         if self.m1:
             for d in self.m1.decisions:
@@ -119,6 +123,7 @@ class PipelineResult:
             "jpeg_count": self.jpeg_count,
             "cancelled": self.cancelled,
             "error": self.error,
+            "session_path": str(self.session_path) if self.session_path else None,
             "counts_by_rating_hint": self.counts_by_rating_hint(),
             "m1": self.m1.to_dict() if self.m1 else None,
             "m2": self.m2.to_dict() if self.m2 else None,
@@ -154,6 +159,23 @@ class ShortlistPipeline:
                 PipelineProgress(stage=stage, message=message, current=current, total=total)
             )
 
+    def _persist(self, result: PipelineResult) -> PipelineResult:
+        cfg = self.config
+        if not cfg.persist_session:
+            return result
+        try:
+            path = save_pipeline_session(
+                result,
+                write_meta=cfg.write,
+                include_jpeg_rescan=cfg.session_jpeg_rescan,
+            )
+            result.session_path = path
+            self._emit("session", f"監査ログを保存: {path}")
+        except Exception as exc:
+            # 監査失敗で短絡結果自体は落とさない
+            self._emit("session", f"監査ログ保存に失敗: {exc}")
+        return result
+
     def run_on_unit(self, unit: LibraryUnit) -> PipelineResult:
         cfg = self.config
         created = datetime.now(timezone.utc).isoformat()
@@ -172,7 +194,7 @@ class ShortlistPipeline:
             result.status = "completed"
             result.finished_at = datetime.now(timezone.utc).isoformat()
             self._emit("done", "対象 JPEG がありません")
-            return result
+            return self._persist(result)
 
         try:
             if cfg.run_m1:
@@ -180,7 +202,7 @@ class ShortlistPipeline:
                     result.status = "cancelled"
                     result.cancelled = True
                     result.finished_at = datetime.now(timezone.utc).isoformat()
-                    return result
+                    return self._persist(result)
                 self._emit("m1", "M1 機械選別を開始", 0, len(paths))
                 result.m1 = run_mechanical_on_paths(
                     paths,
@@ -198,14 +220,14 @@ class ShortlistPipeline:
                     result.status = "cancelled"
                     result.cancelled = True
                     result.finished_at = datetime.now(timezone.utc).isoformat()
-                    return result
+                    return self._persist(result)
 
             if cfg.run_m2:
                 if self.is_cancel_requested():
                     result.status = "cancelled"
                     result.cancelled = True
                     result.finished_at = datetime.now(timezone.utc).isoformat()
-                    return result
+                    return self._persist(result)
                 self._emit("m2", "M2 アンテナを開始", 0, len(paths))
                 result.m2 = run_antenna_on_paths(
                     paths,
@@ -224,14 +246,14 @@ class ShortlistPipeline:
                     result.status = "cancelled"
                     result.cancelled = True
                     result.finished_at = datetime.now(timezone.utc).isoformat()
-                    return result
+                    return self._persist(result)
 
             if cfg.run_m3:
                 if self.is_cancel_requested():
                     result.status = "cancelled"
                     result.cancelled = True
                     result.finished_at = datetime.now(timezone.utc).isoformat()
-                    return result
+                    return self._persist(result)
                 self._emit("m3", "M3 多様性を開始", 0, len(paths))
                 result.m3 = run_diversity_on_paths(
                     paths,
@@ -254,18 +276,18 @@ class ShortlistPipeline:
                     result.status = "cancelled"
                     result.cancelled = True
                     result.finished_at = datetime.now(timezone.utc).isoformat()
-                    return result
+                    return self._persist(result)
 
             result.status = "completed"
             result.finished_at = datetime.now(timezone.utc).isoformat()
             self._emit("done", "短絡パイプライン完了")
-            return result
+            return self._persist(result)
         except Exception as exc:
             result.status = "failed"
             result.error = str(exc)
             result.finished_at = datetime.now(timezone.utc).isoformat()
             self._emit("error", f"パイプライン失敗: {exc}")
-            return result
+            return self._persist(result)
 
     def run_on_dir(self, path: Path | str) -> PipelineResult:
         unit = resolve_unit(path)

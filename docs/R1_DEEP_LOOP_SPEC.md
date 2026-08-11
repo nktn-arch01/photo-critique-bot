@@ -336,6 +336,14 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 各ファイルについて、バッチが書いた Rating、説明ブロック、段、時刻を JSON 等に残す。  
 人の H3 後の最終 Rating は、再スキャンで読める場合は追記可能（第一波は努力目標）。
 
+実装: [`delta_log.py`](../delta_log.py)
+
+- 保存: `{unit}/_lumina/sessions/{session_id}.json`
+- パイプライン終了時に自動保存（`run_shortlist.py`、`--no-session` で無効化可）
+- `summarize_session` / `load_session` で再読
+- H3 後: `append_h3_rescan(session_json)` で現在 Rating を追記
+
+
 ### 8.3 DialogueTrace
 
 | フィールド | 説明 |
@@ -476,3 +484,4 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 | 2026-08-11 | T4 `shortlist_antenna`（M2: 軽量 Vision・相対熱量・Rating 2＋`[M2]`）実装 |
 | 2026-08-11 | T5 `shortlist_diversity`（M3: 多様性貪欲選抜・Rating 3/4＋`[M3]`）実装 |
 | 2026-08-11 | T6 `shortlist_pipeline` + `run_shortlist.py`（M1→M2→M3・進捗・中断）実装 |
+| 2026-08-11 | T7 `delta_log`（`_lumina/sessions` 監査・再読・H3再スキャン）実装 |

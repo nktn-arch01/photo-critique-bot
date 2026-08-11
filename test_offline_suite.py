@@ -999,6 +999,9 @@ def test_shortlist_pipeline_m1_m2_m3_and_cancel():
     assert result.m2.pass_count >= 1
     assert result.m3.pass_count >= 1
     assert "m1" in events and "m2" in events and "m3" in events and "done" in events
+    assert result.session_path is not None
+    assert result.session_path.is_file()
+    assert "_lumina/sessions" in str(result.session_path).replace("\\", "/")
     # 最終で 3 or 4 が付いている
     finals = [read_shortlist_meta(p).rating for p in paths]
     assert any(r in (3, 4) for r in finals)
@@ -1030,6 +1033,85 @@ def test_shortlist_pipeline_m1_m2_m3_and_cancel():
     shutil.rmtree(root, ignore_errors=True)
 
 
+def test_delta_log_session_reload_and_summary():
+    """T7: セッション保存・再読・サマリ件数・H3再スキャン追記。"""
+    import shutil
+
+    from delta_log import (
+        append_h3_rescan,
+        list_session_paths,
+        load_session,
+        load_unit_session_summaries,
+        summarize_session,
+    )
+    from iptc_rating_io import ExifToolNotFoundError, require_exiftool, write_rating
+    from shortlist_antenna import AntennaConfig, AntennaScore
+    from shortlist_diversity import DiversityConfig, DiversityFeature
+    from shortlist_pipeline import PipelineConfig, ShortlistPipeline
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_delta_log_session: exiftool missing")
+        return
+
+    root = Path(tempfile.mkdtemp(prefix="delta_t7_"))
+    month = root / "202608"
+    month.mkdir()
+    paths = []
+    for i in range(4):
+        p = month / f"s{i}.jpg"
+        _make_grid_image((120, 90)).save(p, "JPEG", quality=95)
+        paths.append(p)
+
+    def m2_fn(path: Path) -> AntennaScore:
+        n = int(path.stem.replace("s", ""))
+        v = 2 + n
+        return AntennaScore(
+            {"framing": v, "sensitivity": v, "story": 2, "technical": 2, "sense": 3},
+            f"a{n}",
+        )
+
+    def m3_fn(path: Path) -> DiversityFeature:
+        n = int(path.stem.replace("s", ""))
+        return DiversityFeature(n, 2, ("海",) if n % 2 == 0 else ("都市",), 3.5 + n * 0.2, 3.0, f"d{n}")
+
+    result = ShortlistPipeline(
+        PipelineConfig(
+            write=True,
+            m2_score_fn=m2_fn,
+            m3_feature_fn=m3_fn,
+            antenna=AntennaConfig(pass_ratio=0.5),
+            diversity=DiversityConfig(keep_ratio=0.5, top_ratio=0.5),
+        )
+    ).run_on_dir(month)
+
+    assert result.session_path and result.session_path.is_file()
+    doc = load_session(result.session_path)
+    assert doc["schema"] == "lumina.shortlist_session.v1"
+    assert doc["id"] == result.session_id
+    assert doc["library_unit_id"] == "202608"
+    assert isinstance(doc["files"], list) and len(doc["files"]) >= 1
+    assert "counts_by_rating" in doc
+    summary = summarize_session(doc)
+    assert summary["file_delta_count"] == len(doc["files"])
+    assert summary["counts_by_rating"] is not None
+
+    listed = list_session_paths(month)
+    assert result.session_path in listed
+    summaries = load_unit_session_summaries(month)
+    assert any(s.summary["id"] == result.session_id for s in summaries)
+
+    # H3 想定: 1枚 Rating を人手変更してから再スキャン追記
+    write_rating(paths[0], 4)
+    updated = append_h3_rescan(result.session_path)
+    assert updated["h3_rescan"]["counts_by_rating"]["4"] >= 1
+    again = load_session(result.session_path)
+    assert again["h3_rescan"] is not None
+
+    shutil.rmtree(root, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -1057,6 +1139,7 @@ def run_all():
     test_antenna_m2_relative_heat_no_star_gate()
     test_diversity_m3_margin_top_and_bias_control()
     test_shortlist_pipeline_m1_m2_m3_and_cancel()
+    test_delta_log_session_reload_and_summary()
     print("test_offline_suite: OK")
 
 

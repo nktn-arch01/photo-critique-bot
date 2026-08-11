@@ -104,9 +104,10 @@ T0 検証ゲート（IPTC）
 
 | 項目 | 内容 |
 |------|------|
-| 仮モジュール | `delta_log.py` |
+| モジュール | [`delta_log.py`](../delta_log.py) |
 | 内容 | `_lumina/sessions/{id}.json` にファイルごとの Rating／説明／段／時刻 |
-| 完了条件 | セッション再読・サマリ件数 |
+| 状態 | **完了（2026-08-11）** |
+| 完了条件 | セッション再読・サマリ件数（達成。H3 再スキャン追記 API あり） |
 | 依存 | T6 |
 
 ### T8 — 痕跡生成（Works）
@@ -171,5 +172,7 @@ T0 検証ゲート（IPTC）
 5. ~~T4 `shortlist_antenna`（M2）~~ **完了**  
 6. ~~T5 `shortlist_diversity`（M3）~~ **完了**  
 7. ~~T6 `shortlist_pipeline` + `run_shortlist.py`~~ **完了**  
-8. **T7 監査ログ** ← **次ここ**  
-9. **T8 + T9**
+8. ~~T7 `delta_log`~~ **完了**  
+9. **T8 痕跡生成（Works）** ← **次ここ**  
+10. **T9** scanner/講評の JPEG 正への移行  
+11. **T10** オフラインテスト総仕上げ（必要なら）

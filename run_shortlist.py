@@ -5,8 +5,9 @@ Usage:
   python3 run_shortlist.py --dir /path/to/202608
   python3 run_shortlist.py --dir /path/to/20260810_京都旅行 --dry-run
   python3 run_shortlist.py --dir /path/to/202608 --stages m1
-  python3 run_shortlist.py --dir /path/to/202608 --stages m1,m2,m3 --out-json /tmp/session.json
+  python3 run_shortlist.py --dir /path/to/202608 --stages m1,m2,m3 --out-json /tmp/copy.json
 
+監査ログは自動で {dir}/_lumina/sessions/{id}.json に保存される。
 Ctrl+C で中断（可能な段境界・枚単位で停止）。
 """
 
@@ -46,7 +47,12 @@ def main() -> int:
     parser.add_argument(
         "--out-json",
         type=Path,
-        help="結果 JSON の保存先（任意。本格監査は T7）",
+        help="結果 JSON の追加コピー先（本体は unit/_lumina/sessions/ に自動保存）",
+    )
+    parser.add_argument(
+        "--no-session",
+        action="store_true",
+        help="_lumina/sessions への監査ログ保存を行わない",
     )
     args = parser.parse_args()
 
@@ -73,6 +79,7 @@ def main() -> int:
             run_m1=run_m1,
             run_m2=run_m2,
             run_m3=run_m3,
+            persist_session=not args.no_session,
         ),
         on_progress=on_progress,
     )
@@ -99,6 +106,8 @@ def main() -> int:
     print("------------------------------------------")
     print(f" status: {result.status}")
     print(f" session: {result.session_id}")
+    if result.session_path:
+        print(f" session_path: {result.session_path}")
     print(f" jpeg_count: {result.jpeg_count}")
     print(f" counts_hint: {result.counts_by_rating_hint()}")
     if result.error:
