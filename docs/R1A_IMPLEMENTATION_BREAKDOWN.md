@@ -74,9 +74,10 @@ T0 検証ゲート（IPTC）
 
 | 項目 | 内容 |
 |------|------|
-| 仮モジュール | `shortlist_antenna.py` |
+| モジュール | [`shortlist_antenna.py`](../shortlist_antenna.py) |
 | 内容 | 5軸相対熱量。合格に Rating=2 と説明 `[M2]`。★絶対ゲート禁止 |
-| 完了条件 | 軽量 Vision。フル Phase2 を走らせない |
+| 状態 | **完了（2026-08-11）** |
+| 完了条件 | 軽量 Vision。フル Phase2 を走らせない（達成。相対選抜＋オフラインテスト） |
 | 依存 | T1, T3（入力は Rating≥1） |
 
 ### T5 — M3 多様性
@@ -165,6 +166,7 @@ T0 検証ゲート（IPTC）
 2. ~~T1 `iptc_rating_io`~~ **完了**  
 3. ~~T2 `library_unit`~~ **完了**  
 4. ~~T3 `shortlist_mechanical`（M1）~~ **完了**  
-5. **T4 M2 アンテナ**（軽量 Vision）← **次ここ**  
-6. **T5 → T6 → T7**  
-7. **T8 + T9**
+5. ~~T4 `shortlist_antenna`（M2）~~ **完了**  
+6. **T5 M3 多様性** ← **次ここ**  
+7. **T6 → T7**  
+8. **T8 + T9**

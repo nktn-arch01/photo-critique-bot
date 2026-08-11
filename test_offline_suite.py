@@ -677,6 +677,136 @@ def test_mechanical_m1_blur_and_intent_protect():
     shutil.rmtree(td, ignore_errors=True)
 
 
+def test_antenna_m2_relative_heat_no_star_gate():
+    """T4: 相対熱量で選抜。★5必須なし。Rating0はスキップ。[M2] 書き込み。"""
+    import shutil
+
+    from iptc_rating_io import (
+        ExifToolNotFoundError,
+        read_shortlist_meta,
+        require_exiftool,
+        write_rating,
+    )
+    from shortlist_antenna import (
+        AntennaConfig,
+        AntennaScore,
+        compute_heat,
+        parse_antenna_response,
+        run_antenna_on_paths,
+        select_pass_count,
+    )
+
+    # パーサ
+    parsed = parse_antenna_response(
+        '{"framing":4,"sensitivity":3,"story":2,"technical":3,"sense":4,"reason":"輪郭の熱"}'
+    )
+    assert parsed.scores["framing"] == 4
+    assert "輪郭" in parsed.reason
+
+    # ★5が無くても熱量で上位になりうる（絶対ゲート禁止）
+    mid = AntennaScore(
+        scores={"framing": 3, "sensitivity": 3, "story": 3, "technical": 3, "sense": 3},
+        reason="均質",
+    )
+    spiky = AntennaScore(
+        scores={"framing": 5, "sensitivity": 1, "story": 1, "technical": 1, "sense": 1},
+        reason="一点だけ",
+    )
+    cfg = AntennaConfig()
+    # resonance がある mid が spiky に対抗しうる（どちらが上でも★5必須ではないこと自体が要点）
+    assert select_pass_count(10, AntennaConfig(pass_ratio=0.28)) == 3
+    assert select_pass_count(1, AntennaConfig(pass_ratio=0.28)) == 1
+    _ = compute_heat(mid, cfg)
+    _ = compute_heat(spiky, cfg)
+
+    td = Path(tempfile.mkdtemp(prefix="m2_t4_"))
+    paths = []
+    for i in range(5):
+        p = td / f"img_{i}.jpg"
+        Image.new("RGB", (64, 48), (20 + i * 20, 40, 60)).save(p, "JPEG", quality=90)
+        paths.append(p)
+
+    # 擬似スコア: 熱量順が img_4 > ... で上位2件合格（pass_ratio=0.4 → 2）
+    fake_scores = {
+        paths[0]: AntennaScore(
+            {"framing": 2, "sensitivity": 2, "story": 2, "technical": 2, "sense": 2}, "低"
+        ),
+        paths[1]: AntennaScore(
+            {"framing": 3, "sensitivity": 2, "story": 2, "technical": 2, "sense": 2}, "やや低"
+        ),
+        paths[2]: AntennaScore(
+            {"framing": 3, "sensitivity": 3, "story": 3, "technical": 3, "sense": 3}, "中"
+        ),
+        paths[3]: AntennaScore(
+            {"framing": 4, "sensitivity": 3, "story": 3, "technical": 3, "sense": 3}, "高"
+        ),
+        paths[4]: AntennaScore(
+            {"framing": 4, "sensitivity": 4, "story": 3, "technical": 3, "sense": 4}, "最高"
+        ),
+    }
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip m2 write check: exiftool missing")
+        shutil.rmtree(td, ignore_errors=True)
+        return
+
+    for p in paths:
+        write_rating(p, 1)
+    # Rating 0 はスキップされる
+    zero = td / "zero.jpg"
+    Image.new("RGB", (64, 48), (10, 10, 10)).save(zero, "JPEG", quality=90)
+    write_rating(zero, 0)
+
+    def score_fn(path: Path) -> AntennaScore:
+        return fake_scores[path]
+
+    batch = run_antenna_on_paths(
+        list(paths) + [zero],
+        AntennaConfig(pass_ratio=0.4, min_pass=0),
+        write=True,
+        score_fn=score_fn,
+    )
+    assert batch.skipped == 1
+    assert batch.pass_count == 2
+    assert batch.written == 2
+
+    meta4 = read_shortlist_meta(paths[4])
+    meta3 = read_shortlist_meta(paths[3])
+    meta0 = read_shortlist_meta(paths[0])
+    assert meta4.rating == 2 and meta4.stage_reason("M2")
+    assert meta3.rating == 2
+    assert meta0.rating == 1  # 非合格は1のまま
+    assert read_shortlist_meta(zero).rating == 0
+
+    # ★5なしのバッチでも相対上位が合格
+    flat = {
+        paths[i]: AntennaScore(
+            {"framing": 3, "sensitivity": 3, "story": 2, "technical": 3, "sense": 2},
+            f"flat-{i}",
+        )
+        for i in range(5)
+    }
+    # わずかに差
+    flat[paths[2]] = AntennaScore(
+        {"framing": 3, "sensitivity": 3, "story": 3, "technical": 3, "sense": 3}, "flat-best"
+    )
+    for p in paths:
+        write_rating(p, 1)
+    batch2 = run_antenna_on_paths(
+        paths,
+        AntennaConfig(pass_ratio=0.2),  # 1枚
+        write=True,
+        score_fn=lambda p: flat[p],
+    )
+    assert batch2.pass_count == 1
+    assert read_shortlist_meta(paths[2]).rating == 2
+    assert "flat-best" in (read_shortlist_meta(paths[2]).stage_reason("M2") or "")
+
+    shutil.rmtree(td, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -701,6 +831,7 @@ def run_all():
     test_library_unit_naming_rules()
     test_library_unit_discover_and_list_jpegs()
     test_mechanical_m1_blur_and_intent_protect()
+    test_antenna_m2_relative_heat_no_star_gate()
     print("test_offline_suite: OK")
 
 
