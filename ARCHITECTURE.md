@@ -108,7 +108,7 @@
 #### ② デスクトップ版コンポーネント (Desktop Environment)
 - `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ・カード背景テーマの自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、実行前のライト/ダーク選択、独立例外処理、リアルタイムログ表示、中断制御対応。
 - `analyze_folder.py`: 月別フォルダを一括処理するCLIバッチスクリプト。
-- `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。
+- `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。Wave 2 以降の公式名は `{ym}Luminaノート/カード/ログ`（旧「写真分析*」「評価カード」は読込フォールバック）。
 - `PhotoAICritique.command`: 講評バッチのダブルクリック起動（Gatekeeper属性の自動解除機能付き）。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
 

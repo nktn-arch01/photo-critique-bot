@@ -4,21 +4,44 @@ from pathlib import Path
 from critique_parser import parse_critique_text, is_valid_phase2_content
 
 
+# Wave 2 公式出力名（書き込み先）
+_NOTES_SUFFIX = "Luminaノート"
+_CARDS_SUFFIX = "Luminaカード"
+_MONTHLY_LOG_SUFFIX = "Luminaログ.txt"
+_ANNUAL_LOG_TEMPLATE = "Luminaログ_{year}.txt"
+
+# 移行期間の読込フォールバック（旧 Photo AI 時代の名前）
+_LEGACY_NOTES_SUFFIX = "写真分析ノート"
+_LEGACY_CARDS_SUFFIX = "評価カード"
+_LEGACY_MONTHLY_LOG_SUFFIX = "写真分析ログ.txt"
+_LEGACY_ANNUAL_LOG_TEMPLATE = "写真分析ログ_{year}.txt"
+
+
 class DesktopLogManager:
     """
     出力順序の完全保証：
     ファイル名 ➔ ■TITLE ➔ ■SUMMARY ➔ ■SCORES ➔ 講評要約(CRITIQUE_SUMMARY) ➔ 講評本文（【1】〜【7】） ➔ === メタデータ ===
+
+    出力フォルダ／ログは Wave 2 以降の公式名（Lumina*）へ書く。
+    処理済み判定・既存パス解決は旧名（写真分析*／評価カード）も探索する。
     """
     def __init__(self, target_dir: Path):
         self.target_dir = target_dir
         self.ym_str = target_dir.name
         self.year_str = self.ym_str[:4] if len(self.ym_str) >= 4 else "2026"
 
-        self.notes_dir = target_dir / f"{self.ym_str}写真分析ノート"
-        self.cards_dir = target_dir / f"{self.ym_str}評価カード"
+        self.notes_dir = target_dir / f"{self.ym_str}{_NOTES_SUFFIX}"
+        self.cards_dir = target_dir / f"{self.ym_str}{_CARDS_SUFFIX}"
+        self.legacy_notes_dir = target_dir / f"{self.ym_str}{_LEGACY_NOTES_SUFFIX}"
+        self.legacy_cards_dir = target_dir / f"{self.ym_str}{_LEGACY_CARDS_SUFFIX}"
+
         self.status_file_path = target_dir / f"{self.ym_str}処理ステータス.txt"
-        self.monthly_log_path = target_dir / f"{self.ym_str}写真分析ログ.txt"
-        self.annual_log_path = target_dir.parent / f"写真分析ログ_{self.year_str}.txt"
+        self.monthly_log_path = target_dir / f"{self.ym_str}{_MONTHLY_LOG_SUFFIX}"
+        self.annual_log_path = target_dir.parent / _ANNUAL_LOG_TEMPLATE.format(year=self.year_str)
+        self.legacy_monthly_log_path = target_dir / f"{self.ym_str}{_LEGACY_MONTHLY_LOG_SUFFIX}"
+        self.legacy_annual_log_path = target_dir.parent / _LEGACY_ANNUAL_LOG_TEMPLATE.format(
+            year=self.year_str
+        )
 
         self.notes_dir.mkdir(parents=True, exist_ok=True)
         self.cards_dir.mkdir(parents=True, exist_ok=True)
@@ -37,13 +60,31 @@ class DesktopLogManager:
                 return True
         return False
 
+    def resolve_note_path(self, file_name: str) -> Path | None:
+        """既存ノートを新名→旧名の順で探す。無ければ None。"""
+        stem = Path(file_name).stem
+        for directory in (self.notes_dir, self.legacy_notes_dir):
+            candidate = directory / f"{stem}.md"
+            if candidate.is_file():
+                return candidate
+        return None
+
+    def resolve_card_path(self, file_name: str) -> Path | None:
+        """既存カード画像を新名→旧名の順で探す。無ければ None。"""
+        stem = Path(file_name).stem
+        for directory in (self.cards_dir, self.legacy_cards_dir):
+            candidate = directory / f"{stem}_card.png"
+            if candidate.is_file():
+                return candidate
+        return None
+
     def is_processed(self, file_name: str) -> bool:
         if self._is_in_status_file(file_name):
             return True
-        stem = Path(file_name).stem
-        return (self.notes_dir / f"{stem}.md").exists()
+        return self.resolve_note_path(file_name) is not None
 
     def get_card_output_path(self, file_name: str) -> Path:
+        """新規書き込み先（常に公式名のカードフォルダ）。"""
         stem = Path(file_name).stem
         return self.cards_dir / f"{stem}_card.png"
 
@@ -109,16 +150,16 @@ class DesktopLogManager:
 
         formatted_content = self._format_structured_content(file_name, metadata_block, critique_text)
 
-        # 1. 個別 Markdown ノート
+        # 1. 個別 Markdown ノート（公式名フォルダ）
         note_file.write_text(formatted_content, encoding="utf-8")
 
         # 2. ログエントリ
         log_entry = f"{formatted_content}\n\n"
 
-        # 3. 月間テキストログ
+        # 3. 月間テキストログ（公式名）
         self._update_or_append_log(self.monthly_log_path, file_name, log_entry)
 
-        # 4. 年間統合テキストログ
+        # 4. 年間統合テキストログ（公式名）
         self._update_or_append_log(self.annual_log_path, file_name, log_entry)
 
         # 5. ステータスファイル更新 (日時付き)

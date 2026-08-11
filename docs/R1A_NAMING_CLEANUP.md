@@ -69,8 +69,8 @@
 | 現状 | 改修案 |
 |------|--------|
 | `R1_DEEP_LOOP_SPEC` の「対話Lumina Review」「書き込みなし→実装で追加」 | 用語修正＋§0 を現状に合わせて更新 |
-| バックログ「評価カード」言及 | 出力改名とセットで更新 |
-| `app_gui` ログ「評価カード画像生成中」 | 「カード画像生成中」等 |
+| バックログ「評価カード」言及 | ✅ 出力改名とセットで更新（Wave 2） |
+| `app_gui` ログ「評価カード画像生成中」 | ✅ Wave 1 で「カード画像」へ |
 | `critique_lens` display_name は既に Lumina Notes | 維持 |
 
 ### F. 二製品の並立（設計判断）
@@ -91,11 +91,11 @@
 3. ✅ docs（SPEC §0・§7.2、ARCHITECTURE）の用語カス掃除  
 4. ✅ `app_gui` のユーザー向け「評価カード」文言を弱める（フォルダ名は Wave 2）
 
-### Wave 2 — 出力フォルダ名（データ互換が要る）
+### Wave 2 — 出力フォルダ名（データ互換が要る）（**完了 2026-08-11**）
 
-1. `DesktopLogManager` で新名に出力  
-2. 処理済み判定・カードパス解決は **旧名も探索**  
-3. 移行メモを OPS_POLICY に追記  
+1. ✅ `DesktopLogManager` で新名に出力（`{ym}Luminaノート` / `{ym}Luminaカード` / `{ym}Luminaログ.txt` / `Luminaログ_{year}.txt`）  
+2. ✅ 処理済み判定・ノート／カードパス解決は **旧名も探索**（`resolve_note_path` / `resolve_card_path`）  
+3. ✅ 移行メモを OPS_POLICY §6 に追記  
 
 ### Wave 3 — コード識別子（大きな diff）
 
@@ -141,3 +141,4 @@
 |------|------|
 | 2026-08-11 | 初版。ウォークスルー再確認後の棚卸し |
 | 2026-08-11 | Wave 1 完了（ランチャー・ログ prefix・SPEC/ARCHITECTURE・app_gui 文言） |
+| 2026-08-11 | Wave 2 完了（Lumina* 出力名・旧名フォールバック・OPS_POLICY 移行メモ） |

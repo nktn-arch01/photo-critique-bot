@@ -195,6 +195,52 @@ def test_log_manager_processed_filename():
     assert mgr.is_processed("P12.jpg") is False
 
 
+def test_log_manager_wave2_output_names_and_legacy_lookup():
+    """Wave 2: 新出力は Lumina*。処理済み／パス解決は旧名も見る。"""
+    import shutil
+
+    root = Path(tempfile.mkdtemp())
+    try:
+        year = root / "2026"
+        month = year / "202606"
+        month.mkdir(parents=True)
+        mgr = DesktopLogManager(month)
+
+        assert mgr.notes_dir.name == "202606Luminaノート"
+        assert mgr.cards_dir.name == "202606Luminaカード"
+        assert mgr.monthly_log_path.name == "202606Luminaログ.txt"
+        assert mgr.annual_log_path.name == "Luminaログ_2026.txt"
+        assert mgr.notes_dir.is_dir()
+        assert mgr.cards_dir.is_dir()
+
+        # 旧フォルダにだけノート／カードがある場合も処理済み・解決できる
+        legacy_note = mgr.legacy_notes_dir / "OldShot.md"
+        legacy_note.parent.mkdir(parents=True, exist_ok=True)
+        legacy_note.write_text("# legacy", encoding="utf-8")
+        legacy_card = mgr.legacy_cards_dir / "OldShot_card.png"
+        legacy_card.parent.mkdir(parents=True, exist_ok=True)
+        legacy_card.write_bytes(b"png")
+
+        assert mgr.is_processed("OldShot.jpg") is True
+        assert mgr.resolve_note_path("OldShot.jpg") == legacy_note
+        assert mgr.resolve_card_path("OldShot.jpg") == legacy_card
+        # 書き込み先は常に新名
+        assert mgr.get_card_output_path("OldShot.jpg") == mgr.cards_dir / "OldShot_card.png"
+
+        sample = (
+            "■TITLE: t\n■SUMMARY: s\n■SCORES:\n・構図: ★★★ (3/5)\n"
+            "■CRITIQUE_SUMMARY: p\n---\n## 【1. 構図】\nbody"
+        )
+        mgr.save_analysis_result("NewShot.jpg", "=== メタデータ ===\nok", sample)
+        assert (mgr.notes_dir / "NewShot.md").is_file()
+        assert mgr.monthly_log_path.is_file()
+        assert mgr.annual_log_path.is_file()
+        assert mgr.is_processed("NewShot.jpg") is True
+        assert mgr.resolve_note_path("NewShot.jpg") == mgr.notes_dir / "NewShot.md"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_line_full_split_four_parts():
     combined = PHASE1_SAMPLE + "\n---\n" + PHASE2_SAMPLE
     parts = split_full_critique_for_line(combined)
@@ -1338,9 +1384,12 @@ def test_works_trace_dev_preference_and_no_copy():
         assert any(m.get("critique_image_kind") == "dev_export" for m in seen_meta)
         assert any(m.get("critique_image_kind") == "sooc_export" for m in seen_meta)
 
-        # 出力物が Works 内に生成（コピー元は増やさない）
-        assert (works / "WorksSample評価カード" / "A_dev_card.png").is_file() or any(
+        # 出力物が Works 内に生成（コピー元は増やさない／Wave 2 は Luminaカード）
+        assert (works / "WorksSampleLuminaカード" / "A_dev_card.png").is_file() or any(
             p.is_file() for p in works.rglob("*_card.png")
+        )
+        assert (works / "WorksSampleLuminaノート").is_dir() or any(
+            p.suffix == ".md" for p in works.rglob("*.md")
         )
         assert any(p.suffix == ".md" for p in works.rglob("*.md"))
         # 元 JPEG は増えていない（A.jpg / A_dev / B / C_dev の4枚のまま）
