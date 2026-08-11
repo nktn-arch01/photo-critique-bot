@@ -339,9 +339,12 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 実装: [`delta_log.py`](../delta_log.py)
 
 - 保存: `{unit}/_lumina/sessions/{session_id}.json`
-- パイプライン終了時に自動保存（`run_shortlist.py`、`--no-session` で無効化可）
+- パイプライン／GUI 終了時に自動保存
+- **`pre_h3`**: DxO 修正前（バッチ直後）の Rating／説明
+- **`post_h3`**: DxO 修正後の JPEG 再スキャン（GUI「DxO修正後を記録」）
+- **`h3_delta`**: 前後差分・遷移表（運用開始後の判定改善用）
 - `summarize_session` / `load_session` で再読
-- H3 後: `append_h3_rescan(session_json)` で現在 Rating を追記
+- 互換: `append_h3_rescan` = `record_post_h3`
 
 
 ### 8.3 DialogueTrace
@@ -364,7 +367,12 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 2. 短絡バッチ実行・進捗・中断・ログ  
 3. 痕跡生成：Works（または確定フォルダ）を指定してカード／ログ  
 
-短絡の実行口（T6）: CLI [`run_shortlist.py`](../run_shortlist.py)（`--dir` / `--stages` / `--dry-run`、Ctrl+C で中断）。講評バッチとは別導線。
+短絡の実行口（T6）:
+
+- **必須・主経路:** GUI [`shortlist_gui.py`](../shortlist_gui.py) / ダブルクリック [`LuminaShortlist.command`](../LuminaShortlist.command)
+- 補助: CLI [`run_shortlist.py`](../run_shortlist.py)（`--dir` / `--stages` / `--dry-run`）
+
+講評バッチ GUI（`app_gui.py` / `PhotoAICritique.command`）とは**別アプリ**。既存キーを壊さない。
 
 **作らない:** 短絡のサムネ確認 UI、H1/H2/H3 専用画面、Works コピー機能。  
 既存の講評バッチ GUI（`app_gui.py`）は維持・回帰させない。
@@ -485,3 +493,4 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 | 2026-08-11 | T5 `shortlist_diversity`（M3: 多様性貪欲選抜・Rating 3/4＋`[M3]`）実装 |
 | 2026-08-11 | T6 `shortlist_pipeline` + `run_shortlist.py`（M1→M2→M3・進捗・中断）実装 |
 | 2026-08-11 | T7 `delta_log`（`_lumina/sessions` 監査・再読・H3再スキャン）実装 |
+| 2026-08-11 | 短絡**必須GUI**（`shortlist_gui` / `LuminaShortlist.command`）。監査に `pre_h3`/`post_h3`/`h3_delta` を追加 |

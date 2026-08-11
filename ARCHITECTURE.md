@@ -89,15 +89,18 @@
 - `shortlist_antenna.py`: **【M2 アンテナ】** 5軸軽量 Vision＋バッチ内相対熱量。合格 Rating=2＋`[M2]`。★絶対ゲート禁止。
 - `shortlist_diversity.py`: **【M3 多様性】** 品質×多様性の貪欲選抜。余白 Rating=3／上位=4＋`[M3]`。タグ語彙・執着ブーストは設定化。
 - `shortlist_pipeline.py`: **【短絡パイプライン】** M1→M2→M3 オーケストレーション。進捗・中断。講評バッチとは別導線。
-- `delta_log.py`: **【監査ログ】** `{unit}/_lumina/sessions/{id}.json` に DecisionDelta／件数サマリ。再読・H3再スキャン追記。
-- `run_shortlist.py`: 短絡バッチ CLI（`--dir` / `--stages` / `--dry-run`）。
+- `delta_log.py`: **【監査ログ】** `{unit}/_lumina/sessions/{id}.json`。`pre_h3` / `post_h3` / `h3_delta`（DxO前後・判定改善）。
+- `shortlist_gui.py`: **【短絡必須GUI】** フォルダ選択・実行・中断・DxO修正後記録。講評 `app_gui` とは別。
+- `LuminaShortlist.command`: 短絡 GUI のダブルクリック起動。
+- `run_shortlist.py`: 短絡バッチ CLI（補助）。
 - `scripts/iptc_sync_verify.py`: `iptc_rating_io` を使う Rating/Description ラウンドトリップ検証。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
 - `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ・カード背景テーマの自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、実行前のライト/ダーク選択、独立例外処理、リアルタイムログ表示、中断制御対応。
 - `analyze_folder.py`: 月別フォルダを一括処理するCLIバッチスクリプト。
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。
-- `PhotoAICritique.command`: ダブルクリック起動シェルスクリプト（Gatekeeper属性の自動解除機能付き）。
+- `PhotoAICritique.command`: 講評バッチのダブルクリック起動（Gatekeeper属性の自動解除機能付き）。
+- `LuminaShortlist.command`: **短絡バッチ**のダブルクリック起動。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)

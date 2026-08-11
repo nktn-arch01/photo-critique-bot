@@ -1105,11 +1105,38 @@ def test_delta_log_session_reload_and_summary():
     # H3 想定: 1枚 Rating を人手変更してから再スキャン追記
     write_rating(paths[0], 4)
     updated = append_h3_rescan(result.session_path)
+    assert updated["post_h3"] is not None
+    assert updated["pre_h3"] is not None
+    assert updated["h3_delta"] is not None
+    assert updated["h3_delta"]["changed_count"] >= 1
     assert updated["h3_rescan"]["counts_by_rating"]["4"] >= 1
     again = load_session(result.session_path)
-    assert again["h3_rescan"] is not None
+    assert again["h3_delta"]["transitions"]
+    assert again["post_h3"]["label"] == "DxO修正後"
 
     shutil.rmtree(root, ignore_errors=True)
+
+
+def test_h3_delta_builder_for_judgment_improvement():
+    """DxO前後差分が遷移表になること（判定改善用）。"""
+    from delta_log import build_h3_delta
+
+    pre = [
+        {"file_name": "a.jpg", "rating": 2, "description_blocks": {"M2": "x"}},
+        {"file_name": "b.jpg", "rating": 0, "description_blocks": {}},
+        {"file_name": "c.jpg", "rating": 3, "description_blocks": {"M3": "y"}},
+    ]
+    post = [
+        {"file_name": "a.jpg", "rating": 4, "description_blocks": {"M2": "x"}},
+        {"file_name": "b.jpg", "rating": 2, "description_blocks": {}},
+        {"file_name": "c.jpg", "rating": 3, "description_blocks": {"M3": "y"}},
+    ]
+    delta = build_h3_delta(pre, post)
+    assert delta["changed_count"] == 2
+    assert delta["unchanged_count"] == 1
+    assert delta["transitions"]["2->4"] == 1
+    assert delta["transitions"]["0->2"] == 1
+    assert delta["purpose"] == "judgment_improvement"
 
 
 def run_all():
@@ -1140,6 +1167,7 @@ def run_all():
     test_diversity_m3_margin_top_and_bias_control()
     test_shortlist_pipeline_m1_m2_m3_and_cancel()
     test_delta_log_session_reload_and_summary()
+    test_h3_delta_builder_for_judgment_improvement()
     print("test_offline_suite: OK")
 
 

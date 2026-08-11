@@ -6,9 +6,11 @@
 内容:
 - セッション識別・状態・時刻
 - ファイルごとの段（M1/M2/M3）判定・Rating・説明要点
-- counts_by_rating（バッチ結果＋任意で JPEG 再スキャン）
+- **pre_h3**: DxO 修正前（バッチ直後）のスナップショット
+- **post_h3**: DxO 修正後の JPEG 再スキャン
+- **h3_delta**: 前後差分（運用開始後の判定改善用）
 
-H3 後の最終 Rating 追記は第一波の努力目標（``append_h3_rescan``）。
+GUI から ``record_post_h3``（互換: ``append_h3_rescan``）で後記録する。
 """
 
 from __future__ import annotations
@@ -170,6 +172,102 @@ def rescan_counts_by_rating(unit: LibraryUnit) -> dict[str, int]:
     return out
 
 
+def _compact_file_snapshot(files: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """前後比較用の薄いファイル一覧。"""
+    out = []
+    for f in files:
+        out.append(
+            {
+                "file_name": f.get("file_name"),
+                "relative_path": f.get("relative_path"),
+                "rating": f.get("final_rating", f.get("rating")),
+                "description_blocks": dict(f.get("description_blocks") or {}),
+            }
+        )
+    return out
+
+
+def snapshot_unit_jpeg_state(unit: LibraryUnit) -> list[dict[str, Any]]:
+    """単位内 JPEG の現在 Rating／説明ブロックを列挙。"""
+    file_ratings: list[dict[str, Any]] = []
+    for jpeg in list_source_jpegs(unit):
+        try:
+            meta = read_shortlist_meta(jpeg)
+            file_ratings.append(
+                {
+                    "file_name": jpeg.name,
+                    "relative_path": _rel_name(unit.path, jpeg),
+                    "rating": meta.rating,
+                    "description_blocks": {
+                        k: v
+                        for k, v in (
+                            ("M2", meta.stage_reason("M2")),
+                            ("M3", meta.stage_reason("M3")),
+                        )
+                        if v
+                    },
+                }
+            )
+        except Exception as exc:
+            file_ratings.append(
+                {
+                    "file_name": jpeg.name,
+                    "relative_path": jpeg.name,
+                    "rating": None,
+                    "error": str(exc),
+                    "description_blocks": {},
+                }
+            )
+    return file_ratings
+
+
+def build_h3_delta(
+    pre_files: list[dict[str, Any]],
+    post_files: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """DxO 修正前/後の差分（判定改善用）。"""
+    pre_map = {f.get("file_name"): f for f in pre_files if f.get("file_name")}
+    post_map = {f.get("file_name"): f for f in post_files if f.get("file_name")}
+    changes: list[dict[str, Any]] = []
+    transitions: dict[str, int] = {}
+    unchanged = 0
+
+    for name, pre in sorted(pre_map.items()):
+        post = post_map.get(name)
+        if post is None:
+            continue
+        br, ar = pre.get("rating"), post.get("rating")
+        bb = pre.get("description_blocks") or {}
+        ab = post.get("description_blocks") or {}
+        if br == ar and bb == ab:
+            unchanged += 1
+            continue
+        key = f"{br}->{ar}"
+        transitions[key] = transitions.get(key, 0) + 1
+        changes.append(
+            {
+                "file_name": name,
+                "before_rating": br,
+                "after_rating": ar,
+                "before_blocks": bb,
+                "after_blocks": ab,
+            }
+        )
+
+    only_pre = sorted(set(pre_map) - set(post_map))
+    only_post = sorted(set(post_map) - set(pre_map))
+    return {
+        "at": _now_iso(),
+        "purpose": "judgment_improvement",
+        "changed_count": len(changes),
+        "unchanged_count": unchanged,
+        "transitions": dict(sorted(transitions.items())),
+        "changes": changes,
+        "only_in_pre": only_pre,
+        "only_in_post": only_post,
+    }
+
+
 def build_session_document(
     result: PipelineResult,
     *,
@@ -177,6 +275,15 @@ def build_session_document(
 ) -> dict[str, Any]:
     """BatchSession + DecisionDelta を1つの JSON 文書にする。"""
     files = build_file_deltas(result)
+    counts = count_ratings_from_deltas(files)
+    pre_files = _compact_file_snapshot(files)
+    pre_h3 = {
+        "at": result.finished_at or _now_iso(),
+        "source": "batch_pre_dxo",
+        "label": "DxO修正前（バッチ直後）",
+        "counts_by_rating": counts,
+        "files": pre_files,
+    }
     doc: dict[str, Any] = {
         "schema": "lumina.shortlist_session.v1",
         "id": result.session_id,
@@ -190,7 +297,7 @@ def build_session_document(
         "error": result.error,
         "jpeg_count": result.jpeg_count,
         "write_meta": None,  # 呼び出し側で埋めてもよい
-        "counts_by_rating": count_ratings_from_deltas(files),
+        "counts_by_rating": counts,
         "counts_by_rating_hint": result.counts_by_rating_hint(),
         "stage_summary": {
             "m1": result.m1.to_dict() if result.m1 else None,
@@ -214,6 +321,10 @@ def build_session_document(
             else None,
         },
         "files": files,
+        "pre_h3": pre_h3,
+        "post_h3": None,
+        "h3_delta": None,
+        # 後方互換（旧フィールド名）
         "h3_rescan": None,
     }
     if include_jpeg_rescan and result.unit.path.is_dir():
@@ -266,6 +377,9 @@ def list_session_paths(unit_path: Path | str) -> list[Path]:
 def summarize_session(document: dict[str, Any]) -> dict[str, Any]:
     """再読用の短いサマリ。"""
     files = document.get("files") or []
+    pre = document.get("pre_h3") or {}
+    post = document.get("post_h3") or document.get("h3_rescan") or {}
+    delta = document.get("h3_delta") or {}
     return {
         "id": document.get("id"),
         "library_unit_id": document.get("library_unit_id"),
@@ -277,12 +391,22 @@ def summarize_session(document: dict[str, Any]) -> dict[str, Any]:
         "counts_by_rating": document.get("counts_by_rating"),
         "jpeg_rescan_counts": document.get("jpeg_rescan_counts"),
         "stage_summary": document.get("stage_summary"),
+        "pre_h3_counts": pre.get("counts_by_rating"),
+        "post_h3_counts": post.get("counts_by_rating"),
+        "h3_changed_count": delta.get("changed_count"),
+        "h3_transitions": delta.get("transitions"),
         "h3_rescan": document.get("h3_rescan"),
+        "has_post_h3": bool(post),
     }
 
 
-def append_h3_rescan(session_file: Path | str, unit: LibraryUnit | None = None) -> dict[str, Any]:
-    """努力目標: H3 後に JPEG を再スキャンしてセッションへ追記。"""
+def record_post_h3(session_file: Path | str, unit: LibraryUnit | None = None) -> dict[str, Any]:
+    """DxO（H3）修正後の状態を記録し、修正前との差分を残す。
+
+    - ``pre_h3``: バッチ直後（無ければ files から復元）
+    - ``post_h3``: いまの JPEG 再スキャン
+    - ``h3_delta``: 前後差分（判定改善用）
+    """
     path = Path(session_file)
     doc = load_session(path)
     if unit is None:
@@ -292,34 +416,51 @@ def append_h3_rescan(session_file: Path | str, unit: LibraryUnit | None = None) 
         unit = unit_from_dir(unit_path)
         if unit is None:
             raise ValueError(f"library unit を解釈できません: {unit_path}")
+
+    # pre_h3 が無い古いセッション向けに補完
+    if not doc.get("pre_h3"):
+        doc["pre_h3"] = {
+            "at": doc.get("finished_at") or doc.get("created_at") or _now_iso(),
+            "source": "batch_pre_dxo_backfill",
+            "label": "DxO修正前（バッチ直後・補完）",
+            "counts_by_rating": doc.get("counts_by_rating"),
+            "files": _compact_file_snapshot(doc.get("files") or []),
+        }
+
+    post_files = snapshot_unit_jpeg_state(unit)
     counts = rescan_counts_by_rating(unit)
-    doc["h3_rescan"] = {
+    post_h3 = {
         "at": _now_iso(),
+        "source": "jpeg_rescan_after_dxo",
+        "label": "DxO修正後",
         "counts_by_rating": counts,
+        "files": post_files,
     }
-    # ファイル単位の現在 Rating も付記（監査強化）
-    file_ratings = []
-    for jpeg in list_source_jpegs(unit):
-        try:
-            meta = read_shortlist_meta(jpeg)
-            file_ratings.append(
-                {
-                    "file_name": jpeg.name,
-                    "rating": meta.rating,
-                    "description_blocks": {
-                        k: v for k, v in (
-                            ("M2", meta.stage_reason("M2")),
-                            ("M3", meta.stage_reason("M3")),
-                        )
-                        if v
-                    },
-                }
-            )
-        except Exception as exc:
-            file_ratings.append({"file_name": jpeg.name, "error": str(exc)})
-    doc["h3_rescan"]["files"] = file_ratings
+    delta = build_h3_delta(doc["pre_h3"].get("files") or [], post_files)
+
+    doc["post_h3"] = post_h3
+    doc["h3_delta"] = delta
+    # 後方互換
+    doc["h3_rescan"] = {
+        "at": post_h3["at"],
+        "counts_by_rating": counts,
+        "files": post_files,
+    }
     write_session_document(unit.path, doc)
     return doc
+
+
+def append_h3_rescan(session_file: Path | str, unit: LibraryUnit | None = None) -> dict[str, Any]:
+    """互換エイリアス: ``record_post_h3`` と同じ。"""
+    return record_post_h3(session_file, unit=unit)
+
+
+def latest_session_path(unit_path: Path | str) -> Path | None:
+    paths = list_session_paths(unit_path)
+    if not paths:
+        return None
+    # 更新時刻が新しいものを優先
+    return max(paths, key=lambda p: p.stat().st_mtime)
 
 
 @dataclass(frozen=True)

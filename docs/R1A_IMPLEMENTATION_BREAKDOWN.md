@@ -94,10 +94,10 @@ T0 検証ゲート（IPTC）
 
 | 項目 | 内容 |
 |------|------|
-| モジュール | [`shortlist_pipeline.py`](../shortlist_pipeline.py) / CLI [`run_shortlist.py`](../run_shortlist.py) |
+| モジュール | [`shortlist_pipeline.py`](../shortlist_pipeline.py) / **必須GUI** [`shortlist_gui.py`](../shortlist_gui.py) / CLI [`run_shortlist.py`](../run_shortlist.py) |
 | 内容 | M1→M2→M3 オーケストレーション、進捗、中断、1枚失敗で全体停止しない |
-| 状態 | **完了（2026-08-11）** |
-| 完了条件 | 既存 `app_gui` 講評バッチを壊さない（別導線）（達成） |
+| 状態 | **完了（GUI必須化 2026-08-11）** |
+| 完了条件 | 既存 `app_gui` 講評バッチを壊さない（別導線）。**短絡の主実行口は GUI** |
 | 依存 | T3–T5 |
 
 ### T7 — 監査ログ
@@ -105,9 +105,9 @@ T0 検証ゲート（IPTC）
 | 項目 | 内容 |
 |------|------|
 | モジュール | [`delta_log.py`](../delta_log.py) |
-| 内容 | `_lumina/sessions/{id}.json` にファイルごとの Rating／説明／段／時刻 |
-| 状態 | **完了（2026-08-11）** |
-| 完了条件 | セッション再読・サマリ件数（達成。H3 再スキャン追記 API あり） |
+| 内容 | `_lumina/sessions/{id}.json` にファイルごとの Rating／説明／段／時刻。**pre_h3 / post_h3 / h3_delta**（DxO前後・判定改善用） |
+| 状態 | **完了（前後記録強化 2026-08-11）** |
+| 完了条件 | セッション再読・サマリ件数。H3後記録と差分（達成） |
 | 依存 | T6 |
 
 ### T8 — 痕跡生成（Works）

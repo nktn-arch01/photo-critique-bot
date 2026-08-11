@@ -214,7 +214,7 @@ Photos/
 
 1. 本構想のレビュー（オーナー）。  
 2. **機能仕様**は R1′ → [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)（R1′-A: IPTC Rating／説明バッチ＋DxO 側 H3/W。**メタ一次ソースは JPEG**（同期成立時は dop/xmp 不使用。§0））。  
-3. ~~IPTC 同期検証~~ → **PASS・§0 運用確定**（一方向＋双方向）。~~T1–T7~~ 完了。次は T8 以降（[`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md)）。R1′-B/C は A の後続。
+3. ~~IPTC 同期検証~~ → **PASS・§0 運用確定**。~~T1–T7~~ 完了（短絡**必須GUI**・DxO前後記録含む）。次は T8 以降（[`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md)）。R1′-B/C は A の後続。
 
 ---
 
