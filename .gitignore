@@ -14,6 +14,6 @@ eval/phase_d/images/*
 !eval/phase_d/images/.gitkeep
 eval/phase_d/out/
 
-# IPTC sync verification (keep docs/json; ignore generated JPEGs — already covered by *.jpg)
-eval/iptc_sync/*.json
+# IPTC sync: generated JPEGs ignored via *.jpg; keep committed result JSON if present
+!eval/iptc_sync/roundtrip_result.json
 !eval/iptc_sync/.gitkeep
