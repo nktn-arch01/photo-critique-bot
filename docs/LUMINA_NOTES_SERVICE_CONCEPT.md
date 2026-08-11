@@ -213,8 +213,8 @@ Photos/
 ## 10. 次のステップ
 
 1. 本構想のレビュー（オーナー）。  
-2. **機能仕様**は R1′（ミラーレス派・深い輪）から切り出す → [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)（R1′-A は IPTC Rating／説明バッチ＋DxO 側で H3/W。同期は要検証）。  
-3. 実装前に IPTC 同期検証を行い、その後 R1′-A を進める。R1′-B/C は A の後続。
+2. **機能仕様**は R1′ → [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)（R1′-A: IPTC Rating／説明バッチ＋DxO 側 H3/W。**メタ一次ソースは JPEG**（同期成立時は dop/xmp 不使用。§0））。  
+3. **IPTC 同期検証**のあと実装へ。R1′-B/C は A の後続。
 
 ---
 
@@ -227,3 +227,4 @@ Photos/
 | 2026-08-10 | R1′ 機能仕様へのリンクを追加 |
 | 2026-08-10 | R1′-A が段階短絡・週次作品化を含む旨を次ステップに追記 |
 | 2026-08-10 | R1′-A を IPTC Rating 駆動（DxO 側 H3/W）へ改訂した旨を追記 |
+| 2026-08-11 | メタ一次ソース（JPEG Rating/Description・画+撮影EXIF、dop/xmp 不使用条件付き）を追記 |
