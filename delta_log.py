@@ -1,4 +1,4 @@
-"""短絡バッチの監査ログ（DecisionDelta / BatchSession）.
+"""スクリーニングの監査ログ（DecisionDelta / BatchSession）.
 
 保存先（仕様 §10）:
   {library_unit}/_lumina/sessions/{session_id}.json

@@ -4,7 +4,7 @@
 前提仕様: [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)  
 メタ検証: [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md)
 
-第一波の本アプリ範囲: **JPEG への短絡バッチ（M1→M2→M3）＋監査ログ＋Works 上の痕跡生成**。  
+第一波の本アプリ範囲: **JPEG へのスクリーニング（M1→M2→M3）＋監査ログ＋Works 上のLumina Review**。  
 H3 / Works コピー / RAW 現像は DxO 等（実装しない）。
 
 ---
@@ -20,7 +20,7 @@ T0 検証ゲート（IPTC）
   → T5 M3 diversity
   → T6 pipeline + CLI/最小UI
   → T7 監査ログ
-  → T8 痕跡生成（Works 指定）
+  → T8 Lumina Review（Works 指定）
   → T9 scanner/講評の JPEG 正への移行
   → T10 オフラインテスト拡充
 ```
@@ -97,7 +97,7 @@ T0 検証ゲート（IPTC）
 | モジュール | [`shortlist_pipeline.py`](../shortlist_pipeline.py) / **必須GUI** [`shortlist_gui.py`](../shortlist_gui.py) / CLI [`run_shortlist.py`](../run_shortlist.py) |
 | 内容 | M1→M2→M3 オーケストレーション、進捗、中断、1枚失敗で全体停止しない |
 | 状態 | **完了（GUI必須化 2026-08-11）** |
-| 完了条件 | 既存 `app_gui` 講評バッチを壊さない（別導線）。**短絡の主実行口は GUI** |
+| 完了条件 | 既存 `app_gui` 講評バッチを壊さない（別導線）。**スクリーニングの主実行口は GUI** |
 | 依存 | T3–T5 |
 
 ### T7 — 監査ログ
@@ -110,7 +110,7 @@ T0 検証ゲート（IPTC）
 | 完了条件 | セッション再読・サマリ件数。H3後記録と差分（達成） |
 | 依存 | T6 |
 
-### T8 — 痕跡生成（Works）
+### T8 — Lumina Review（Works）
 
 | 項目 | 内容 |
 |------|------|
@@ -118,7 +118,7 @@ T0 検証ゲート（IPTC）
 | 内容 | ユーザー指定フォルダ上の `{stem}_dev.jpg` 優先（なければ撮って出し）に既存講評カード／ノート／ログ |
 | 完了条件 | コピー機能なし。既存コア再利用。画優先の注記をプロンプトへ（必要なら T9 と同時） |
 | 依存 | T1（読取）, 既存 critique コア |
-| 実装 | **完了** — `WorksTraceRunner` / `list_works_trace_targets`。GUI: `shortlist_gui` の「Works 痕跡生成」。補助 CLI: `run_trace_works.py`。プロンプトに画優先注記（`pixel_priority`） |
+| 実装 | **完了** — `WorksTraceRunner` / `list_works_trace_targets`。GUI: `shortlist_gui` の「Works Lumina Review」。補助 CLI: `run_trace_works.py`。プロンプトに画優先注記（`pixel_priority`） |
 
 ### T9 — scanner / 講評の JPEG 正への移行
 
@@ -176,7 +176,7 @@ T0 検証ゲート（IPTC）
 6. ~~T5 `shortlist_diversity`（M3）~~ **完了**  
 7. ~~T6 `shortlist_pipeline` + `run_shortlist.py`~~ **完了**  
 8. ~~T7 `delta_log`~~ **完了**  
-9. ~~**T8 痕跡生成（Works）**~~ **完了**  
+9. ~~**T8 Lumina Review（Works）**~~ **完了**  
 10. ~~**T9** scanner/講評の JPEG 正への移行~~ **完了**  
 11. ~~**T10** オフラインテスト総仕上げ~~ **完了**  
 

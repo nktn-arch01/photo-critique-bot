@@ -1,4 +1,4 @@
-"""R1′-A 短絡パイプライン: M1 → M2 → M3 オーケストレーション.
+"""R1′-A スクリーニングパイプライン: M1 → M2 → M3 オーケストレーション.
 
 - 月／イベント LibraryUnit 単位
 - 進捗コールバック・中断フラグ
@@ -132,7 +132,7 @@ class PipelineResult:
 
 
 class ShortlistPipeline:
-    """キャンセル可能な短絡パイプライン。"""
+    """キャンセル可能なスクリーニングパイプライン。"""
 
     def __init__(
         self,
@@ -172,7 +172,7 @@ class ShortlistPipeline:
             result.session_path = path
             self._emit("session", f"監査ログを保存: {path}")
         except Exception as exc:
-            # 監査失敗で短絡結果自体は落とさない
+            # 監査失敗でスクリーニング結果自体は落とさない
             self._emit("session", f"監査ログ保存に失敗: {exc}")
         return result
 
@@ -280,7 +280,7 @@ class ShortlistPipeline:
 
             result.status = "completed"
             result.finished_at = datetime.now(timezone.utc).isoformat()
-            self._emit("done", "短絡パイプライン完了")
+            self._emit("done", "スクリーニングパイプライン完了")
             return self._persist(result)
         except Exception as exc:
             result.status = "failed"

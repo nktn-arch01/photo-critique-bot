@@ -2,7 +2,7 @@
 
 規則（[`R1A_DESKTOP_OPS_POLICY.md`](docs/R1A_DESKTOP_OPS_POLICY.md)）:
 
-オリジナル（短絡対象）:
+オリジナル（スクリーニング対象）:
 
 - 月: ``YYYYMM`` または ``XXYYYYMM``（``XX`` = 機種2文字、例 ``OM`` / ``FF``）
 - イベント: ``YYYYMMDD_短い名前`` または ``XXYYYYMMDD_短い名前``
@@ -11,11 +11,11 @@
 - 月単位の画像: 月フォルダ直下のバラ JPEG（イベント配下は含めない）
 - イベント単位の画像: そのイベントフォルダ直下の JPEG
 
-Works（痕跡対象・ユーザー自作）:
+Works（Lumina Review 対象・ユーザー自作）:
 
 - **月 ``YYYYMM`` のみ**（接頭辞なし。イベントサブフォルダは作らない）
 
-短絡バッチの書き込み対象は主に JPEG（``.jpg`` / ``.jpeg``）。
+スクリーニングの書き込み対象は主に JPEG（``.jpg`` / ``.jpeg``）。
 ``.dop`` / ``.xmp`` は扱わない。
 """
 
@@ -77,7 +77,7 @@ def _parse_yyyymmdd(text: str) -> date | None:
 
 
 def is_works_month_folder_name(name: str) -> bool:
-    """Works 痕跡対象: 接頭辞なし ``YYYYMM`` のみ。"""
+    """Works Lumina Review対象: 接頭辞なし ``YYYYMM`` のみ。"""
     m = MONTH_PLAIN_RE.fullmatch(name)
     if not m:
         return False
@@ -271,7 +271,7 @@ def iter_direct_jpegs(directory: Path | str) -> Iterator[Path]:
 
 
 def list_source_jpegs(unit: LibraryUnit) -> list[Path]:
-    """単位に属する短絡対象 JPEG。
+    """単位に属するスクリーニング対象 JPEG。
 
     - 月: 直下のバラのみ（イベント配下は含まない）
     - イベント: イベントフォルダ直下

@@ -6,9 +6,9 @@ Usage:
   python3 prepare_mac_manual_fixtures.py --root ~/Desktop/LuminaManualCheck
 
 作成物（運用方針どおり）:
-  {root}/OM202608/                 短絡・月（XX 接頭辞）
-  {root}/OM202608/OM20260815_旅行/ 短絡・イベント
-  {root}/2026/202608/              Works 月（痕跡）
+  {root}/OM202608/                 スクリーニング・月（XX 接頭辞）
+  {root}/OM202608/OM20260815_旅行/ スクリーニング・イベント
+  {root}/2026/202608/              Works 月（Lumina Review）
   {root}/2026/202608/_subdir_only/ L4 案内確認用（直下対象外）
 """
 
@@ -46,8 +46,8 @@ def prepare(root: Path) -> None:
     _jpeg(buried / "buried.jpg", (10, 10, 10), "subdir only")
 
     print("作成完了:")
-    print(f"  短絡・月:     {month}")
-    print(f"  短絡・イベント: {event}")
+    print(f"  スクリーニング・月:     {month}")
+    print(f"  スクリーニング・イベント: {event}")
     print(f"  Works 月:     {works}")
     print(f"  L4 サブ:     {buried}")
     print()

@@ -1,4 +1,4 @@
-"""R1′-A T8: Works（または確定フォルダ）上の対話痕跡生成.
+"""R1′-A T8: Works（または確定フォルダ）上のLumina Review.
 
 - 本アプリは Works へコピーしない（DxO 等が書き出した JPEG を読むだけ）
 - 同一 stem では ``{stem}_dev.jpg`` を優先。なければ撮って出し ``.jpg``
@@ -46,7 +46,7 @@ class TraceConfig:
     force_overwrite: bool = False
     card_theme: str = DEFAULT_CARD_THEME
     lens: str = DEFAULT_LENS
-    # Works 痕跡は常に画優先（現像 JPEG の見た目を一次ソースに）
+    # Works Lumina Reviewは常に画優先（現像 JPEG の見た目を一次ソースに）
     pixel_priority: bool = True
     # テスト差し替え（本番は None → critique_engine）
     critique_fn: CritiqueFn | None = None
@@ -112,7 +112,7 @@ def is_dev_export(path: Path) -> bool:
 
 
 def list_works_trace_targets(works_dir: Path) -> list[Path]:
-    """Works 直下の痕跡対象 JPEG を列挙（コピーしない）.
+    """Works 直下のLumina Review 対象 JPEG を列挙（コピーしない）.
 
     優先順（stem 単位）:
     1. ``{stem}_dev.jpg``
@@ -183,7 +183,7 @@ def works_empty_targets_hint(works_dir: Path | str) -> str:
         return ""
     return (
         f"\n\n注意: サブフォルダ内に JPEG が {n} 枚ありますが、"
-        "Works 痕跡の対象は月フォルダ直下のみです。"
+        "Works Lumina Review の対象は月フォルダ直下のみです。"
         "イベント用サブフォルダは使わず、直下へ置いてください。"
     )
 
@@ -230,7 +230,7 @@ class WorksTraceRunner:
             result.targets_found = len(targets)
             self._emit(
                 "scan",
-                f"痕跡対象 {len(targets)} 枚（_dev 優先・コピーなし）",
+                f"Lumina Review 対象 {len(targets)} 枚（_dev 優先・コピーなし）",
                 current=0,
                 total=len(targets),
             )
@@ -339,7 +339,7 @@ class WorksTraceRunner:
             result.finished_at = _utc_now_iso()
             self._emit(
                 "done",
-                f"痕跡生成{result.status}: 新規={result.processed} "
+                f"Lumina Review{result.status}: 新規={result.processed} "
                 f"スキップ={result.skipped} エラー={result.errors}",
             )
             return result

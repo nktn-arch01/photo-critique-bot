@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""短絡バッチ CLI（講評バッチ analyze_folder / app_gui とは別導線）.
+"""スクリーニング CLI（講評バッチ analyze_folder / app_gui とは別導線）.
 
 Usage:
   python3 run_shortlist.py --dir /path/to/202608
@@ -27,7 +27,7 @@ from shortlist_pipeline import PipelineConfig, PipelineProgress, ShortlistPipeli
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Lumina Notes 短絡バッチ (M1→M2→M3)")
+    parser = argparse.ArgumentParser(description="Lumina Notes スクリーニング (M1→M2→M3)")
     parser.add_argument(
         "--dir",
         required=True,
@@ -91,7 +91,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, _handle_sigint)
 
     print("==========================================")
-    print(" Lumina Notes 短絡バッチ")
+    print(" Lumina Notes スクリーニング")
     print(f" 対象: {target}")
     print(f" 段: {'m1' if run_m1 else ''}{' m2' if run_m2 else ''}{' m3' if run_m3 else ''}".strip())
     print(f" 書き込み: {'OFF (dry-run)' if args.dry_run else 'ON'}")

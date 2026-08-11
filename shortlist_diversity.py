@@ -315,7 +315,7 @@ def build_diversity_prompt(*, lens: str | None = None, config: DiversityConfig |
     cfg = config or default_config()
     lens_obj = get_lens(normalize_lens(lens or cfg.lens))
     vocab = "、".join(cfg.tag_vocab)
-    return f"""この写真を短絡用に短く見てください。フル講評は不要です。
+    return f"""この写真をスクリーニング用に短く見てください。フル講評は不要です。
 
 観点:
 - quality: Lumina Notes としての残す熱量（1–5）。★5必須禁止。迷ったら低め。
@@ -331,7 +331,7 @@ def build_diversity_system_prompt(*, lens: str | None = None) -> str:
     lens_obj = get_lens(normalize_lens(lens))
     return (
         f"{lens_obj.system_role} "
-        "今は多様性短絡用の短いラベル付けのみ。評価ではなく残す余白と上位の材料を返す。"
+        "今は多様性スクリーニング用の短いラベル付けのみ。評価ではなく残す余白と上位の材料を返す。"
     )
 
 

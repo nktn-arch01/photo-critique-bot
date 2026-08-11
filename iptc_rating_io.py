@@ -1,4 +1,4 @@
-"""JPEG 内 Rating / Description（短絡メタ）の単一ソース I/O.
+"""JPEG 内 Rating / Description（スクリーニングメタ）の単一ソース I/O.
 
 R1′-A §0 / §5.1 / docs/IPTC_SYNC_VERIFICATION.md のタグ契約に従う。
 `.dop` / `.xmp` サイドカーは扱わない。書き込みは exiftool 経由。
@@ -60,7 +60,7 @@ class IptcIoError(ValueError):
 
 @dataclass(frozen=True)
 class ShortlistMeta:
-    """JPEG から読んだ短絡用メタ（一次ソース）。"""
+    """JPEG から読んだスクリーニング用メタ（一次ソース）。"""
 
     path: Path
     rating: int | None
@@ -304,7 +304,7 @@ def write_shortlist_decision(
     reason: str | None = None,
     description: str | None = None,
 ) -> ShortlistMeta:
-    """短絡1コマ分の書き込みヘルパ。
+    """スクリーニング1コマ分の書き込みヘルパ。
 
     - ``description`` を渡すとその全文を書く
     - さもなくば既存説明を読み、``stage``+``reason`` があれば upsert して書く

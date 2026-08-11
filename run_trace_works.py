@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Works 痕跡生成 CLI（短絡 run_shortlist / 講評 analyze_folder とは別導線）.
+"""Works Lumina Review CLI（スクリーニング run_shortlist / 講評 analyze_folder とは別導線）.
 
 Usage:
   python3 run_trace_works.py --dir /path/to/Works/202608
@@ -27,7 +27,7 @@ from trace_from_works import TraceConfig, TraceProgress, WorksTraceRunner
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Lumina Notes Works 痕跡生成（カード／ノート／ログ）")
+    parser = argparse.ArgumentParser(description="Lumina Notes Works Lumina Review（カード／ノート／ログ）")
     parser.add_argument(
         "--dir",
         required=True,
@@ -86,7 +86,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, _handle_sigint)
 
     print("==========================================")
-    print(" Lumina Notes Works 痕跡生成")
+    print(" Lumina Notes Works Lumina Review")
     print(f" 対象: {target}")
     print(f" mode: {args.mode} / theme: {args.theme}")
     print(f" overwrite: {'ON' if args.force else 'OFF'}")
