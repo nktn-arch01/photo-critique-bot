@@ -167,12 +167,22 @@ exiftool -G1 -s -Rating -XMP:Rating -ImageDescription -Description -Caption-Abst
 | 一方向 Rating（書込→DxO表示） | **PASS**（レーティング ★★★☆☆ = 3） |
 | 一方向 説明（書込→DxO表示） | **PASS**（IPTC コンテンツ「説明」に `[M2]…` / `[M3]…`） |
 | クロスチェック | macOS プレビュー IPTC でも StarRating=3・説明同一を確認 **PASS** |
-| 双方向（努力） | 未実施（必須ではない） |
+| 双方向（努力） | **PASS**（2026-08-11 追加検証） |
 | 証拠 | オーナー提供スクショ（2026-08-11）: **黒バック＝DxO**（レーティング★★★・IPTC説明）、**白バック＝Macプレビュー IPTC**（StarRating=3・同一説明） |
 
-**判定: A PASS かつ B 一方向（Rating・説明）PASS → §0 を運用確定。`.dop` / `.xmp` は使わない。**
+### B10. 双方向追加検証（オーナー・2026-08-11）— **PASS**
 
-次工程: [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T1（JPEG Rating/Description I/O）** から実装可能。
+H3 想定どおり、DxO 上で Rating 修正とコメント（説明）書き込みを行い、対象 JPEG（例: `P6141347.JPG`）へ**リアルタイム反映**されることを確認。
+
+| 項目 | 結果 |
+|------|------|
+| DxO → ファイル（Rating） | **PASS** |
+| DxO → ファイル（説明／コメント） | **PASS** |
+| 反映タイミング | リアルタイム（OK） |
+
+**判定: A PASS かつ B 一方向 PASS かつ双方向 PASS → §0 を運用確定。`.dop` / `.xmp` は使わない。**
+
+実装: [`iptc_rating_io.py`](../iptc_rating_io.py)（T1）。次は [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T2** 以降。
 
 ---
 

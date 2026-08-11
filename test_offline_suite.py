@@ -424,6 +424,79 @@ def test_n06_log_keeps_numeric_scores():
     _ = mgr  # DesktopLogManager が import 可能であること
 
 
+def test_iptc_stage_block_upsert_preserves_user_text():
+    """T1: [M2]/[M3] はブロック置換。ユーザー文は消さない。"""
+    from iptc_rating_io import parse_stage_blocks, upsert_stage_reason
+
+    base = "人のメモです\n[M2] old antenna"
+    mid = upsert_stage_reason(base, "M2", "new antenna")
+    assert "人のメモです" in mid
+    assert "[M2] new antenna" in mid
+    assert "old antenna" not in mid
+
+    both = upsert_stage_reason(mid, "M3", "diversity keep")
+    assert "[M3] diversity keep" in both
+    assert parse_stage_blocks(both) == {
+        "M2": "new antenna",
+        "M3": "diversity keep",
+    }
+
+    # 重複 [M2] は1行に畳む
+    messy = "note\n[M2] a\n[M2] b\n[M3] c"
+    cleaned = upsert_stage_reason(messy, "M2", "only")
+    assert cleaned.count("[M2]") == 1
+    assert parse_stage_blocks(cleaned)["M2"] == "only"
+    assert parse_stage_blocks(cleaned)["M3"] == "c"
+
+
+def test_iptc_rating_description_roundtrip():
+    """T1: JPEG への Rating/Description 書き込み・再読取（exiftool）。"""
+    import shutil
+
+    from iptc_rating_io import (
+        ExifToolNotFoundError,
+        rating_to_percent,
+        read_shortlist_meta,
+        require_exiftool,
+        write_shortlist_decision,
+        write_stage_reason,
+    )
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_iptc_rating_description_roundtrip: exiftool missing")
+        return
+
+    assert rating_to_percent(3) == 60
+    assert rating_to_percent(0) == 0
+
+    td = Path(tempfile.mkdtemp(prefix="iptc_t1_"))
+    jpeg = td / "sample.jpg"
+    Image.new("RGB", (80, 60), (40, 80, 120)).save(jpeg, "JPEG", quality=90)
+
+    desc = "[M2] Lumina sync test reason\n[M3] diversity placeholder"
+    meta = write_shortlist_decision(jpeg, rating=3, description=desc)
+    assert meta.rating == 3
+    assert meta.description == desc
+    assert meta.stage_reason("M2") == "Lumina sync test reason"
+    assert meta.stage_reason("M3") == "diversity placeholder"
+
+    # 段追記: 既存 M2 を残しつつ M3 を置換、Rating も更新
+    write_shortlist_decision(jpeg, rating=4, stage="M3", reason="top pick")
+    again = read_shortlist_meta(jpeg)
+    assert again.rating == 4
+    assert again.stage_reason("M2") == "Lumina sync test reason"
+    assert again.stage_reason("M3") == "top pick"
+
+    write_stage_reason(jpeg, "M2", "updated antenna")
+    final = read_shortlist_meta(jpeg)
+    assert final.stage_reason("M2") == "updated antenna"
+    assert final.rating == 4  # Description のみ更新でも Rating は維持
+
+    shutil.rmtree(td, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -443,6 +516,8 @@ def run_all():
     test_n04_score_label_fits_before_stars()
     test_n05_sensitivity_mentions_light_and_reflection()
     test_n06_log_keeps_numeric_scores()
+    test_iptc_stage_block_upsert_preserves_user_text()
+    test_iptc_rating_description_roundtrip()
     print("test_offline_suite: OK")
 
 

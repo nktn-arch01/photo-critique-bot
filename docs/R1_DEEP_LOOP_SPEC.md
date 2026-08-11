@@ -9,7 +9,8 @@
 
 **前提:** DxO PhotoLab 等が、外部から書き換えた JPEG の **Rating / 説明** を表示できること。  
 - ファイル側ラウンドトリップ: **PASS**（`scripts/iptc_sync_verify.py` / [`IPTC_SYNC_VERIFICATION.md`](IPTC_SYNC_VERIFICATION.md) §A）  
-- DxO UI 表示（一方向）: **PASS・運用確定**（同 §B9。プレビュー IPTC でも一致確認）。`.dop` / `.xmp` は使わない。
+- DxO UI 表示（一方向）: **PASS・運用確定**（同 §B9。プレビュー IPTC でも一致確認）  
+- DxO → ファイル（双方向・H3）: **PASS**（同 §B10。Rating／コメントが JPEG にリアルタイム反映）。`.dop` / `.xmp` は使わない。
 
 ---
 
@@ -78,7 +79,7 @@
 ### 1.3 成功条件（R1′-A）
 
 1. バッチが M1→M2→M3 を実行し、対象 JPEG に Rating／説明が書き込まれる  
-2. DxO 等で Rating 一覧を確認・修正できる（H3。同期は要検証）  
+2. DxO 等で Rating 一覧を確認・修正できる（H3。同期は §B9/B10 で PASS）  
 3. 本アプリは **Works へのコピー機能を持たない**（書き出しは DxO 等）  
 4. Works（またはユーザーが置いた確定フォルダ）上の `{stem}_dev.jpg`（なければ撮って出し）にカード／ノート／ログを付けられる  
 5. バッチ結果の監査ログ（DecisionDelta 相当）が残る  
@@ -176,7 +177,7 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 [M3] （多様性／上位の短い理由）
 ```
 
-既存のユーザー文がある場合は消さない（追記またはブロック置換。実装で一方に固定）。
+既存のユーザー文がある場合は消さない。実装は **ブロック置換** に固定（`iptc_rating_io.upsert_stage_reason`）。
 
 ---
 
@@ -375,8 +376,7 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 | `shortlist_mechanical.py` | M1 |
 | `shortlist_antenna.py` | M2 |
 | `shortlist_diversity.py` | M3 |
-| `iptc_rating_writer.py` | JPEG への Rating／説明書き込み（exiftool 等）。フィールド対応を単一ソース化 |
-| `iptc_rating_reader.py`（仮） | JPEG からの Rating／説明読み取り（講評・再スキャン用。`.dop` に依存しない） |
+| `iptc_rating_io.py` | JPEG の Rating／説明 読み書き単一ソース（exiftool）。`[M2]`/`[M3]` ブロック置換 API |
 | `delta_log.py` | 監査 |
 | `trace_from_works.py` | Works 指定の痕跡生成 |
 | 既存コア | scanner（撮影 EXIF）/ critique_engine / card / DesktopLogManager。scanner の `.dop` 優先は同期確立後に JPEG 正へ移行 |
@@ -414,3 +414,4 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 | 2026-08-11 | **§0 メタ一次ソースを確定方針として追記**（短絡=JPEG Rating+Description、講評=画+撮影EXIF、同期成立時は dop/xmp 不使用）。検証チェックリスト追加 |
 | 2026-08-11 | ファイル側 IPTC ラウンドトリップ検証済。検証ドキュメント・R1′-A 実装タスク分解を追加 |
 | 2026-08-11 | **DxO／プレビュー一方向 PASS。§0 運用確定**（dop/xmp 不使用） |
+| 2026-08-11 | **双方向 PASS**（DxO の Rating／コメントが JPEG にリアルタイム反映）。T1 `iptc_rating_io` 実装 |
