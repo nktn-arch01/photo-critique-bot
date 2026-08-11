@@ -22,10 +22,12 @@ def extract_jpeg_metadata(image_path: Path) -> dict:
         "iso": exif_meta.get("iso", "不明"),
         "focal_length": exif_meta.get("focal_length", "不明"),
         "user_intent": exif_meta.get("user_intent", "なし"),
-        "category": dop_info.get("category") or "なし",
-        "headline": dop_info.get("content_headline") or "なし",
-        "other_categories": dop_info.get("other_categories") or "なし",
-        "subject_code": dop_info.get("subject_code") or "なし",
+        "rating_str": exif_meta.get("rating_str", dop_info.get("rating_str") or "なし"),
+        "rating_source": exif_meta.get("rating_source", "none"),
+        "category": exif_meta.get("category") or dop_info.get("category") or "なし",
+        "headline": exif_meta.get("content_headline") or dop_info.get("content_headline") or "なし",
+        "other_categories": exif_meta.get("other_categories") or dop_info.get("other_categories") or "なし",
+        "subject_code": exif_meta.get("subject_code") or dop_info.get("subject_code") or "なし",
     }
 
 

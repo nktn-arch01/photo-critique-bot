@@ -101,9 +101,10 @@ def complete_with_image_openai(
     temperature: float = 0.7,
     image_detail: str = "low",
     system_prompt: str | None = None,
+    max_side: int | None = None,
 ) -> str:
     client = get_openai_client()
-    raw, mime = prepare_vision_image_bytes(image_path)
+    raw, mime = prepare_vision_image_bytes(image_path, max_side=max_side)
     b64 = base64.b64encode(raw).decode("utf-8")
     image_url_data = f"data:{mime};base64,{b64}"
 
@@ -140,6 +141,7 @@ def complete_with_image_gemini(
     max_tokens: int = 800,
     temperature: float = 0.7,
     system_prompt: str | None = None,
+    max_side: int | None = None,
 ) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -170,7 +172,7 @@ def complete_with_image_gemini(
         if system_instruction
         else genai.GenerativeModel(model_name)
     )
-    raw, mime = prepare_vision_image_bytes(image_path)
+    raw, mime = prepare_vision_image_bytes(image_path, max_side=max_side)
     image_part = {"mime_type": mime, "data": raw}
 
     response = gemini_model.generate_content(
@@ -194,6 +196,8 @@ def complete_with_image(
     max_tokens: int = 800,
     temperature: float = 0.7,
     system_prompt: str | None = None,
+    max_side: int | None = None,
+    image_detail: str = "low",
 ) -> str:
     if provider == "openai":
         openai_model = model or DEFAULT_OPENAI_MODEL
@@ -204,6 +208,8 @@ def complete_with_image(
             max_tokens=max_tokens,
             temperature=temperature,
             system_prompt=system_prompt,
+            max_side=max_side,
+            image_detail=image_detail,
         )
     if provider == "gemini":
         return complete_with_image_gemini(
@@ -213,6 +219,7 @@ def complete_with_image(
             max_tokens=max_tokens,
             temperature=temperature,
             system_prompt=system_prompt,
+            max_side=max_side,
         )
     raise ValueError(f"未対応の Vision プロバイダ: {provider}")
 

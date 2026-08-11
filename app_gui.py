@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 import re
 import threading
 import subprocess
@@ -18,9 +17,9 @@ from card_theme import (
     card_theme_label,
     normalize_card_theme,
 )
+from desktop_config import load_config as load_shared_config, save_config_merge
+from desktop_ui import schedule_on_ui
 from scanner import extract_file_metadata, SUPPORTED_IMAGE_SUFFIXES
-
-CONFIG_FILE = Path.home() / ".photo_ai_config.json"  # 仕様: ユーザーホーム直下（プロジェクト外）
 
 
 class PhotoAICritiqueApp:
@@ -44,31 +43,29 @@ class PhotoAICritiqueApp:
         self.setup_ui()
 
     def load_config(self) -> dict:
-        default_dir = str(Path.home() / "Desktop")
-        if CONFIG_FILE.exists():
-            try:
-                data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-                return {
-                    "last_dir": data.get("last_dir", default_dir),
-                    "force_overwrite": data.get("force_overwrite", False),
-                    "card_theme": normalize_card_theme(data.get("card_theme", DEFAULT_CARD_THEME)),
-                }
-            except Exception:
-                pass
-        return {
-            "last_dir": default_dir,
-            "force_overwrite": False,
-            "card_theme": DEFAULT_CARD_THEME,
-        }
+        """共有設定を読む。短絡 GUI 等が書いたキーは落とさない。"""
+        cfg = load_shared_config(
+            defaults={
+                "force_overwrite": False,
+                "card_theme": DEFAULT_CARD_THEME,
+            }
+        )
+        cfg["force_overwrite"] = bool(cfg.get("force_overwrite", False))
+        cfg["card_theme"] = normalize_card_theme(cfg.get("card_theme", DEFAULT_CARD_THEME))
+        return cfg
 
     def save_config(self, target_dir_str: str):
+        """更新キーだけ merge して保存（shortlist_last_dir / works_last_dir 等を保持）。"""
         try:
-            self.config["last_dir"] = target_dir_str
-            self.config["force_overwrite"] = self.force_overwrite_var.get()
-            self.config["card_theme"] = normalize_card_theme(self.card_theme_var.get())
-            tmp_file = CONFIG_FILE.with_suffix(".tmp")
-            tmp_file.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding="utf-8")
-            tmp_file.replace(CONFIG_FILE)
+            merged = save_config_merge(
+                {
+                    "last_dir": target_dir_str,
+                    "force_overwrite": self.force_overwrite_var.get(),
+                    "card_theme": normalize_card_theme(self.card_theme_var.get()),
+                },
+                current=self.config,
+            )
+            self.config = merged
         except Exception as e:
             self.log(f"⚠️ 設定の保存に失敗しました: {e}")
 
@@ -191,6 +188,10 @@ class PhotoAICritiqueApp:
             self.save_config(selected)
             self.log(f"📁 処理対象フォルダを変更しました: {selected}")
 
+    def _ui(self, fn) -> None:
+        """ワーカー→UI。ウィンドウ破棄後は何もしない（L1）。"""
+        schedule_on_ui(self.root, fn)
+
     def log(self, message: str):
         def _append():
             self.log_text.config(state=tk.NORMAL)
@@ -202,7 +203,7 @@ class PhotoAICritiqueApp:
                 
             self.log_text.see(tk.END)
             self.log_text.config(state=tk.DISABLED)
-        self.root.after(0, _append)
+        self._ui(_append)
 
     def request_cancel(self):
         if self.is_running:
@@ -305,7 +306,7 @@ class PhotoAICritiqueApp:
                 file_name = img_path.name
                 
                 progress_pct = (idx / total) * 100
-                self.root.after(0, lambda p=progress_pct, i=idx, t=total, fn=file_name: [
+                self._ui(lambda p=progress_pct, i=idx, t=total, fn=file_name: [
                     self.progress_bar.config(value=p),
                     self.status_label.config(text=f"処理中... ({i}/{t}): {fn}")
                 ])
@@ -318,7 +319,7 @@ class PhotoAICritiqueApp:
                 self.log(f"📸 [{idx}/{total}] 処理中: {file_name}")
 
                 try:
-                    self.log("   └─ EXIF / .dop メタデータ抽出中 (scanner.py)...")
+                    self.log("   └─ EXIF / JPEG Rating・説明 抽出中 (scanner.py, JPEG正)...")
                     exif_meta, dop_info, metadata_block = extract_file_metadata(img_path)
 
                     self.log("   └─ AI講評生成中 (OpenAI gpt-4o-mini)...")
@@ -350,13 +351,13 @@ class PhotoAICritiqueApp:
             self.log(f"🎉 バッチ処理{status_text_res}! (新規処理: {processed_count} / スキップ: {skipped_count} / エラー: {error_count})")
             self.log("=" * 50)
 
-            self.root.after(0, lambda p=processed_count, s=skipped_count, e=error_count, st=status_text_res: [
+            self._ui(lambda p=processed_count, s=skipped_count, e=error_count, st=status_text_res: [
                 self.status_label.config(text=f"処理{st} (新規: {p} 件 / スキップ: {s} 件 / エラー: {e} 件)"),
                 self.show_completion_dialog(target_dir, p, s, e, st)
             ])
 
         finally:
-            self.root.after(0, self.reset_ui)
+            self._ui(self.reset_ui)
 
     def reset_ui(self):
         self.is_running = False
