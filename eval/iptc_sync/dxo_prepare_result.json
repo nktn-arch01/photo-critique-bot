@@ -1,0 +1,15 @@
+{
+  "jpeg": "eval/iptc_sync/dxo_probe/dxo_probe_sample.jpg",
+  "expected_rating": 3,
+  "expected_description": "[M2] Lumina sync test reason\n[M3] diversity placeholder",
+  "read_tags": {
+    "Rating": "3",
+    "RatingPercent": "60",
+    "ImageDescription": "[M2] Lumina sync test reason\n[M3] diversity placeholder",
+    "Description": "[M2] Lumina sync test reason\n[M3] diversity placeholder",
+    "Caption-Abstract": "[M2] Lumina sync test reason\n[M3] diversity placeholder"
+  },
+  "rating_ok": true,
+  "description_ok": true,
+  "passed": true
+}

@@ -16,4 +16,5 @@ eval/phase_d/out/
 
 # IPTC sync: generated JPEGs ignored via *.jpg; keep committed result JSON if present
 !eval/iptc_sync/roundtrip_result.json
+!eval/iptc_sync/dxo_prepare_result.json
 !eval/iptc_sync/.gitkeep

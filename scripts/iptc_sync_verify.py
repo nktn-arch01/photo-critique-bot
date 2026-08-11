@@ -129,11 +129,49 @@ def main() -> int:
         default=Path("eval/iptc_sync/roundtrip_result.json"),
         help="結果 JSON の出力先",
     )
+    parser.add_argument(
+        "--prepare-dxo",
+        action="store_true",
+        help=(
+            "DxO 手動検証用に、書き込み済み JPEG を eval/iptc_sync/dxo_probe/ に残す。"
+            "--jpeg 指定時はそのコピー、未指定時はサンプルを作成する。"
+        ),
+    )
     args = parser.parse_args()
 
     require_exiftool()
 
     tmp_dir = None
+    prepare_dir = Path("eval/iptc_sync/dxo_probe")
+
+    if args.prepare_dxo:
+        prepare_dir.mkdir(parents=True, exist_ok=True)
+        if args.jpeg:
+            if not args.jpeg.is_file():
+                print(f"file not found: {args.jpeg}", file=sys.stderr)
+                return 2
+            jpeg = prepare_dir / args.jpeg.name
+            shutil.copy2(args.jpeg, jpeg)
+        else:
+            jpeg = prepare_dir / "dxo_probe_sample.jpg"
+            make_sample_jpeg(jpeg)
+        result = verify_roundtrip(jpeg, args.rating, args.description)
+        args.out_json = Path("eval/iptc_sync/dxo_prepare_result.json")
+        args.out_json.parent.mkdir(parents=True, exist_ok=True)
+        args.out_json.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(f"\nWrote {args.out_json}")
+        print(f"\n=== DxO で開くフォルダ ===\n{jpeg.resolve().parent}")
+        print(f"対象ファイル: {jpeg.resolve()}")
+        print(f"期待 Rating: {args.rating}")
+        print(f"期待 説明:\n{args.description}")
+        print(
+            "\n次: docs/IPTC_SYNC_VERIFICATION.md の「B. DxO 手順（詳細）」に進んでください。"
+        )
+        return 0 if result["passed"] else 1
+
     if args.jpeg:
         jpeg = args.jpeg
         if not jpeg.is_file():
