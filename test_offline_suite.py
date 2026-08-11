@@ -590,6 +590,93 @@ def test_library_unit_discover_and_list_jpegs():
     shutil.rmtree(root, ignore_errors=True)
 
 
+def _make_grid_image(size=(320, 240)) -> Image.Image:
+    from PIL import ImageDraw
+
+    img = Image.new("RGB", size, (40, 40, 40))
+    draw = ImageDraw.Draw(img)
+    for x in range(0, size[0], 3):
+        draw.line([(x, 0), (x, size[1])], fill=(220, 220, 220))
+    for y in range(0, size[1], 3):
+        draw.line([(0, y), (size[0], y)], fill=(180, 180, 180))
+    return img
+
+
+def test_mechanical_m1_blur_and_intent_protect():
+    """T3: ブレ不合格、意図保護で合格、白飛び不合格。閾値は設定化。"""
+    import shutil
+    from PIL import ImageFilter
+
+    from iptc_rating_io import ExifToolNotFoundError, read_shortlist_meta, require_exiftool
+    from shortlist_mechanical import (
+        CaptureSettings,
+        MechanicalConfig,
+        evaluate_mechanical,
+        run_mechanical_on_paths,
+    )
+
+    td = Path(tempfile.mkdtemp(prefix="m1_t3_"))
+    sharp_p = td / "sharp.jpg"
+    blur_p = td / "blur.jpg"
+    white_p = td / "white.jpg"
+    black_p = td / "black.jpg"
+
+    sharp = _make_grid_image()
+    sharp.save(sharp_p, "JPEG", quality=95)
+    sharp.filter(ImageFilter.GaussianBlur(12)).save(blur_p, "JPEG", quality=95)
+    Image.new("RGB", (200, 150), (250, 250, 250)).save(white_p, "JPEG", quality=95)
+    Image.new("RGB", (200, 150), (5, 5, 5)).save(black_p, "JPEG", quality=95)
+
+    cfg = MechanicalConfig()
+    assert evaluate_mechanical(sharp_p, cfg).rating == 1
+    assert evaluate_mechanical(blur_p, cfg).rating == 0
+    assert "fail_blur" in evaluate_mechanical(blur_p, cfg).reason_codes
+    assert evaluate_mechanical(white_p, cfg).rating == 0
+    assert evaluate_mechanical(black_p, cfg).rating == 0
+
+    # 低速 SS / 意図的アンダーで保護
+    blur_ok = evaluate_mechanical(
+        blur_p, cfg, capture=CaptureSettings(exposure_time_sec=1 / 10)
+    )
+    assert blur_ok.rating == 1 and blur_ok.intent_protected
+    under_ok = evaluate_mechanical(
+        black_p, cfg, capture=CaptureSettings(exposure_bias_ev=-1.0)
+    )
+    assert under_ok.rating == 1
+    open_ok = evaluate_mechanical(
+        blur_p, cfg, capture=CaptureSettings(f_number=1.8)
+    )
+    assert open_ok.rating == 1
+
+    # 閾値を極端に上げるとシャープも不合格（設定化の確認）
+    strict = MechanicalConfig(min_sharpness=1_000_000.0)
+    assert evaluate_mechanical(sharp_p, strict).rating == 0
+
+    # バッチ: 1枚壊しても継続。画素サイズは不変
+    bad = td / "missing.jpg"
+    before = Image.open(sharp_p).size
+    batch = run_mechanical_on_paths([sharp_p, bad, blur_p], cfg, write=False)
+    assert len(batch.decisions) == 3
+    assert batch.errors >= 1
+    assert batch.pass_count == 1
+    assert batch.fail_count == 1
+    assert Image.open(sharp_p).size == before
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip m1 write check: exiftool missing")
+        shutil.rmtree(td, ignore_errors=True)
+        return
+
+    written = run_mechanical_on_paths([sharp_p, blur_p], cfg, write=True)
+    assert written.written == 2
+    assert read_shortlist_meta(sharp_p).rating == 1
+    assert read_shortlist_meta(blur_p).rating == 0
+    assert Image.open(sharp_p).size == before
+    shutil.rmtree(td, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -613,6 +700,7 @@ def run_all():
     test_iptc_rating_description_roundtrip()
     test_library_unit_naming_rules()
     test_library_unit_discover_and_list_jpegs()
+    test_mechanical_m1_blur_and_intent_protect()
     print("test_offline_suite: OK")
 
 

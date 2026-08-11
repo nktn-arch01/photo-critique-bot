@@ -232,6 +232,7 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 ### 6.4 M1 の意図保護（閾値は実装詳細）
 
 - 低速シャッター、開放寄り、意図的アンダー（RAW のハイライト保護を含む）を機械不合格から守る余地を持つ。
+- 実装: [`shortlist_mechanical.py`](../shortlist_mechanical.py) の `MechanicalConfig`（`slow_shutter_sec` / `open_aperture_max_f` / `intentional_under_ev` 等）。ブレ指標は Laplacian 分散。
 
 ### 6.5 コスト分離
 
@@ -416,3 +417,4 @@ M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
 | 2026-08-11 | **DxO／プレビュー一方向 PASS。§0 運用確定**（dop/xmp 不使用） |
 | 2026-08-11 | **双方向 PASS**（DxO の Rating／コメントが JPEG にリアルタイム反映）。T1 `iptc_rating_io` 実装 |
 | 2026-08-11 | T2 `library_unit`（月／イベント規則・JPEG 列挙）実装 |
+| 2026-08-11 | T3 `shortlist_mechanical`（M1: 足切り＋意図保護、Rating 0/1）実装 |
