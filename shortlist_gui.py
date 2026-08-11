@@ -17,14 +17,18 @@ from tkinter import filedialog, messagebox, ttk
 
 from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
 from delta_log import (
-    latest_session_path,
-    list_session_paths,
     load_session,
     record_post_h3,
     summarize_session,
 )
 from desktop_config import load_config as load_shared_config, save_config_merge
-from library_unit import list_source_jpegs, resolve_unit, unit_from_dir
+from library_unit import (
+    is_works_month_folder_name,
+    list_source_jpegs,
+    resolve_session_for_unit,
+    resolve_unit,
+    unit_from_dir,
+)
 from shortlist_pipeline import PipelineConfig, PipelineProgress, ShortlistPipeline
 from trace_from_works import TraceConfig, TraceProgress, WorksTraceRunner, list_works_trace_targets
 
@@ -81,10 +85,10 @@ class ShortlistApp:
         ttk.Label(
             info,
             text=(
-                "1. 月（YYYYMM）またはイベント（YYYYMMDD_名前）フォルダを選ぶ\n"
+                "1. オリジナルの月（YYYYMM または OM202606 等）／イベント（…DD_名前）を選ぶ\n"
                 "2. 短絡バッチ（M1→M2→M3）を実行 → JPEG に Rating / 説明が付く\n"
                 "3. DxO で確認・修正したあと「修正後を記録」で前後比較を残す\n"
-                "4. DxO から Works へ書き出したあと、下の「痕跡生成」でカード／ノートを付ける"
+                "4. Works の月フォルダ（YYYYMM のみ）を選び、痕跡（カード／ノート）を付ける"
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
@@ -179,8 +183,9 @@ class ShortlistApp:
         ttk.Label(
             works,
             text=(
-                "DxO 等が書き出した確定フォルダを指定します。"
-                "同一コマは {stem}_dev.jpg を優先し、なければ撮って出し .jpg を使います。"
+                "Works は月フォルダ YYYYMM のみ（例: ~/2026/202606）。"
+                "イベント用サブフォルダは使いません。"
+                "同一コマは {stem}_dev.jpg を優先し、なければ撮って出し .jpg。"
                 "ファイルのコピーはしません。"
             ),
             wraplength=640,
@@ -251,11 +256,16 @@ class ShortlistApp:
         current = self.works_dir_var.get()
         initial = current if Path(current).exists() else str(Path.home())
         selected = filedialog.askdirectory(
-            initialdir=initial, title="Works（確定 JPEG）フォルダを選択"
+            initialdir=initial, title="Works 月フォルダ（YYYYMM）を選択"
         )
         if selected:
             self.works_dir_var.set(selected)
             self.save_config(works_dir=selected)
+            name = Path(selected).name
+            if not is_works_month_folder_name(name):
+                self.log(
+                    f"Works フォルダ: {selected}（注意: 名前が YYYYMM ではありません: {name}）"
+                )
             try:
                 n = len(list_works_trace_targets(Path(selected)))
                 self.log(f"Works フォルダ: {selected}（痕跡対象 {n} 枚）")
@@ -278,7 +288,8 @@ class ShortlistApp:
         self.root.after(0, lambda: self.status_label.config(text=text))
 
     def _refresh_session_label(self, unit_dir: Path) -> None:
-        latest = latest_session_path(unit_dir)
+        """表示用: この unit 配下の最新セッション。"""
+        latest = resolve_session_for_unit(unit_dir, self.last_session_path)
         self.last_session_path = latest
         if latest:
             self.session_label.config(text=f"セッション: {latest.name}")
@@ -316,7 +327,8 @@ class ShortlistApp:
         if unit is None:
             messagebox.showerror(
                 "フォルダ名エラー",
-                "月（YYYYMM）またはイベント（YYYYMMDD_名前）のフォルダを選んでください。\n"
+                "月（YYYYMM または OM202606 等の XXYYYYMM）か、\n"
+                "イベント（YYYYMMDD_名前 または OM20260615_旅行 等）を選んでください。\n"
                 f"現在: {target.name}",
             )
             return
@@ -329,20 +341,27 @@ class ShortlistApp:
             messagebox.showwarning("警告", f"直下に JPEG がありません:\n{target}")
             return
 
+        # M3: 開始時点の UI 値をスナップショット（ワーカーは Tk 変数を読まない）
+        opts = {
+            "run_m1": bool(self.var_m1.get()),
+            "run_m2": bool(self.var_m2.get()),
+            "run_m3": bool(self.var_m3.get()),
+            "dry": bool(self.var_dry.get()),
+        }
         stages = []
-        if self.var_m1.get():
+        if opts["run_m1"]:
             stages.append("M1")
-        if self.var_m2.get():
+        if opts["run_m2"]:
             stages.append("M2")
-        if self.var_m3.get():
+        if opts["run_m3"]:
             stages.append("M3")
-        dry = self.var_dry.get()
         if not messagebox.askyesno(
             "実行確認",
-            f"対象: {unit.kind} / {unit.unit_id}\n"
-            f"JPEG: {len(jpegs)} 枚\n"
+            f"対象: {unit.kind} / {unit.unit_id}"
+            + (f"（機種 {unit.camera_code}）" if unit.camera_code else "")
+            + f"\nJPEG: {len(jpegs)} 枚\n"
             f"段: {', '.join(stages)}\n"
-            f"書き込み: {'しない（ドライラン）' if dry else 'する'}\n\n"
+            f"書き込み: {'しない（ドライラン）' if opts['dry'] else 'する'}\n\n"
             "短絡バッチを開始しますか？",
         ):
             return
@@ -358,9 +377,9 @@ class ShortlistApp:
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
         self.progress.start(12)
-        threading.Thread(target=self._run_batch, args=(target,), daemon=True).start()
+        threading.Thread(target=self._run_batch, args=(target, opts), daemon=True).start()
 
-    def _run_batch(self, target: Path) -> None:
+    def _run_batch(self, target: Path, opts: dict) -> None:
         try:
             def on_progress(p: PipelineProgress) -> None:
                 self.log(f"[{p.stage}] {p.message}")
@@ -368,10 +387,10 @@ class ShortlistApp:
 
             self.pipeline = ShortlistPipeline(
                 PipelineConfig(
-                    write=not self.var_dry.get(),
-                    run_m1=self.var_m1.get(),
-                    run_m2=self.var_m2.get(),
-                    run_m3=self.var_m3.get(),
+                    write=not opts["dry"],
+                    run_m1=opts["run_m1"],
+                    run_m2=opts["run_m2"],
+                    run_m3=opts["run_m3"],
                     persist_session=True,
                 ),
                 on_progress=on_progress,
@@ -435,6 +454,13 @@ class ShortlistApp:
         if not works.is_dir():
             messagebox.showerror("エラー", f"Works フォルダがありません:\n{works}")
             return
+        if not is_works_month_folder_name(works.name):
+            messagebox.showerror(
+                "フォルダ名エラー",
+                "Works 痕跡の対象は月フォルダ YYYYMM のみです。\n"
+                f"例: ~/2026/202606\n現在: {works.name}",
+            )
+            return
         try:
             targets = list_works_trace_targets(works)
         except Exception as e:
@@ -448,21 +474,23 @@ class ShortlistApp:
             )
             return
 
-        mode = self.trace_mode_var.get()
-        theme = normalize_card_theme(self.trace_theme_var.get())
-        force = self.trace_force_var.get()
+        opts = {
+            "mode": self.trace_mode_var.get(),
+            "theme": normalize_card_theme(self.trace_theme_var.get()),
+            "force": bool(self.trace_force_var.get()),
+        }
         if not messagebox.askyesno(
             "痕跡生成の確認",
             f"Works: {works}\n"
             f"対象: {len(targets)} 枚（_dev 優先）\n"
-            f"モード: {mode} / テーマ: {theme}\n"
-            f"上書き: {'する' if force else 'しない'}\n\n"
+            f"モード: {opts['mode']} / テーマ: {opts['theme']}\n"
+            f"上書き: {'する' if opts['force'] else 'しない'}\n\n"
             "ファイルのコピーは行いません。\n痕跡生成を開始しますか？",
         ):
             return
 
-        self.config["card_theme"] = theme
-        self.config["force_overwrite"] = force
+        self.config["card_theme"] = opts["theme"]
+        self.config["force_overwrite"] = opts["force"]
         self.save_config(works_dir=str(works))
         self.is_running = True
         self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
@@ -474,9 +502,9 @@ class ShortlistApp:
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
         self.progress.start(12)
-        threading.Thread(target=self._run_trace, args=(works,), daemon=True).start()
+        threading.Thread(target=self._run_trace, args=(works, opts), daemon=True).start()
 
-    def _run_trace(self, works: Path) -> None:
+    def _run_trace(self, works: Path, opts: dict) -> None:
         try:
             def on_progress(p: TraceProgress) -> None:
                 self.log(f"[trace/{p.stage}] {p.message}")
@@ -484,9 +512,9 @@ class ShortlistApp:
 
             self.trace_runner = WorksTraceRunner(
                 TraceConfig(
-                    mode=self.trace_mode_var.get(),
-                    force_overwrite=self.trace_force_var.get(),
-                    card_theme=self.trace_theme_var.get(),
+                    mode=opts["mode"],
+                    force_overwrite=opts["force"],
+                    card_theme=opts["theme"],
                     pixel_priority=True,
                 ),
                 on_progress=on_progress,
@@ -521,51 +549,80 @@ class ShortlistApp:
             self.root.after(0, self.reset_ui)
 
     def record_h3_after(self) -> None:
+        if self.is_running:
+            messagebox.showwarning("実行中", "別の処理が終わるまでお待ちください。")
+            return
         target = Path(self.dir_var.get().strip())
         if not target.is_dir():
             messagebox.showerror("エラー", "先に対象フォルダを選んでください。")
             return
-        session = self.last_session_path or latest_session_path(target)
-        if session is None or not session.is_file():
-            paths = list_session_paths(target)
-            if not paths:
-                messagebox.showwarning(
-                    "セッションなし",
-                    "このフォルダに短絡セッションがありません。\n先に短絡バッチを実行してください。",
-                )
-                return
-            session = paths[-1]
+        # M2: 手編集でずれても、必ず当該フォルダ配下のセッションだけを使う
+        session = resolve_session_for_unit(target, self.last_session_path)
+        if session is None:
+            messagebox.showwarning(
+                "セッションなし",
+                "このフォルダに短絡セッションがありません。\n先に短絡バッチを実行してください。",
+            )
+            return
 
         if not messagebox.askyesno(
             "DxO修正後の記録",
+            f"フォルダ:\n{target}\n\n"
             f"セッション:\n{session.name}\n\n"
             "いまの JPEG（DxO で直した内容）を読み取り、\n"
-            "修正前（バッチ直後）との差分を記録します。\n続行しますか？",
+            "修正前（バッチ直後）との差分を記録します。\n"
+            "（ファイルのコピーはしません）\n続行しますか？",
         ):
             return
 
+        self.is_running = True
+        self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_cancel.config(state=tk.DISABLED)
+        self.btn_browse.config(state=tk.DISABLED)
+        self.btn_h3.config(state=tk.DISABLED)
+        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_browse_works.config(state=tk.DISABLED)
+        self.dir_entry.config(state=tk.DISABLED)
+        self.works_entry.config(state=tk.DISABLED)
+        self.progress.start(12)
+        self._set_status("DxO修正後を記録中…")
+        threading.Thread(
+            target=self._run_record_h3, args=(target, session), daemon=True
+        ).start()
+
+    def _run_record_h3(self, target: Path, session: Path) -> None:
         try:
             unit = resolve_unit(target)
+            self.log(f"DxO修正後を記録開始: {session.name}")
             doc = record_post_h3(session, unit=unit)
             delta = doc.get("h3_delta") or {}
             self.last_session_path = session
-            self._refresh_session_label(target)
             self.log(
                 f"DxO修正後を記録: changed={delta.get('changed_count')} "
                 f"unchanged={delta.get('unchanged_count')} "
                 f"transitions={delta.get('transitions')}"
             )
-            messagebox.showinfo(
-                "記録完了",
-                "DxO 修正後を記録しました。\n\n"
-                f"変化した枚数: {delta.get('changed_count', 0)}\n"
-                f"変化なし: {delta.get('unchanged_count', 0)}\n"
-                f"遷移: {delta.get('transitions')}\n\n"
-                f"ファイル:\n{session}",
-            )
+
+            def _done() -> None:
+                self._refresh_session_label(target)
+                self.status_label.config(text="DxO修正後を記録済み")
+                messagebox.showinfo(
+                    "記録完了",
+                    "DxO 修正後を記録しました。\n\n"
+                    f"変化した枚数: {delta.get('changed_count', 0)}\n"
+                    f"変化なし: {delta.get('unchanged_count', 0)}\n"
+                    f"遷移: {delta.get('transitions')}\n\n"
+                    f"フォルダ:\n{target}\n"
+                    f"ファイル:\n{session}",
+                )
+
+            self.root.after(0, _done)
         except Exception as e:
-            messagebox.showerror("エラー", str(e))
-            self.log(f"H3記録エラー: {e}")
+            err_msg = str(e)
+            self.log(f"H3記録エラー: {err_msg}")
+            self.root.after(0, lambda msg=err_msg: messagebox.showerror("エラー", msg))
+        finally:
+            self.root.after(0, self.reset_ui)
 
     def open_sessions_folder(self) -> None:
         target = Path(self.dir_var.get().strip())

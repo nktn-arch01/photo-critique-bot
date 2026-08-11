@@ -1,14 +1,19 @@
 """ライブラリ単位（月 / イベント）の識別と JPEG 列挙.
 
-規則（LUMINA_NOTES_SERVICE_CONCEPT §5 / R1′ LibraryUnit）:
+規則（[`R1A_DESKTOP_OPS_POLICY.md`](docs/R1A_DESKTOP_OPS_POLICY.md)）:
 
-- 月フォルダ名: ``YYYYMM``（実在する年月）
-- イベントフォルダ名: ``YYYYMMDD_短い名前``
+オリジナル（短絡対象）:
+
+- 月: ``YYYYMM`` または ``XXYYYYMM``（``XX`` = 機種2文字、例 ``OM`` / ``FF``）
+- イベント: ``YYYYMMDD_短い名前`` または ``XXYYYYMMDD_短い名前``
   - スペースなし。日本語可。記号は ``_`` と ``-`` 以外を避ける
   - このパターンに一致するサブフォルダだけをイベント単位とする
-  - 一致しないサブフォルダはイベント扱いしない
 - 月単位の画像: 月フォルダ直下のバラ JPEG（イベント配下は含めない）
 - イベント単位の画像: そのイベントフォルダ直下の JPEG
+
+Works（痕跡対象・ユーザー自作）:
+
+- **月 ``YYYYMM`` のみ**（接頭辞なし。イベントサブフォルダは作らない）
 
 短絡バッチの書き込み対象は主に JPEG（``.jpg`` / ``.jpeg``）。
 ``.dop`` / ``.xmp`` は扱わない。
@@ -24,9 +29,11 @@ from typing import Iterator, Literal
 
 UnitKind = Literal["month", "event"]
 
-MONTH_NAME_RE = re.compile(r"^(\d{4})(\d{2})$")
-# 表示名: 空白なし。英数字・日本語等の単語文字と _ - のみ
-EVENT_NAME_RE = re.compile(r"^(\d{8})_([^\s]+)$")
+# 接頭辞なし（後方互換）と XX 接頭辞（実運用）
+MONTH_PLAIN_RE = re.compile(r"^(\d{4})(\d{2})$")
+MONTH_PREFIXED_RE = re.compile(r"^([A-Za-z]{2})(\d{4})(\d{2})$")
+EVENT_PLAIN_RE = re.compile(r"^(\d{8})_([^\s]+)$")
+EVENT_PREFIXED_RE = re.compile(r"^([A-Za-z]{2})(\d{8})_([^\s]+)$")
 EVENT_DISPLAY_RE = re.compile(r"^[\w\-]+$", re.UNICODE)
 
 SHORTLIST_JPEG_SUFFIXES = frozenset({".jpg", ".jpeg"})
@@ -40,8 +47,9 @@ class LibraryUnit:
     unit_id: str
     path: Path
     display_name: str
-    month_id: str | None = None
+    month_id: str | None = None  # 暦の YYYYMM（Works 対応・集計用。接頭辞なし）
     start_date: date | None = None
+    camera_code: str | None = None  # XX（接頭辞なしなら None）
 
     @property
     def is_month(self) -> bool:
@@ -50,6 +58,11 @@ class LibraryUnit:
     @property
     def is_event(self) -> bool:
         return self.kind == "event"
+
+    @property
+    def works_month_id(self) -> str | None:
+        """対応する Works 月フォルダ名（YYYYMM）。"""
+        return self.month_id
 
 
 def _valid_calendar_month(year: int, month: int) -> bool:
@@ -63,39 +76,80 @@ def _parse_yyyymmdd(text: str) -> date | None:
         return None
 
 
+def is_works_month_folder_name(name: str) -> bool:
+    """Works 痕跡対象: 接頭辞なし ``YYYYMM`` のみ。"""
+    m = MONTH_PLAIN_RE.fullmatch(name)
+    if not m:
+        return False
+    year, month = int(m.group(1)), int(m.group(2))
+    return _valid_calendar_month(year, month)
+
+
 def is_month_folder_name(name: str) -> bool:
-    """フォルダ名が月規則 ``YYYYMM`` か。"""
+    """フォルダ名が月規則（``YYYYMM`` または ``XXYYYYMM``）か。"""
     return try_parse_month_name(name) is not None
 
 
 def try_parse_month_name(name: str) -> str | None:
-    m = MONTH_NAME_RE.fullmatch(name)
-    if not m:
+    """成功時はフォルダ名そのもの（unit_id）を返す。"""
+    m = MONTH_PLAIN_RE.fullmatch(name)
+    if m:
+        year, month = int(m.group(1)), int(m.group(2))
+        if _valid_calendar_month(year, month):
+            return name
         return None
-    year, month = int(m.group(1)), int(m.group(2))
-    if not _valid_calendar_month(year, month):
+    m = MONTH_PREFIXED_RE.fullmatch(name)
+    if m:
+        year, month = int(m.group(2)), int(m.group(3))
+        if _valid_calendar_month(year, month):
+            return name
         return None
-    return name
+    return None
+
+
+def calendar_month_id_from_folder_name(name: str) -> str | None:
+    """フォルダ名から暦の ``YYYYMM`` を取り出す（接頭辞があれば除去）。"""
+    m = MONTH_PLAIN_RE.fullmatch(name)
+    if m and _valid_calendar_month(int(m.group(1)), int(m.group(2))):
+        return name
+    m = MONTH_PREFIXED_RE.fullmatch(name)
+    if m and _valid_calendar_month(int(m.group(2)), int(m.group(3))):
+        return f"{m.group(2)}{m.group(3)}"
+    parsed = try_parse_event_name(name)
+    if parsed is not None:
+        _uid, _disp, start, _code = parsed
+        return month_id_from_event_start(start)
+    return None
 
 
 def is_event_folder_name(name: str) -> bool:
-    """フォルダ名がイベント規則 ``YYYYMMDD_短い名前`` か。"""
+    """フォルダ名がイベント規則か。"""
     return try_parse_event_name(name) is not None
 
 
-def try_parse_event_name(name: str) -> tuple[str, str, date] | None:
-    """成功時: (unit_id, display_name, start_date)。"""
-    m = EVENT_NAME_RE.fullmatch(name)
-    if not m:
-        return None
-    ymd, display = m.group(1), m.group(2)
-    if not EVENT_DISPLAY_RE.fullmatch(display):
-        return None
-    # 表示名だけの余分なルール: 先頭末尾の _- は許容するが空は不可（正規表現で担保）
-    start = _parse_yyyymmdd(ymd)
-    if start is None:
-        return None
-    return name, display, start
+def try_parse_event_name(name: str) -> tuple[str, str, date, str | None] | None:
+    """成功時: (unit_id, display_name, start_date, camera_code|None)。"""
+    m = EVENT_PLAIN_RE.fullmatch(name)
+    if m:
+        ymd, display = m.group(1), m.group(2)
+        if not EVENT_DISPLAY_RE.fullmatch(display):
+            return None
+        start = _parse_yyyymmdd(ymd)
+        if start is None:
+            return None
+        return name, display, start, None
+
+    m = EVENT_PREFIXED_RE.fullmatch(name)
+    if m:
+        code, ymd, display = m.group(1), m.group(2), m.group(3)
+        if not EVENT_DISPLAY_RE.fullmatch(display):
+            return None
+        start = _parse_yyyymmdd(ymd)
+        if start is None:
+            return None
+        return name, display, start, code.upper()
+
+    return None
 
 
 def month_id_from_event_start(start: date) -> str:
@@ -109,20 +163,34 @@ def unit_from_dir(path: Path | str) -> LibraryUnit | None:
         return None
     name = p.name
 
-    month = try_parse_month_name(name)
-    if month is not None:
+    m_plain = MONTH_PLAIN_RE.fullmatch(name)
+    if m_plain and _valid_calendar_month(int(m_plain.group(1)), int(m_plain.group(2))):
         return LibraryUnit(
             kind="month",
-            unit_id=month,
+            unit_id=name,
             path=p.resolve(),
-            display_name=month,
-            month_id=month,
+            display_name=name,
+            month_id=name,
             start_date=None,
+            camera_code=None,
+        )
+
+    m_pref = MONTH_PREFIXED_RE.fullmatch(name)
+    if m_pref and _valid_calendar_month(int(m_pref.group(2)), int(m_pref.group(3))):
+        cal = f"{m_pref.group(2)}{m_pref.group(3)}"
+        return LibraryUnit(
+            kind="month",
+            unit_id=name,
+            path=p.resolve(),
+            display_name=name,
+            month_id=cal,
+            start_date=None,
+            camera_code=m_pref.group(1).upper(),
         )
 
     parsed = try_parse_event_name(name)
     if parsed is not None:
-        unit_id, display, start = parsed
+        unit_id, display, start, code = parsed
         return LibraryUnit(
             kind="event",
             unit_id=unit_id,
@@ -130,6 +198,7 @@ def unit_from_dir(path: Path | str) -> LibraryUnit | None:
             display_name=display,
             month_id=month_id_from_event_start(start),
             start_date=start,
+            camera_code=code,
         )
 
     return None
@@ -215,7 +284,37 @@ def resolve_unit(path: Path | str) -> LibraryUnit:
     unit = unit_from_dir(path)
     if unit is None:
         raise ValueError(
-            f"ライブラリ単位として解釈できません（月 YYYYMM または "
-            f"イベント YYYYMMDD_名前）: {path}"
+            f"ライブラリ単位として解釈できません"
+            f"（月 YYYYMM|XXYYYYMM または イベント YYYYMMDD_名前|XXYYYYMMDD_名前）: {path}"
         )
     return unit
+
+
+def session_belongs_to_unit(session_path: Path | str, unit_dir: Path | str) -> bool:
+    """監査セッション JSON が当該 unit の ``_lumina/sessions`` 配下か。"""
+    session = Path(session_path)
+    unit = Path(unit_dir)
+    if not session.is_file():
+        return False
+    expected = (unit / "_lumina" / "sessions").resolve()
+    try:
+        return session.resolve().parent == expected
+    except OSError:
+        return False
+
+
+def resolve_session_for_unit(
+    unit_dir: Path | str,
+    preferred: Path | None = None,
+) -> Path | None:
+    """H3 記録用: unit 配下のセッションだけを返す（preferred がずれていれば無視）。"""
+    from delta_log import latest_session_path, list_session_paths
+
+    target = Path(unit_dir)
+    if preferred is not None and session_belongs_to_unit(preferred, target):
+        return Path(preferred)
+    latest = latest_session_path(target)
+    if latest is not None:
+        return latest
+    paths = list_session_paths(target)
+    return paths[-1] if paths else None

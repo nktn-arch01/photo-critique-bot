@@ -498,12 +498,15 @@ def test_iptc_rating_description_roundtrip():
 
 
 def test_library_unit_naming_rules():
-    """T2: 月 YYYYMM / イベント YYYYMMDD_名前。規則外はイベントにしない。"""
+    """T2 + P1: 月 YYYYMM|XXYYYYMM / イベント YYYYMMDD_名前|XXYYYYMMDD_名前。"""
     from library_unit import (
+        calendar_month_id_from_folder_name,
         is_event_folder_name,
         is_month_folder_name,
+        is_works_month_folder_name,
         try_parse_event_name,
         try_parse_month_name,
+        unit_from_dir,
     )
 
     assert is_month_folder_name("202608")
@@ -512,11 +515,36 @@ def test_library_unit_naming_rules():
     assert not is_month_folder_name("20268")
     assert not is_month_folder_name("Photos")
 
+    # P1: 機種接頭辞付き月
+    assert is_month_folder_name("OM202606")
+    assert try_parse_month_name("OM202606") == "OM202606"
+    assert calendar_month_id_from_folder_name("OM202606") == "202606"
+    assert is_month_folder_name("FF202612")
+    assert not is_month_folder_name("OM202613")
+    assert not is_month_folder_name("O202606")  # 接頭辞は2文字のみ
+
+    # Works は接頭辞なし YYYYMM のみ
+    assert is_works_month_folder_name("202606")
+    assert not is_works_month_folder_name("OM202606")
+    assert not is_works_month_folder_name("202613")
+
     assert is_event_folder_name("20260810_京都旅行")
     parsed = try_parse_event_name("20260810_京都旅行")
     assert parsed is not None
+    assert parsed[0] == "20260810_京都旅行"
     assert parsed[1] == "京都旅行"
     assert parsed[2].isoformat() == "2026-08-10"
+    assert parsed[3] is None
+
+    # P1: 機種接頭辞付きイベント
+    pref = try_parse_event_name("OM20260615_旅行")
+    assert pref is not None
+    assert pref[0] == "OM20260615_旅行"
+    assert pref[1] == "旅行"
+    assert pref[2].isoformat() == "2026-06-15"
+    assert pref[3] == "OM"
+    assert calendar_month_id_from_folder_name("OM20260615_旅行") == "202606"
+    assert is_event_folder_name("FF20260101_day-trip_v2")
 
     assert is_event_folder_name("20260822_海辺の午後")
     assert is_event_folder_name("20260101_day-trip_v2")  # _ と - は可
@@ -528,6 +556,75 @@ def test_library_unit_naming_rules():
     assert not is_event_folder_name("20260230_無効日")
     assert not is_event_folder_name("20260810_bad.name")
     assert not is_event_folder_name("misc_folder")
+    assert not is_event_folder_name("OM20260615")  # 名前なし
+
+
+def test_library_unit_prefixed_unit_from_dir():
+    """P1: XXYYYYMM / XXYYYYMMDD_名前 が LibraryUnit になる。"""
+    import shutil
+    import tempfile
+
+    from library_unit import resolve_unit, unit_from_dir
+
+    root = Path(tempfile.mkdtemp(prefix="lib_p1_"))
+    try:
+        month = root / "OM202606"
+        event = month / "OM20260615_旅行"
+        event.mkdir(parents=True)
+
+        mu = unit_from_dir(month)
+        assert mu is not None
+        assert mu.is_month
+        assert mu.unit_id == "OM202606"
+        assert mu.month_id == "202606"
+        assert mu.camera_code == "OM"
+        assert mu.works_month_id == "202606"
+
+        eu = resolve_unit(event)
+        assert eu.is_event
+        assert eu.unit_id == "OM20260615_旅行"
+        assert eu.display_name == "旅行"
+        assert eu.month_id == "202606"
+        assert eu.camera_code == "OM"
+        assert eu.works_month_id == "202606"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_resolve_session_for_unit_prefers_target_sessions():
+    """M2: preferred が別フォルダなら無視し、target 配下だけを正とする。"""
+    import json
+    import shutil
+    import tempfile
+
+    from library_unit import resolve_session_for_unit, session_belongs_to_unit
+
+    root = Path(tempfile.mkdtemp(prefix="sess_m2_"))
+    try:
+        unit_a = root / "OM202606"
+        unit_b = root / "FF202606"
+        sess_a = unit_a / "_lumina" / "sessions"
+        sess_b = unit_b / "_lumina" / "sessions"
+        sess_a.mkdir(parents=True)
+        sess_b.mkdir(parents=True)
+
+        path_a = sess_a / "session_a.json"
+        path_b = sess_b / "session_b.json"
+        path_a.write_text(json.dumps({"id": "a"}), encoding="utf-8")
+        path_b.write_text(json.dumps({"id": "b"}), encoding="utf-8")
+
+        assert session_belongs_to_unit(path_a, unit_a)
+        assert not session_belongs_to_unit(path_b, unit_a)
+
+        # preferred が他 unit なら無視して A 側を返す
+        got = resolve_session_for_unit(unit_a, preferred=path_b)
+        assert got == path_a
+
+        # preferred が正しければそれを返す
+        got2 = resolve_session_for_unit(unit_a, preferred=path_a)
+        assert got2 == path_a
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_library_unit_discover_and_list_jpegs():

@@ -64,19 +64,19 @@
 
 運用確定後の読み替えは [`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md) §7 を正とする。
 
-| ID | 内容 |
-|----|------|
-| M1 | Works＝**月 `YYYYMM` のみ**前提。年次は直親年フォルダで現行 `DesktopLogManager` と一致 → **特殊分岐は原則不要**（受付チェック／文書化程度） |
-| M2 | H3 記録時、Entry 手編集と `last_session_path` の不一致 → **target 配下セッションを正** |
-| M3 | ワーカースレッドから Tk 変数再読取 → 開始時スナップショット |
-| M4 | H3 記録が UI スレッドで固まる → **ワーカー化**（コピー UI は作らない） |
-| M5 | `force_overwrite` / `card_theme` キー共有の文書化（分離しない） |
-| P1 | 短絡が `XXYYYYMM` / `XXYYYYMMDD_名前` を受け付ける（`XX`=機種2文字。実運用オリジナル。M1–M5 より上流） |
-| L1 | 実行中ウィンドウ破棄後の `after` |
-| L2 | `open_sessions_folder` の mkdir 副作用 |
-| L3 | `RatingPercent` のみの JPEG で Rating が `None` |
-| L4 | Works ルート非再帰（サブフォルダのみだと 0 枚） |
-| L5 | `CritiquePromptContext._pick` が哨兵「なし」を有値扱い |
+| ID | 内容 | 状態 |
+|----|------|------|
+| M1 | Works＝**月 `YYYYMM` のみ**前提。年次は直親年フォルダで現行 `DesktopLogManager` と一致 → **特殊分岐は原則不要**（受付チェック／文書化程度） | **対応済み 2026-08-11** |
+| M2 | H3 記録時、Entry 手編集と `last_session_path` の不一致 → **target 配下セッションを正** | **対応済み 2026-08-11** |
+| M3 | ワーカースレッドから Tk 変数再読取 → 開始時スナップショット | **対応済み 2026-08-11** |
+| M4 | H3 記録が UI スレッドで固まる → **ワーカー化**（コピー UI は作らない） | **対応済み 2026-08-11** |
+| M5 | `force_overwrite` / `card_theme` キー共有の文書化（分離しない） | **対応済み 2026-08-11** |
+| P1 | 短絡が `XXYYYYMM` / `XXYYYYMMDD_名前` を受け付ける（`XX`=機種2文字。実運用オリジナル。M1–M5 より上流） | **対応済み 2026-08-11** |
+| L1 | 実行中ウィンドウ破棄後の `after` | |
+| L2 | `open_sessions_folder` の mkdir 副作用 | |
+| L3 | `RatingPercent` のみの JPEG で Rating が `None` | |
+| L4 | Works ルート非再帰（サブフォルダのみだと 0 枚） | |
+| L5 | `CritiquePromptContext._pick` が哨兵「なし」を有値扱い | |
 
 ---
 

@@ -2,6 +2,17 @@
 
 講評 GUI（app_gui）と短絡 GUI（shortlist_gui）が同じファイルを使う。
 保存時はディスク上の既存キーを消さない（merge 書き込み）。
+
+共有キー（意図的に横断利用・M5）:
+
+- ``card_theme``: 講評バッチと Works 痕跡カードの背景（dark/light）
+- ``force_overwrite``: 講評の処理済み上書きと、痕跡の処理済み上書き
+
+アプリ固有キー（消してはいけない）:
+
+- ``last_dir``: 講評 GUI の前回フォルダ
+- ``shortlist_last_dir``: 短絡対象の前回フォルダ
+- ``works_last_dir``: Works 痕跡の前回フォルダ
 """
 
 from __future__ import annotations
@@ -11,6 +22,9 @@ from pathlib import Path
 from typing import Any
 
 CONFIG_FILE = Path.home() / ".photo_ai_config.json"
+
+# 講評 GUI と短絡 GUI が意図的に共有するキー（分離しない）
+SHARED_UI_KEYS = frozenset({"card_theme", "force_overwrite"})
 
 
 def default_config(desktop: str | None = None) -> dict[str, Any]:

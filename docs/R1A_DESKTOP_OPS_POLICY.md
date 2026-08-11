@@ -53,9 +53,8 @@
 **Works 月との対応（運用）:** 接頭辞2文字を除いた `YYYYMM`。  
 例: `OM202606` → Works `~/2026/202606`。イベント由来の確定コマも同じ月 Works へ集約。
 
-**実装メモ（P1）:** 現行 `library_unit` は接頭辞なしの `YYYYMM` / `YYYYMMDD_名前` のみ。  
-→ **`XXYYYYMM` / `XXYYYYMMDD_名前`（`XX` = `[A-Za-z]{2}`）を正式に受付**するよう拡張する。  
-　後方互換で接頭辞なし旧名も残すかは実装時に決める（推奨: 残す）。
+**実装メモ（P1）:** `library_unit` は `XXYYYYMM` / `XXYYYYMMDD_名前`（`XX` = `[A-Za-z]{2}`）を正式受付。  
+接頭辞なしの `YYYYMM` / `YYYYMMDD_名前` も後方互換で残す。`month_id` / `works_month_id` は常に暦の `YYYYMM`。
 
 ---
 
@@ -128,19 +127,19 @@ Works が月のみなら、現行 `DesktopLogManager`（`year_str = name[:4]`、
 
 ## 7. 中優先改修への落とし込み（簡略化後）
 
-| ID | 方針 |
-|----|------|
-| **M1** | **縮小:** Works＝`YYYYMM` 前提を文書化／任意で受付チェック。年次ログの特殊分岐は不要（現行で足りる） |
-| **M2** | 「DxO修正後を記録」は **target 配下セッションのみ**を正とする |
-| **M3** | 開始時に Tk 変数をスナップショットしてワーカーへ渡す |
-| **M4** | 記録処理をワーカースレッド化（固まり防止）。コピー UI は作らない |
-| **M5** | `card_theme` / `force_overwrite` は共有のまま文書化 |
+| ID | 方針 | 状態 |
+|----|------|------|
+| **M1** | Works＝`YYYYMM` 前提を文書化／受付チェック。年次ログの特殊分岐は不要 | **対応済み**（GUI ゲート＋`is_works_month_folder_name`） |
+| **M2** | 「DxO修正後を記録」は **target 配下セッションのみ**を正とする | **対応済み**（`resolve_session_for_unit`） |
+| **M3** | 開始時に Tk 変数をスナップショットしてワーカーへ渡す | **対応済み**（短絡／痕跡） |
+| **M4** | 記録処理をワーカースレッド化（固まり防止）。コピー UI は作らない | **対応済み**（`_run_record_h3`） |
+| **M5** | `card_theme` / `force_overwrite` は共有のまま文書化 | **対応済み**（`desktop_config` モジュール docstring） |
 
 ### 上流タスク
 
-| ID | 内容 |
-|----|------|
-| **P1** | `library_unit` / 短絡 GUI が `XXYYYYMM`・`XXYYYYMMDD_名前` を受け付ける（`XX`=機種2文字） |
+| ID | 内容 | 状態 |
+|----|------|------|
+| **P1** | `library_unit` / 短絡 GUI が `XXYYYYMM`・`XXYYYYMMDD_名前` を受け付ける | **対応済み** |
 
 ---
 
@@ -161,3 +160,4 @@ Works が月のみなら、現行 `DesktopLogManager`（`year_str = name[:4]`、
 | 2026-08-11 | オーナー回答により確定。自動生成・アプリコピー案は撤回。ログ配置・記録 UI を固定 |
 | 2026-08-11 | **Works は月 `YYYYMM` のみ**（イベントフォルダ非作成）。M1 を簡略化 |
 | 2026-08-11 | オリジナル命名を一般化: **`XXYYYY` / `XXYYYYMM` / `XXYYYYMMDD_イベント`**（`XX`=機種コード） |
+| 2026-08-11 | **P1 + M1–M5 実装**: 接頭辞付き unit 受付、Works YYYYMM ゲート、H3 target 正＋ワーカー、開始時スナップショット、共有キー文書化 |
