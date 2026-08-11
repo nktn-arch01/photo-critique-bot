@@ -43,7 +43,7 @@ class PhotoAICritiqueApp:
         self.setup_ui()
 
     def load_config(self) -> dict:
-        """共有設定を読む。短絡 GUI 等が書いたキーは落とさない。"""
+        """共有設定を読む。スクリーニング GUI 等が書いたキーは落とさない。"""
         cfg = load_shared_config(
             defaults={
                 "force_overwrite": False,

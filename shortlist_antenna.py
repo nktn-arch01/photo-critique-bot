@@ -1,4 +1,4 @@
-"""M2 アンテナ: 5軸の相対熱量で短絡（軽量 Vision）。
+"""M2 アンテナ: 5軸の相対熱量でスクリーニング（軽量 Vision）。
 
 仕様（R1′ §6.3）:
 - 入力は原則 Rating≥1（M1 合格）
@@ -260,7 +260,7 @@ def build_antenna_system_prompt(*, lens: str | None = None) -> str:
     lens_obj = get_lens(normalize_lens(lens))
     return (
         f"{lens_obj.system_role} "
-        "今は短絡用のアンテナ採点のみ。評価ではなく熱量の相対比較のための短いスコアを返す。"
+        "今はスクリーニング用のアンテナ採点のみ。評価ではなく熱量の相対比較のための短いスコアを返す。"
     )
 
 

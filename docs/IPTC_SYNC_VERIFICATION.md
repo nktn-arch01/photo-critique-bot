@@ -9,7 +9,7 @@ JPEG メタと DxO の同期は検証 PASS。**`.dop` / `.xmp` は使わない�
 
 | 用途 | 一次ソース |
 |------|------------|
-| 短絡 | JPEG 内 Rating + Description（IPTC/XMP） |
+| スクリーニング | JPEG 内 Rating + Description（IPTC/XMP） |
 | 講評 | 画（JPEG 画素）＋撮影 EXIF |
 
 ## 書き込みタグ契約（ファイル側・単一ソース候補）

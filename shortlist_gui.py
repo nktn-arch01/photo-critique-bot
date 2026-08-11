@@ -1,10 +1,10 @@
-"""Lumina Notes 短絡バッチ GUI（必須実行口）.
+"""Lumina Notes Console（スクリーニング + Lumina Review の統合 GUI）.
 
 講評バッチ ``app_gui.py`` とは別ウィンドウ・別導線。
 - 月／イベントフォルダを選んで M1→M2→M3 を実行
 - 進捗・中断・監査ログ自動保存
 - DxO（H3）修正後の記録ボタン（pre_h3 / post_h3 / h3_delta）
-- Works（確定フォルダ）を指定して対話痕跡（カード／ノート／ログ）を生成（T8・コピーなし）
+- Works（確定フォルダ）を指定して Lumina Review（カード／ノート／ログ）（T8・コピーなし）
 """
 
 from __future__ import annotations
@@ -40,10 +40,65 @@ from trace_from_works import (
 )
 
 
+# 主要アクションボタン（macOS では tk.Button の bg が無視されるため ttk+clam）
+BTN_DARK_BLUE = "#003d82"
+BTN_DARK_BLUE_ACTIVE = "#002655"
+BTN_DARK_BLUE_DISABLED = "#5a6d7d"
+BTN_FG = "#ffffff"
+ACTION_STYLE = "ConsoleAction.TButton"
+ACTION_SMALL_STYLE = "ConsoleActionSmall.TButton"
+
+
+def _configure_console_button_theme(root: tk.Tk) -> ttk.Style:
+    """白文字＋ダークブルーの ttk ボタンスタイル（macOS 対応）。"""
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+
+    for style_name, font_size, padding in (
+        (ACTION_STYLE, 12, (16, 10)),
+        (ACTION_SMALL_STYLE, 11, (16, 8)),
+    ):
+        style.configure(
+            style_name,
+            font=("Helvetica", font_size, "bold"),
+            foreground=BTN_FG,
+            background=BTN_DARK_BLUE,
+            padding=padding,
+            borderwidth=0,
+            focusthickness=0,
+            focuscolor=BTN_DARK_BLUE,
+        )
+        style.map(
+            style_name,
+            foreground=[("disabled", "#e8eef5"), ("active", BTN_FG), ("pressed", BTN_FG)],
+            background=[
+                ("disabled", BTN_DARK_BLUE_DISABLED),
+                ("active", BTN_DARK_BLUE_ACTIVE),
+                ("pressed", BTN_DARK_BLUE_ACTIVE),
+            ],
+        )
+    return style
+
+
+def _action_button(parent: tk.Misc, *, small: bool = False, **kwargs: object) -> ttk.Button:
+    """白文字＋ダークブルーの主要ボタン（ttk）。"""
+    for key in ("bg", "activebackground", "fg", "activeforeground", "disabledforeground", "pady", "padx"):
+        kwargs.pop(key, None)
+    style_name = ACTION_SMALL_STYLE if small else ACTION_STYLE
+    return ttk.Button(parent, style=style_name, **kwargs)
+
+
+def _set_action_button_enabled(btn: ttk.Button, enabled: bool) -> None:
+    btn.state(["!disabled"] if enabled else ["disabled"])
+
+
 class ShortlistApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Lumina Notes 短絡バッチ")
+        self.root.title("Lumina Notes Console")
         self.root.geometry("720x860")
         self.root.minsize(640, 720)
         try:
@@ -57,6 +112,7 @@ class ShortlistApp:
         self.last_session_path: Path | None = None
         self.config = self.load_config()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        _configure_console_button_theme(self.root)
         self.setup_ui()
 
     def load_config(self) -> dict:
@@ -93,9 +149,9 @@ class ShortlistApp:
             info,
             text=(
                 "1. オリジナルの月（YYYYMM または OM202606 等）／イベント（…DD_名前）を選ぶ\n"
-                "2. 短絡バッチ（M1→M2→M3）を実行 → JPEG に Rating / 説明が付く\n"
+                "2. スクリーニング（M1→M2→M3）を実行 → JPEG に Rating / 説明が付く\n"
                 "3. DxO で確認・修正したあと「修正後を記録」で前後比較を残す\n"
-                "4. Works の月フォルダ（YYYYMM のみ）を選び、痕跡（カード／ノート）を付ける"
+                "4. Works の月フォルダ（YYYYMM のみ）を選び、Lumina Review（カード／ノート）を付ける"
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
@@ -142,30 +198,18 @@ class ShortlistApp:
 
         actions = ttk.Frame(main)
         actions.pack(fill=tk.X, pady=(0, 8))
-        self.btn_start = tk.Button(
+        self.btn_start = _action_button(
             actions,
-            text="短絡バッチを開始",
-            font=("Helvetica", 12, "bold"),
-            bg="#007aff",
-            fg="white",
-            activebackground="#005bb5",
-            activeforeground="white",
-            pady=8,
+            text="スクリーニングを開始",
             command=self.start_batch_thread,
         )
         self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        self.btn_cancel = tk.Button(
+        self.btn_cancel = _action_button(
             actions,
             text="中止",
-            font=("Helvetica", 12),
-            bg="#ff3b30",
-            fg="white",
-            activebackground="#c72c23",
-            activeforeground="white",
-            state=tk.DISABLED,
-            pady=8,
             command=self.request_cancel,
         )
+        self.btn_cancel.state(["disabled"])
         self.btn_cancel.pack(side=tk.RIGHT)
 
         h3 = ttk.LabelFrame(main, text=" DxO 修正後の記録（判定改善用） ", padding="8")
@@ -185,7 +229,7 @@ class ShortlistApp:
         self.session_label = ttk.Label(h3, text="セッション: （まだありません）")
         self.session_label.pack(anchor=tk.W, pady=(6, 0))
 
-        works = ttk.LabelFrame(main, text=" Works 痕跡生成（コピーなし） ", padding="8")
+        works = ttk.LabelFrame(main, text=" Works Lumina Review（コピーなし） ", padding="8")
         works.pack(fill=tk.X, pady=(10, 0))
         ttk.Label(
             works,
@@ -234,15 +278,10 @@ class ShortlistApp:
 
         works_btns = ttk.Frame(works)
         works_btns.pack(fill=tk.X, pady=(8, 0))
-        self.btn_trace = tk.Button(
+        self.btn_trace = _action_button(
             works_btns,
-            text="痕跡生成を開始",
-            font=("Helvetica", 11, "bold"),
-            bg="#34c759",
-            fg="white",
-            activebackground="#248a3d",
-            activeforeground="white",
-            pady=6,
+            text="Lumina Review を開始",
+            small=True,
             command=self.start_trace_thread,
         )
         self.btn_trace.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -277,7 +316,7 @@ class ShortlistApp:
                 works_path = Path(selected)
                 n = len(list_works_trace_targets(works_path))
                 hint = works_empty_targets_hint(works_path) if n == 0 else ""
-                self.log(f"Works フォルダ: {selected}（痕跡対象 {n} 枚）{hint.strip()}")
+                self.log(f"Works フォルダ: {selected}（Lumina Review 対象 {n} 枚）{hint.strip()}")
             except Exception as e:
                 self.log(f"Works フォルダ: {selected}（列挙注意: {e}）")
 
@@ -316,7 +355,7 @@ class ShortlistApp:
             if self.trace_runner:
                 self.trace_runner.request_cancel()
             self.log("中止リクエストを受け付けました…")
-            self.btn_cancel.config(state=tk.DISABLED)
+            self.btn_cancel.state(["disabled"])
 
     def on_closing(self) -> None:
         if self.is_running:
@@ -375,17 +414,17 @@ class ShortlistApp:
             + f"\nJPEG: {len(jpegs)} 枚\n"
             f"段: {', '.join(stages)}\n"
             f"書き込み: {'しない（ドライラン）' if opts['dry'] else 'する'}\n\n"
-            "短絡バッチを開始しますか？",
+            "スクリーニングを開始しますか？",
         ):
             return
 
         self.save_config(str(target))
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
-        self.btn_cancel.config(state=tk.NORMAL)
+        _set_action_button_enabled(self.btn_start, False)
+        _set_action_button_enabled(self.btn_cancel, True)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
@@ -409,7 +448,7 @@ class ShortlistApp:
                 on_progress=on_progress,
             )
             self.log("=" * 48)
-            self.log(f"短絡バッチ開始: {target}")
+            self.log(f"スクリーニング開始: {target}")
             result = self.pipeline.run_on_dir(target)
             self.last_session_path = result.session_path
             self.log(f"status: {result.status}")
@@ -430,7 +469,7 @@ class ShortlistApp:
                 self._refresh_session_label(target)
                 self.status_label.config(text=f"処理{result.status}")
                 msg = (
-                    f"短絡バッチが {result.status} しました。\n\n"
+                    f"スクリーニングが {result.status} しました。\n\n"
                     f"JPEG: {result.jpeg_count} 枚\n"
                     f"セッション: {result.session_path.name if result.session_path else 'なし'}\n\n"
                     "次: DxO で Rating を確認・修正し、\n"
@@ -451,11 +490,11 @@ class ShortlistApp:
         self.pipeline = None
         self.trace_runner = None
         self.progress.stop()
-        self.btn_start.config(state=tk.NORMAL, bg="#007aff")
-        self.btn_cancel.config(state=tk.DISABLED)
+        _set_action_button_enabled(self.btn_start, True)
+        _set_action_button_enabled(self.btn_cancel, False)
         self.btn_browse.config(state=tk.NORMAL)
         self.btn_h3.config(state=tk.NORMAL)
-        self.btn_trace.config(state=tk.NORMAL, bg="#34c759")
+        _set_action_button_enabled(self.btn_trace, True)
         self.btn_browse_works.config(state=tk.NORMAL)
         self.dir_entry.config(state=tk.NORMAL)
         self.works_entry.config(state=tk.NORMAL)
@@ -470,7 +509,7 @@ class ShortlistApp:
         if not is_works_month_folder_name(works.name):
             messagebox.showerror(
                 "フォルダ名エラー",
-                "Works 痕跡の対象は月フォルダ YYYYMM のみです。\n"
+                "Works Lumina Review の対象は月フォルダ YYYYMM のみです。\n"
                 f"例: ~/2026/202606\n現在: {works.name}",
             )
             return
@@ -482,7 +521,7 @@ class ShortlistApp:
         if not targets:
             messagebox.showwarning(
                 "対象なし",
-                "痕跡対象の JPEG がありません。\n"
+                "Lumina Review 対象の JPEG がありません。\n"
                 "{stem}_dev.jpg または撮って出し .jpg を月フォルダ直下に置いてください。"
                 + works_empty_targets_hint(works),
             )
@@ -494,12 +533,12 @@ class ShortlistApp:
             "force": bool(self.trace_force_var.get()),
         }
         if not messagebox.askyesno(
-            "痕跡生成の確認",
+            "Lumina Review の確認",
             f"Works: {works}\n"
             f"対象: {len(targets)} 枚（_dev 優先）\n"
             f"モード: {opts['mode']} / テーマ: {opts['theme']}\n"
             f"上書き: {'する' if opts['force'] else 'しない'}\n\n"
-            "ファイルのコピーは行いません。\n痕跡生成を開始しますか？",
+            "ファイルのコピーは行いません。\nLumina Review を開始しますか？",
         ):
             return
 
@@ -507,11 +546,11 @@ class ShortlistApp:
         self.config["force_overwrite"] = opts["force"]
         self.save_config(works_dir=str(works))
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
-        self.btn_cancel.config(state=tk.NORMAL)
+        _set_action_button_enabled(self.btn_start, False)
+        _set_action_button_enabled(self.btn_cancel, True)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
@@ -534,7 +573,7 @@ class ShortlistApp:
                 on_progress=on_progress,
             )
             self.log("=" * 48)
-            self.log(f"Works 痕跡生成開始: {works}")
+            self.log(f"Works Lumina Review 開始: {works}")
             result = self.trace_runner.run(works)
             self.log(
                 f"status={result.status} processed={result.processed} "
@@ -543,10 +582,10 @@ class ShortlistApp:
             self.log("=" * 48)
 
             def _done() -> None:
-                self.status_label.config(text=f"痕跡{result.status}")
+                self.status_label.config(text=f"Lumina Review {result.status}")
                 messagebox.showinfo(
-                    "痕跡生成完了",
-                    f"痕跡生成が {result.status} しました。\n\n"
+                    "Lumina Review 完了",
+                    f"Lumina Review が {result.status} しました。\n\n"
                     f"対象: {result.targets_found} 枚\n"
                     f"新規: {result.processed}\n"
                     f"スキップ: {result.skipped}\n"
@@ -557,7 +596,7 @@ class ShortlistApp:
             self._ui(_done)
         except Exception as e:
             err_msg = str(e)
-            self.log(f"痕跡エラー: {err_msg}")
+            self.log(f"Lumina Review エラー: {err_msg}")
             self._ui(lambda msg=err_msg: messagebox.showerror("エラー", msg))
         finally:
             self._ui(self.reset_ui)
@@ -575,7 +614,7 @@ class ShortlistApp:
         if session is None:
             messagebox.showwarning(
                 "セッションなし",
-                "このフォルダに短絡セッションがありません。\n先に短絡バッチを実行してください。",
+                "このフォルダにスクリーニングセッションがありません。\n先にスクリーニングを実行してください。",
             )
             return
 
@@ -590,11 +629,11 @@ class ShortlistApp:
             return
 
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
-        self.btn_cancel.config(state=tk.DISABLED)
+        _set_action_button_enabled(self.btn_start, False)
+        _set_action_button_enabled(self.btn_cancel, False)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
@@ -650,8 +689,8 @@ class ShortlistApp:
         if not sess.is_dir():
             messagebox.showinfo(
                 "監査フォルダなし",
-                "まだ短絡セッションがありません。\n"
-                "先に短絡バッチを実行すると、次の場所に作られます。\n\n"
+                "まだスクリーニングセッションがありません。\n"
+                "先にスクリーニングを実行すると、次の場所に作られます。\n\n"
                 f"{sess}",
             )
             return

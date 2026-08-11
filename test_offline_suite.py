@@ -1589,7 +1589,7 @@ def test_r1a_t10_dry_run_does_not_write_rating():
 
 
 def test_r1a_t10_works_without_dop_no_error():
-    """T10: Works に .dop が無くても痕跡対象列挙・メタ抽出はエラーにならない。"""
+    """T10: Works に .dop が無くてもLumina Review 対象列挙・メタ抽出はエラーにならない。"""
     import shutil
 
     from scanner import extract_file_metadata
@@ -1656,7 +1656,7 @@ def test_r1a_t10_iptc_sync_verify_script_roundtrip():
 
 
 def test_r1a_t10_no_works_copy_surface():
-    """T10 / A6: Works コピー API を持たない（痕跡は読取のみ）。"""
+    """T10 / A6: Works コピー API を持たない（Lumina Review は読取のみ）。"""
     import inspect
 
     import trace_from_works as tw

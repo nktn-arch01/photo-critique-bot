@@ -85,22 +85,22 @@
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
 - `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。
 - `docs/R1A_MAC_MANUAL_CHECKLIST.md`: **【Mac 手動確認】** オーナー向け GUI／実フォルダ手順（PASS/FAIL 記入）。
-- `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `XX` 機種接頭辞、Works 月 `YYYYMM` のみ・手動、コピーなし、痕跡ログ配置、記録 UI。
-- `iptc_rating_io.py`: **【短絡メタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`RatingPercent` のみでも復元。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
+- `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `XX` 機種接頭辞、Works 月 `YYYYMM` のみ・手動、コピーなし、Lumina Review ログ配置、記録 UI。
+- `iptc_rating_io.py`: **【スクリーニングメタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`RatingPercent` のみでも復元。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM|XXYYYYMM` / イベント `YYYYMMDD_名前|XXYYYYMMDD_名前`。Works は `YYYYMM` のみ。規則外サブフォルダはイベントにしない。
 - `shortlist_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。
 - `shortlist_antenna.py`: **【M2 アンテナ】** 5軸軽量 Vision＋バッチ内相対熱量。合格 Rating=2＋`[M2]`。★絶対ゲート禁止。
 - `shortlist_diversity.py`: **【M3 多様性】** 品質×多様性の貪欲選抜。余白 Rating=3／上位=4＋`[M3]`。タグ語彙・執着ブーストは設定化。
-- `shortlist_pipeline.py`: **【短絡パイプライン】** M1→M2→M3 オーケストレーション。進捗・中断。講評バッチとは別導線。
+- `shortlist_pipeline.py`: **【スクリーニングパイプライン】** M1→M2→M3 オーケストレーション。進捗・中断。講評バッチとは別導線。
 - `delta_log.py`: **【監査ログ】** `{unit}/_lumina/sessions/{id}.json`。`pre_h3` / `post_h3` / `h3_delta`（DxO前後・判定改善）。
-- `desktop_config.py`: **【共有設定】** `~/.photo_ai_config.json` の merge 読書き。`card_theme` / `force_overwrite` は講評／痕跡で共有。
-- `desktop_ui.py`: **【UI安全予約】** ウィンドウ破棄後の `after` を握りつぶす（短絡／講評 GUI 共通）。
+- `desktop_config.py`: **【共有設定】** `~/.photo_ai_config.json` の merge 読書き。`card_theme` / `force_overwrite` は講評／Lumina Reviewで共有。
+- `desktop_ui.py`: **【UI安全予約】** ウィンドウ破棄後の `after` を握りつぶす（スクリーニング／講評 GUI 共通）。
 - `prepare_mac_manual_fixtures.py`: Mac 手動確認用の最小フォルダ／JPEG を Desktop に生成。
-- `shortlist_gui.py`: **【短絡必須GUI】** フォルダ選択・実行・中断・DxO修正後記録・Works 痕跡生成。講評 `app_gui` とは別。
-- `LuminaShortlist.command`: 短絡 GUI のダブルクリック起動。
-- `run_shortlist.py`: 短絡バッチ CLI（補助）。
-- `trace_from_works.py`: **【Works 痕跡】** `{stem}_dev.jpg` 優先／撮って出しフォールバック。既存 critique コア再利用。コピーなし。
-- `run_trace_works.py`: Works 痕跡 CLI（補助）。
+- `shortlist_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI。講評 `app_gui` とは別。
+- `LuminaShortlist.command`: Lumina Notes Console のダブルクリック起動。
+- `run_shortlist.py`: スクリーニング CLI（補助）。
+- `trace_from_works.py`: **【Works Lumina Review】** `{stem}_dev.jpg` 優先／撮って出しフォールバック。既存 critique コア再利用。コピーなし。
+- `run_trace_works.py`: Works Lumina Review CLI（補助）。
 - `scripts/iptc_sync_verify.py`: `iptc_rating_io` を使う Rating/Description ラウンドトリップ検証。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
@@ -108,7 +108,7 @@
 - `analyze_folder.py`: 月別フォルダを一括処理するCLIバッチスクリプト。
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。
 - `PhotoAICritique.command`: 講評バッチのダブルクリック起動（Gatekeeper属性の自動解除機能付き）。
-- `LuminaShortlist.command`: **短絡バッチ**のダブルクリック起動。
+- `LuminaShortlist.command`: **Lumina Notes Console** のダブルクリック起動。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)
