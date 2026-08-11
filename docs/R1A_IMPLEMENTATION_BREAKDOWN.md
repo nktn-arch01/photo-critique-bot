@@ -118,6 +118,7 @@ T0 検証ゲート（IPTC）
 | 内容 | ユーザー指定フォルダ上の `{stem}_dev.jpg` 優先（なければ撮って出し）に既存講評カード／ノート／ログ |
 | 完了条件 | コピー機能なし。既存コア再利用。画優先の注記をプロンプトへ（必要なら T9 と同時） |
 | 依存 | T1（読取）, 既存 critique コア |
+| 実装 | **完了** — `WorksTraceRunner` / `list_works_trace_targets`。GUI: `shortlist_gui` の「Works 痕跡生成」。補助 CLI: `run_trace_works.py`。プロンプトに画優先注記（`pixel_priority`） |
 
 ### T9 — scanner / 講評の JPEG 正への移行
 
@@ -173,6 +174,6 @@ T0 検証ゲート（IPTC）
 6. ~~T5 `shortlist_diversity`（M3）~~ **完了**  
 7. ~~T6 `shortlist_pipeline` + `run_shortlist.py`~~ **完了**  
 8. ~~T7 `delta_log`~~ **完了**  
-9. **T8 痕跡生成（Works）** ← **次ここ**  
-10. **T9** scanner/講評の JPEG 正への移行  
+9. ~~**T8 痕跡生成（Works）**~~ **完了**  
+10. **T9** scanner/講評の JPEG 正への移行 ← **次ここ**  
 11. **T10** オフラインテスト総仕上げ（必要なら）

@@ -1139,6 +1139,125 @@ def test_h3_delta_builder_for_judgment_improvement():
     assert delta["purpose"] == "judgment_improvement"
 
 
+def test_works_trace_dev_preference_and_no_copy():
+    """T8: stem 単位で _dev 優先。SOOC のみも対象。コピーしない。"""
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+
+    from critique_prompts import CritiquePromptContext, build_phase1_prompt, build_phase2_prompt
+    from trace_from_works import (
+        TraceConfig,
+        WorksTraceRunner,
+        is_dev_export,
+        list_works_trace_targets,
+        works_base_stem,
+    )
+
+    assert works_base_stem(Path("P1_dev.jpg")) == "P1"
+    assert works_base_stem(Path("P1.jpg")) == "P1"
+    assert is_dev_export(Path("P1_dev.JPG"))
+    assert not is_dev_export(Path("P1.jpg"))
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_t8_"))
+    try:
+        works = root / "WorksSample"
+        works.mkdir()
+        # both → prefer _dev
+        Image.new("RGB", (32, 24), color=(10, 20, 30)).save(works / "A.jpg", quality=90)
+        Image.new("RGB", (32, 24), color=(40, 50, 60)).save(works / "A_dev.jpg", quality=90)
+        # sooc only
+        Image.new("RGB", (32, 24), color=(70, 80, 90)).save(works / "B.jpg", quality=90)
+        # dev only
+        Image.new("RGB", (32, 24), color=(100, 110, 120)).save(works / "C_dev.jpg", quality=90)
+        # noise
+        Image.new("RGB", (32, 24), color=(1, 1, 1)).save(works / "A_card.png")
+        (works / "ignore.txt").write_text("x", encoding="utf-8")
+        (works / "._A.jpg").write_bytes(b"")
+
+        targets = list_works_trace_targets(works)
+        names = [p.name for p in targets]
+        assert names == ["A_dev.jpg", "B.jpg", "C_dev.jpg"]
+        assert "A.jpg" not in names
+
+        # 画優先プロンプト注記
+        ctx_off = CritiquePromptContext.from_metadata({"camera_model": "Cam"}, {})
+        assert not ctx_off.pixel_priority
+        assert "画優先" not in build_phase1_prompt(ctx_off)
+        ctx_on = CritiquePromptContext.from_metadata(
+            {"camera_model": "Cam", "pixel_priority": True}, {}
+        )
+        assert ctx_on.pixel_priority
+        p1 = build_phase1_prompt(ctx_on)
+        p2 = build_phase2_prompt(ctx_on, "■TITLE: t\n■SUMMARY: s")
+        assert "画優先" in p1
+        assert "画優先" in p2
+        assert "撮影記録" in p2
+
+        fake_critique = (
+            "■TITLE: テストタイトル\n"
+            "■SUMMARY: 短いキャッチ\n"
+            "■SCORES:\n"
+            "・眼差の輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)\n"
+            "・感情の陰影 (Nuances of Emotion)  : ★★★☆☆ (3/5)\n"
+            "・物語の気配 (Signs of the Story)  : ★★★☆☆ (3/5)\n"
+            "・表現の意図 (Intent of Expression)  : ★★★☆☆ (3/5)\n"
+            "・感性の兆し (Signs of Sensibility)  : ★★★☆☆ (3/5)\n"
+            "■CRITIQUE_SUMMARY: これはテスト用の短評です。光と形だけを見ます。\n\n"
+            "---\n\n"
+            "## 【1. 情景・空気感とストーリー性】\n本文1\n"
+            "## 【2. 視線誘導と構成の美学】\n本文2\n"
+            "## 【3. 光の強弱・色彩と印象解析】\n本文3\n"
+            "## 【4. EXIFデータの技術的役割と表現効果】\n本文4\n"
+            "## 【5. 次なる一枚への対話と提案】\n本文5\n"
+            "## 【6. フォトブック＆SNSでの役割提案】\n本文6\n"
+            "## 【7. 自動タグ】\n#カメラ_x #レンズ_y #test\n"
+        )
+
+        seen_meta: list[dict] = []
+
+        def fake_critique_fn(path, metadata, dop_info, mode, lens):  # noqa: ARG001
+            seen_meta.append(dict(metadata))
+            return fake_critique
+
+        runner = WorksTraceRunner(
+            TraceConfig(
+                mode="full",
+                force_overwrite=False,
+                card_theme="dark",
+                pixel_priority=True,
+                critique_fn=fake_critique_fn,
+            )
+        )
+        result = runner.run(works)
+        assert result.status == "completed"
+        assert result.targets_found == 3
+        assert result.processed == 3
+        assert result.errors == 0
+        assert result.to_dict()["copy_performed"] is False
+        assert all(m.get("pixel_priority") is True for m in seen_meta)
+        assert any(m.get("critique_image_kind") == "dev_export" for m in seen_meta)
+        assert any(m.get("critique_image_kind") == "sooc_export" for m in seen_meta)
+
+        # 出力物が Works 内に生成（コピー元は増やさない）
+        assert (works / "WorksSample評価カード" / "A_dev_card.png").is_file() or any(
+            p.is_file() for p in works.rglob("*_card.png")
+        )
+        assert any(p.suffix == ".md" for p in works.rglob("*.md"))
+        # 元 JPEG は増えていない（A.jpg / A_dev / B / C_dev の4枚のまま）
+        jpegs = [p for p in works.iterdir() if p.suffix.lower() in {".jpg", ".jpeg"} and not p.name.startswith("._")]
+        assert len(jpegs) == 4
+
+        # 2回目はスキップ
+        again = runner.run(works)
+        assert again.processed == 0
+        assert again.skipped == 3
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -1168,6 +1287,7 @@ def run_all():
     test_shortlist_pipeline_m1_m2_m3_and_cancel()
     test_delta_log_session_reload_and_summary()
     test_h3_delta_builder_for_judgment_improvement()
+    test_works_trace_dev_preference_and_no_copy()
     print("test_offline_suite: OK")
 
 

@@ -182,7 +182,7 @@ H3 想定どおり、DxO 上で Rating 修正とコメント（説明）書き�
 
 **判定: A PASS かつ B 一方向 PASS かつ双方向 PASS → §0 を運用確定。`.dop` / `.xmp` は使わない。**
 
-実装: T1–T7（短絡必須GUI・DxO前後記録含む）。次は [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T8** 以降。
+実装: T1–T8（短絡必須GUI・DxO前後記録・Works痕跡含む）。次は [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T9** 以降。
 
 ---
 

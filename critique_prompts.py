@@ -35,11 +35,21 @@ class CritiquePromptContext:
     keywords: str
     rating_str: str
     preset_name: str
+    # Works / ``_dev.jpg`` 痕跡: 画を一次ソース、EXIF は撮影記録（T8）
+    pixel_priority: bool = False
 
     @classmethod
-    def from_metadata(cls, metadata: dict | None, dop_info: dict | None) -> "CritiquePromptContext":
+    def from_metadata(
+        cls,
+        metadata: dict | None,
+        dop_info: dict | None,
+        *,
+        pixel_priority: bool | None = None,
+    ) -> "CritiquePromptContext":
         metadata = metadata or {}
         dop_info = dop_info or {}
+        if pixel_priority is None:
+            pixel_priority = bool(metadata.get("pixel_priority"))
         return cls(
             user_intent=sanitize_str(metadata.get("user_intent")),
             camera_model=sanitize_str(metadata.get("camera_model")),
@@ -56,6 +66,7 @@ class CritiquePromptContext:
             keywords=sanitize_str(dop_info.get("keywords")),
             rating_str=sanitize_str(dop_info.get("rating_str")),
             preset_name=sanitize_str(dop_info.get("preset_name")),
+            pixel_priority=bool(pixel_priority),
         )
 
     @property
@@ -100,6 +111,27 @@ def _scores_meaning_block(lens: CritiqueLens) -> str:
     return "\n".join(lines)
 
 
+def _pixel_priority_block(ctx: CritiquePromptContext, *, phase: int) -> str:
+    """Works / 現像書き出し向け: 画を一次ソース、EXIF は撮影記録（T8）。"""
+    if not ctx.pixel_priority:
+        return ""
+    if phase == 1:
+        return (
+            "\n【画優先（Works / 現像書き出し）】\n"
+            "- 判断の一次ソースは「いま見ている画素（JPEGの見た目）」です。"
+            "数値やメタと食い違うときは画を優先してください。\n"
+        )
+    return (
+        "\n【画優先（Works / 現像書き出し）】\n"
+        "- 判断の一次ソースは「いま見ている画素（JPEGの見た目）」です"
+        "（特に `{stem}_dev.jpg` など現像書き出し）。\n"
+        "- EXIF（絞り・SS・ISO・焦点距離等）はシャッターを切った時点の撮影記録であり、"
+        "現像後の見え方と一致しないことがあります。\n"
+        "- 数値と見た目が食い違うときは画を優先し、EXIF は補助事実として扱ってください。"
+        "現像パラメータ自体を講評入力にしないでください。\n"
+    )
+
+
 def build_phase1_prompt(ctx: CritiquePromptContext, lens: str | CritiqueLens | None = None) -> str:
     """Phase 1: カード用4項目（TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY）。"""
     L = _resolve_lens(lens)
@@ -107,7 +139,7 @@ def build_phase1_prompt(ctx: CritiquePromptContext, lens: str | CritiqueLens | N
 
 【撮影環境ファクトデータ】
 - カメラ: {ctx.camera_model} / レンズ: {ctx.lens_model}
-
+{_pixel_priority_block(ctx, phase=1)}
 【講評作成の絶対ルール】
 1. {L.score_definition_rule}
 2. 時間帯ラベルの厳禁: 『朝日』『夕日』『夕焼け』『夕暮れ』『夕映え』『夕景』『夜景』『黄昏』『夜の』『早朝』などの直接的な時間帯を示す単語・ラベルの使用は【一切厳禁】です。画面が暗く見えても時計の時間帯を推測して書かないでください。光の角度・質感・明暗・グラデーションだけを描写してください。
@@ -148,7 +180,7 @@ def build_phase2_prompt(
 - カメラ: {ctx.camera_model} / レンズ: {ctx.lens_model}
 - 撮影設定: {ctx.f_number} | {ctx.shutter_speed} | {ctx.iso} | 焦点距離: {ctx.focal_length}
 - DxO評価/Preset: {ctx.rating_str} | Preset: {ctx.preset_name}
-
+{_pixel_priority_block(ctx, phase=2)}
 【撮影者が付与したメタデータ (IPTC)】
 - 作品タイトル/見出し (Headline): {ctx.content_headline}
 - 撮影意図・悩み・コメント (User Intent): {ctx.user_intent}

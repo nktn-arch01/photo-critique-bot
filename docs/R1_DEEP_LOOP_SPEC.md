@@ -372,12 +372,18 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 - **必須・主経路:** GUI [`shortlist_gui.py`](../shortlist_gui.py) / ダブルクリック [`LuminaShortlist.command`](../LuminaShortlist.command)
 - 補助: CLI [`run_shortlist.py`](../run_shortlist.py)（`--dir` / `--stages` / `--dry-run`）
 
+痕跡生成（T8）:
+
+- **主経路:** 同 GUI の「Works 痕跡生成」セクション（フォルダ指定・モード・テーマ・中断）
+- 補助: CLI [`run_trace_works.py`](../run_trace_works.py)（`--dir` / `--mode` / `--force`）
+- コア: [`trace_from_works.py`](../trace_from_works.py)（`_dev` 優先・コピーなし・画優先プロンプト）
+
 講評バッチ GUI（`app_gui.py` / `PhotoAICritique.command`）とは**別アプリ**。既存キーを壊さない。
 
 **作らない:** 短絡のサムネ確認 UI、H1/H2/H3 専用画面、Works コピー機能。  
 既存の講評バッチ GUI（`app_gui.py`）は維持・回帰させない。
 
-設定: `~/.photo_ai_config.json` の既存キーは壊さない。
+設定: `~/.photo_ai_config.json` の既存キーは壊さない（`works_last_dir` を追加可）。
 
 ---
 
@@ -494,3 +500,4 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 | 2026-08-11 | T6 `shortlist_pipeline` + `run_shortlist.py`（M1→M2→M3・進捗・中断）実装 |
 | 2026-08-11 | T7 `delta_log`（`_lumina/sessions` 監査・再読・H3再スキャン）実装 |
 | 2026-08-11 | 短絡**必須GUI**（`shortlist_gui` / `LuminaShortlist.command`）。監査に `pre_h3`/`post_h3`/`h3_delta` を追加 |
+| 2026-08-11 | T8 `trace_from_works`（Works `_dev` 優先・コピーなし・画優先注記）。GUI／`run_trace_works` 導線 |

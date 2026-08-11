@@ -4,6 +4,7 @@
 - 月／イベントフォルダを選んで M1→M2→M3 を実行
 - 進捗・中断・監査ログ自動保存
 - DxO（H3）修正後の記録ボタン（pre_h3 / post_h3 / h3_delta）
+- Works（確定フォルダ）を指定して対話痕跡（カード／ノート／ログ）を生成（T8・コピーなし）
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
 from delta_log import (
     latest_session_path,
     list_session_paths,
@@ -24,6 +26,7 @@ from delta_log import (
 )
 from library_unit import list_source_jpegs, resolve_unit, unit_from_dir
 from shortlist_pipeline import PipelineConfig, PipelineProgress, ShortlistPipeline
+from trace_from_works import TraceConfig, TraceProgress, WorksTraceRunner, list_works_trace_targets
 
 CONFIG_FILE = Path.home() / ".photo_ai_config.json"
 
@@ -32,8 +35,8 @@ class ShortlistApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Lumina Notes 短絡バッチ")
-        self.root.geometry("720x700")
-        self.root.minsize(640, 580)
+        self.root.geometry("720x860")
+        self.root.minsize(640, 720)
         try:
             self.root.tk.call("tk", "scaling", 2.0)
         except Exception:
@@ -41,6 +44,7 @@ class ShortlistApp:
 
         self.is_running = False
         self.pipeline: ShortlistPipeline | None = None
+        self.trace_runner: WorksTraceRunner | None = None
         self.last_session_path: Path | None = None
         self.config = self.load_config()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -51,6 +55,7 @@ class ShortlistApp:
         base = {
             "last_dir": default_dir,
             "shortlist_last_dir": default_dir,
+            "works_last_dir": default_dir,
             "force_overwrite": False,
             "card_theme": "dark",
         }
@@ -62,11 +67,16 @@ class ShortlistApp:
                 pass
         if not base.get("shortlist_last_dir"):
             base["shortlist_last_dir"] = base.get("last_dir", default_dir)
+        if not base.get("works_last_dir"):
+            base["works_last_dir"] = base.get("last_dir", default_dir)
         return base
 
-    def save_config(self, target_dir: str) -> None:
+    def save_config(self, target_dir: str | None = None, *, works_dir: str | None = None) -> None:
         try:
-            self.config["shortlist_last_dir"] = target_dir
+            if target_dir:
+                self.config["shortlist_last_dir"] = target_dir
+            if works_dir:
+                self.config["works_last_dir"] = works_dir
             # 既存キーは壊さない
             tmp = CONFIG_FILE.with_suffix(".tmp")
             tmp.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -85,7 +95,8 @@ class ShortlistApp:
             text=(
                 "1. 月（YYYYMM）またはイベント（YYYYMMDD_名前）フォルダを選ぶ\n"
                 "2. 短絡バッチ（M1→M2→M3）を実行 → JPEG に Rating / 説明が付く\n"
-                "3. DxO で確認・修正したあと「修正後を記録」で前後比較を残す"
+                "3. DxO で確認・修正したあと「修正後を記録」で前後比較を残す\n"
+                "4. DxO から Works へ書き出したあと、下の「痕跡生成」でカード／ノートを付ける"
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
@@ -175,6 +186,67 @@ class ShortlistApp:
         self.session_label = ttk.Label(h3, text="セッション: （まだありません）")
         self.session_label.pack(anchor=tk.W, pady=(6, 0))
 
+        works = ttk.LabelFrame(main, text=" Works 痕跡生成（コピーなし） ", padding="8")
+        works.pack(fill=tk.X, pady=(10, 0))
+        ttk.Label(
+            works,
+            text=(
+                "DxO 等が書き出した確定フォルダを指定します。"
+                "同一コマは {stem}_dev.jpg を優先し、なければ撮って出し .jpg を使います。"
+                "ファイルのコピーはしません。"
+            ),
+            wraplength=640,
+            justify=tk.LEFT,
+        ).pack(anchor=tk.W, pady=(0, 6))
+        works_row = ttk.Frame(works)
+        works_row.pack(fill=tk.X)
+        self.works_dir_var = tk.StringVar(value=self.config.get("works_last_dir", ""))
+        self.works_entry = ttk.Entry(works_row, textvariable=self.works_dir_var, font=("Helvetica", 11))
+        self.works_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.btn_browse_works = ttk.Button(works_row, text=" 参照... ", command=self.browse_works_folder)
+        self.btn_browse_works.pack(side=tk.RIGHT)
+
+        works_opts = ttk.Frame(works)
+        works_opts.pack(fill=tk.X, pady=(6, 0))
+        ttk.Label(works_opts, text="モード:").pack(side=tk.LEFT)
+        self.trace_mode_var = tk.StringVar(value="full")
+        ttk.Radiobutton(works_opts, text="詳細 (full)", variable=self.trace_mode_var, value="full").pack(
+            side=tk.LEFT, padx=(4, 8)
+        )
+        ttk.Radiobutton(works_opts, text="簡易 (compact)", variable=self.trace_mode_var, value="compact").pack(
+            side=tk.LEFT, padx=(0, 12)
+        )
+        self.trace_force_var = tk.BooleanVar(value=bool(self.config.get("force_overwrite", False)))
+        ttk.Checkbutton(works_opts, text="処理済みも上書き", variable=self.trace_force_var).pack(side=tk.LEFT)
+
+        theme_row = ttk.Frame(works)
+        theme_row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Label(theme_row, text="カード背景:").pack(side=tk.LEFT)
+        self.trace_theme_var = tk.StringVar(
+            value=normalize_card_theme(self.config.get("card_theme", DEFAULT_CARD_THEME))
+        )
+        ttk.Radiobutton(theme_row, text="ダーク", variable=self.trace_theme_var, value="dark").pack(
+            side=tk.LEFT, padx=(4, 8)
+        )
+        ttk.Radiobutton(theme_row, text="ライト", variable=self.trace_theme_var, value="light").pack(
+            side=tk.LEFT
+        )
+
+        works_btns = ttk.Frame(works)
+        works_btns.pack(fill=tk.X, pady=(8, 0))
+        self.btn_trace = tk.Button(
+            works_btns,
+            text="痕跡生成を開始",
+            font=("Helvetica", 11, "bold"),
+            bg="#34c759",
+            fg="white",
+            activebackground="#248a3d",
+            activeforeground="white",
+            pady=6,
+            command=self.start_trace_thread,
+        )
+        self.btn_trace.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
     def browse_folder(self) -> None:
         current = self.dir_var.get()
         initial = current if Path(current).exists() else str(Path.home())
@@ -186,6 +258,21 @@ class ShortlistApp:
             self.save_config(selected)
             self.log(f"対象フォルダ: {selected}")
             self._refresh_session_label(Path(selected))
+
+    def browse_works_folder(self) -> None:
+        current = self.works_dir_var.get()
+        initial = current if Path(current).exists() else str(Path.home())
+        selected = filedialog.askdirectory(
+            initialdir=initial, title="Works（確定 JPEG）フォルダを選択"
+        )
+        if selected:
+            self.works_dir_var.set(selected)
+            self.save_config(works_dir=selected)
+            try:
+                n = len(list_works_trace_targets(Path(selected)))
+                self.log(f"Works フォルダ: {selected}（痕跡対象 {n} 枚）")
+            except Exception as e:
+                self.log(f"Works フォルダ: {selected}（列挙注意: {e}）")
 
     def log(self, message: str) -> None:
         def _append() -> None:
@@ -211,16 +298,21 @@ class ShortlistApp:
             self.session_label.config(text="セッション: （まだありません）")
 
     def request_cancel(self) -> None:
-        if self.pipeline and self.is_running:
-            self.pipeline.request_cancel()
+        if self.is_running:
+            if self.pipeline:
+                self.pipeline.request_cancel()
+            if self.trace_runner:
+                self.trace_runner.request_cancel()
             self.log("中止リクエストを受け付けました…")
             self.btn_cancel.config(state=tk.DISABLED)
 
     def on_closing(self) -> None:
         if self.is_running:
-            if messagebox.askyesno("確認", "短絡バッチ実行中です。終了しますか？"):
+            if messagebox.askyesno("確認", "処理実行中です。終了しますか？"):
                 if self.pipeline:
                     self.pipeline.request_cancel()
+                if self.trace_runner:
+                    self.trace_runner.request_cancel()
                 self.root.destroy()
         else:
             self.root.destroy()
@@ -273,7 +365,10 @@ class ShortlistApp:
         self.btn_cancel.config(state=tk.NORMAL)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
+        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
+        self.works_entry.config(state=tk.DISABLED)
         self.progress.start(12)
         threading.Thread(target=self._run_batch, args=(target,), daemon=True).start()
 
@@ -333,12 +428,107 @@ class ShortlistApp:
     def reset_ui(self) -> None:
         self.is_running = False
         self.pipeline = None
+        self.trace_runner = None
         self.progress.stop()
         self.btn_start.config(state=tk.NORMAL, bg="#007aff")
         self.btn_cancel.config(state=tk.DISABLED)
         self.btn_browse.config(state=tk.NORMAL)
         self.btn_h3.config(state=tk.NORMAL)
+        self.btn_trace.config(state=tk.NORMAL, bg="#34c759")
+        self.btn_browse_works.config(state=tk.NORMAL)
         self.dir_entry.config(state=tk.NORMAL)
+        self.works_entry.config(state=tk.NORMAL)
+
+    def start_trace_thread(self) -> None:
+        if self.is_running:
+            return
+        works = Path(self.works_dir_var.get().strip())
+        if not works.is_dir():
+            messagebox.showerror("エラー", f"Works フォルダがありません:\n{works}")
+            return
+        try:
+            targets = list_works_trace_targets(works)
+        except Exception as e:
+            messagebox.showerror("エラー", str(e))
+            return
+        if not targets:
+            messagebox.showwarning(
+                "対象なし",
+                "痕跡対象の JPEG がありません。\n"
+                "{stem}_dev.jpg または撮って出し .jpg を置いてください。",
+            )
+            return
+
+        mode = self.trace_mode_var.get()
+        theme = normalize_card_theme(self.trace_theme_var.get())
+        force = self.trace_force_var.get()
+        if not messagebox.askyesno(
+            "痕跡生成の確認",
+            f"Works: {works}\n"
+            f"対象: {len(targets)} 枚（_dev 優先）\n"
+            f"モード: {mode} / テーマ: {theme}\n"
+            f"上書き: {'する' if force else 'しない'}\n\n"
+            "ファイルのコピーは行いません。\n痕跡生成を開始しますか？",
+        ):
+            return
+
+        self.config["card_theme"] = theme
+        self.config["force_overwrite"] = force
+        self.save_config(works_dir=str(works))
+        self.is_running = True
+        self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_cancel.config(state=tk.NORMAL)
+        self.btn_browse.config(state=tk.DISABLED)
+        self.btn_h3.config(state=tk.DISABLED)
+        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_browse_works.config(state=tk.DISABLED)
+        self.dir_entry.config(state=tk.DISABLED)
+        self.works_entry.config(state=tk.DISABLED)
+        self.progress.start(12)
+        threading.Thread(target=self._run_trace, args=(works,), daemon=True).start()
+
+    def _run_trace(self, works: Path) -> None:
+        try:
+            def on_progress(p: TraceProgress) -> None:
+                self.log(f"[trace/{p.stage}] {p.message}")
+                self._set_status(p.message)
+
+            self.trace_runner = WorksTraceRunner(
+                TraceConfig(
+                    mode=self.trace_mode_var.get(),
+                    force_overwrite=self.trace_force_var.get(),
+                    card_theme=self.trace_theme_var.get(),
+                    pixel_priority=True,
+                ),
+                on_progress=on_progress,
+            )
+            self.log("=" * 48)
+            self.log(f"Works 痕跡生成開始: {works}")
+            result = self.trace_runner.run(works)
+            self.log(
+                f"status={result.status} processed={result.processed} "
+                f"skipped={result.skipped} errors={result.errors}"
+            )
+            self.log("=" * 48)
+
+            def _done() -> None:
+                self.status_label.config(text=f"痕跡{result.status}")
+                messagebox.showinfo(
+                    "痕跡生成完了",
+                    f"痕跡生成が {result.status} しました。\n\n"
+                    f"対象: {result.targets_found} 枚\n"
+                    f"新規: {result.processed}\n"
+                    f"スキップ: {result.skipped}\n"
+                    f"エラー: {result.errors}\n\n"
+                    f"出力先:\n{works}",
+                )
+
+            self.root.after(0, _done)
+        except Exception as e:
+            self.log(f"痕跡エラー: {e}")
+            self.root.after(0, lambda: messagebox.showerror("エラー", str(e)))
+        finally:
+            self.root.after(0, self.reset_ui)
 
     def record_h3_after(self) -> None:
         target = Path(self.dir_var.get().strip())

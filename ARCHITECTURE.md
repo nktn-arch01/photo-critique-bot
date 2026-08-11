@@ -82,7 +82,7 @@
 - `docs/LUMINA_NOTES_SERVICE_CONCEPT.md`: **【将来サービス構想・E1】** 二速度（速い輪＝当日〜習慣の対話／深い輪＝週・イベントの振り返りと章）。最初に届ける類型はミラーレス派。機能仕様・実装詳細は含まない。
 - `docs/R1_DEEP_LOOP_SPEC.md`: **【R1′ 深い輪 機能仕様】** 第一波 R1′-A は JPEG への IPTC Rating／説明書き込みバッチが中心。人の確認と Works 書き出しは DxO 等。メタ一次ソースは JPEG（同期成立時は dop/xmp 不使用）。
 - `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向＋双方向 PASS（2026-08-11）。§0 運用確定。**
-- `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。T0–T7 完了。
+- `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。T0–T8 完了。
 - `iptc_rating_io.py`: **【短絡メタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM` / イベント `YYYYMMDD_名前` の識別・列挙と直下 JPEG 一覧。規則外サブフォルダはイベントにしない。
 - `shortlist_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。
@@ -90,9 +90,11 @@
 - `shortlist_diversity.py`: **【M3 多様性】** 品質×多様性の貪欲選抜。余白 Rating=3／上位=4＋`[M3]`。タグ語彙・執着ブーストは設定化。
 - `shortlist_pipeline.py`: **【短絡パイプライン】** M1→M2→M3 オーケストレーション。進捗・中断。講評バッチとは別導線。
 - `delta_log.py`: **【監査ログ】** `{unit}/_lumina/sessions/{id}.json`。`pre_h3` / `post_h3` / `h3_delta`（DxO前後・判定改善）。
-- `shortlist_gui.py`: **【短絡必須GUI】** フォルダ選択・実行・中断・DxO修正後記録。講評 `app_gui` とは別。
+- `shortlist_gui.py`: **【短絡必須GUI】** フォルダ選択・実行・中断・DxO修正後記録・Works 痕跡生成。講評 `app_gui` とは別。
 - `LuminaShortlist.command`: 短絡 GUI のダブルクリック起動。
 - `run_shortlist.py`: 短絡バッチ CLI（補助）。
+- `trace_from_works.py`: **【Works 痕跡】** `{stem}_dev.jpg` 優先／撮って出しフォールバック。既存 critique コア再利用。コピーなし。
+- `run_trace_works.py`: Works 痕跡 CLI（補助）。
 - `scripts/iptc_sync_verify.py`: `iptc_rating_io` を使う Rating/Description ラウンドトリップ検証。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
