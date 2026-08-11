@@ -71,13 +71,13 @@ python3 prepare_mac_manual_fixtures.py
 
 ---
 
-## 1. スクリーニング GUI 起動
+## 1. Lumina Notes Console 起動
 
 Finder で `LuminaShortlist.command` をダブルクリック（またはターミナルで `python3 shortlist_gui.py`）。
 
 | # | 確認 | 結果 |
 |---|------|------|
-| S1 | ウィンドウ「Lumina Notes スクリーニング」が開く | |
+| S1 | ウィンドウ「Lumina Notes Console」が開く | |
 
 ---
 

@@ -1,4 +1,4 @@
-"""Lumina Notes スクリーニング GUI（必須実行口）.
+"""Lumina Notes Console（スクリーニング + Lumina Review の統合 GUI）.
 
 講評バッチ ``app_gui.py`` とは別ウィンドウ・別導線。
 - 月／イベントフォルダを選んで M1→M2→M3 を実行
@@ -43,7 +43,7 @@ from trace_from_works import (
 class ShortlistApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Lumina Notes スクリーニング")
+        self.root.title("Lumina Notes Console")
         self.root.geometry("720x860")
         self.root.minsize(640, 720)
         try:
