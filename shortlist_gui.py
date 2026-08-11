@@ -40,6 +40,45 @@ from trace_from_works import (
 )
 
 
+# 主要アクションボタン（macOS でも bg が効くよう clam + flat）
+BTN_DARK_BLUE = "#003d82"
+BTN_DARK_BLUE_ACTIVE = "#002655"
+BTN_DARK_BLUE_DISABLED = "#5a6d7d"
+BTN_FG = "#ffffff"
+
+
+def _configure_console_button_theme(root: tk.Tk) -> None:
+    """macOS Aqua でもカスタム背景色が効くようにする。"""
+    import sys
+
+    if sys.platform == "darwin":
+        try:
+            ttk.Style(root).theme_use("clam")
+        except tk.TclError:
+            pass
+    root.option_add("*Button.highlightThickness", 0)
+    root.option_add("*Button.borderWidth", 0)
+
+
+def _action_button(parent: tk.Misc, **kwargs: object) -> tk.Button:
+    """白文字＋ダークブルーの主要ボタン。"""
+    bg = str(kwargs.pop("bg", BTN_DARK_BLUE))
+    active_bg = str(kwargs.pop("activebackground", BTN_DARK_BLUE_ACTIVE))
+    return tk.Button(
+        parent,
+        fg=BTN_FG,
+        bg=bg,
+        activebackground=active_bg,
+        activeforeground=BTN_FG,
+        disabledforeground=BTN_FG,
+        highlightthickness=0,
+        borderwidth=0,
+        relief=tk.FLAT,
+        cursor="hand2",
+        **kwargs,
+    )
+
+
 class ShortlistApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -57,6 +96,7 @@ class ShortlistApp:
         self.last_session_path: Path | None = None
         self.config = self.load_config()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        _configure_console_button_theme(self.root)
         self.setup_ui()
 
     def load_config(self) -> dict:
@@ -142,26 +182,18 @@ class ShortlistApp:
 
         actions = ttk.Frame(main)
         actions.pack(fill=tk.X, pady=(0, 8))
-        self.btn_start = tk.Button(
+        self.btn_start = _action_button(
             actions,
             text="スクリーニングを開始",
             font=("Helvetica", 12, "bold"),
-            bg="#007aff",
-            fg="white",
-            activebackground="#005bb5",
-            activeforeground="white",
             pady=8,
             command=self.start_batch_thread,
         )
         self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        self.btn_cancel = tk.Button(
+        self.btn_cancel = _action_button(
             actions,
             text="中止",
-            font=("Helvetica", 12),
-            bg="#ff3b30",
-            fg="white",
-            activebackground="#c72c23",
-            activeforeground="white",
+            font=("Helvetica", 12, "bold"),
             state=tk.DISABLED,
             pady=8,
             command=self.request_cancel,
@@ -234,14 +266,10 @@ class ShortlistApp:
 
         works_btns = ttk.Frame(works)
         works_btns.pack(fill=tk.X, pady=(8, 0))
-        self.btn_trace = tk.Button(
+        self.btn_trace = _action_button(
             works_btns,
             text="Lumina Review を開始",
             font=("Helvetica", 11, "bold"),
-            bg="#34c759",
-            fg="white",
-            activebackground="#248a3d",
-            activeforeground="white",
             pady=6,
             command=self.start_trace_thread,
         )
@@ -381,11 +409,11 @@ class ShortlistApp:
 
         self.save_config(str(target))
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_start.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
         self.btn_cancel.config(state=tk.NORMAL)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_trace.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
@@ -451,8 +479,8 @@ class ShortlistApp:
         self.pipeline = None
         self.trace_runner = None
         self.progress.stop()
-        self.btn_start.config(state=tk.NORMAL, bg="#007aff")
-        self.btn_cancel.config(state=tk.DISABLED)
+        self.btn_start.config(state=tk.NORMAL, bg=BTN_DARK_BLUE)
+        self.btn_cancel.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
         self.btn_browse.config(state=tk.NORMAL)
         self.btn_h3.config(state=tk.NORMAL)
         self.btn_trace.config(state=tk.NORMAL, bg="#34c759")
@@ -507,11 +535,11 @@ class ShortlistApp:
         self.config["force_overwrite"] = opts["force"]
         self.save_config(works_dir=str(works))
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_start.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
         self.btn_cancel.config(state=tk.NORMAL)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_trace.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
@@ -590,11 +618,11 @@ class ShortlistApp:
             return
 
         self.is_running = True
-        self.btn_start.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_start.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
         self.btn_cancel.config(state=tk.DISABLED)
         self.btn_browse.config(state=tk.DISABLED)
         self.btn_h3.config(state=tk.DISABLED)
-        self.btn_trace.config(state=tk.DISABLED, bg="#8e8e93")
+        self.btn_trace.config(state=tk.DISABLED, bg=BTN_DARK_BLUE_DISABLED)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
