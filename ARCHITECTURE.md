@@ -85,6 +85,7 @@
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
 - `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。
 - `docs/R1A_MAC_MANUAL_CHECKLIST.md`: **【Mac 手動確認】** オーナー向け GUI／実フォルダ手順（PASS/FAIL 記入）。
+- `docs/R1A_NAMING_CLEANUP.md`: **【命名整理】** 旧 shortlist／trace／評価カード等の棚卸しと段階改修案。
 - `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `XX` 機種接頭辞、Works 月 `YYYYMM` のみ・手動、コピーなし、Lumina Review ログ配置、記録 UI。
 - `iptc_rating_io.py`: **【スクリーニングメタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`RatingPercent` のみでも復元。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM|XXYYYYMM` / イベント `YYYYMMDD_名前|XXYYYYMMDD_名前`。Works は `YYYYMM` のみ。規則外サブフォルダはイベントにしない。

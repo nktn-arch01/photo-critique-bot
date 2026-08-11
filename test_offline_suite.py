@@ -1959,6 +1959,41 @@ def test_low_priority_prompt_pick_skips_sentinel_nashi():
     assert ctx2.rating_str == "★★★★★ (5/5)"
 
 
+def test_dry_run_session_rejects_record_post_h3():
+    """C1: write_meta=False のセッションは H3 記録を拒否する。"""
+    import json
+    import shutil
+    import tempfile
+
+    from delta_log import DryRunSessionError, record_post_h3, write_session_document
+
+    root = Path(tempfile.mkdtemp(prefix="dry_h3_"))
+    try:
+        unit = root / "OM202608"
+        unit.mkdir()
+        sess = unit / "_lumina" / "sessions"
+        sess.mkdir(parents=True)
+        path = sess / "dry.json"
+        doc = {
+            "schema": "lumina.shortlist_session.v1",
+            "id": "dry",
+            "library_unit_id": "OM202608",
+            "library_unit_kind": "month",
+            "library_unit_path": str(unit),
+            "write_meta": False,
+            "pre_h3": {"files": [], "counts_by_rating": {}},
+            "files": [],
+        }
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        try:
+            record_post_h3(path)
+            raise AssertionError("DryRunSessionError expected")
+        except DryRunSessionError as e:
+            assert "ドライラン" in str(e)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -2007,6 +2042,7 @@ def run_all():
     test_low_priority_rating_percent_fallback()
     test_low_priority_works_subdir_hint()
     test_low_priority_prompt_pick_skips_sentinel_nashi()
+    test_dry_run_session_rejects_record_post_h3()
     print("test_offline_suite: OK")
 
 

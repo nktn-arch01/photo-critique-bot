@@ -400,15 +400,28 @@ def summarize_session(document: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+class DryRunSessionError(ValueError):
+    """ドライラン（JPEG 未書き込み）のセッションに H3 を記録しようとした。"""
+
+
 def record_post_h3(session_file: Path | str, unit: LibraryUnit | None = None) -> dict[str, Any]:
     """DxO（H3）修正後の状態を記録し、修正前との差分を残す。
 
     - ``pre_h3``: バッチ直後（無ければ files から復元）
     - ``post_h3``: いまの JPEG 再スキャン
     - ``h3_delta``: 前後差分（判定改善用）
+
+    ``write_meta`` が False（ドライラン）のセッションは拒否する。
+    pre_h3 はパイプライン判定値、JPEG は未更新のため偽差分になるため。
     """
     path = Path(session_file)
     doc = load_session(path)
+    if doc.get("write_meta") is False:
+        raise DryRunSessionError(
+            "このセッションはドライラン（JPEGへ書いていない）のため、"
+            "「DxO修正後を記録」は使えません。\n"
+            "ドライランを外してスクリーニングを再実行してから記録してください。"
+        )
     if unit is None:
         unit_path = Path(doc["library_unit_path"])
         from library_unit import unit_from_dir
