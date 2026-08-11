@@ -182,7 +182,7 @@ H3 想定どおり、DxO 上で Rating 修正とコメント（説明）書き�
 
 **判定: A PASS かつ B 一方向 PASS かつ双方向 PASS → §0 を運用確定。`.dop` / `.xmp` は使わない。**
 
-実装: T1–T9（短絡必須GUI・DxO前後記録・Works痕跡・scanner JPEG正含む）。次は [`R1A_IMPLEMENTATION_BREAKDOWN.md`](R1A_IMPLEMENTATION_BREAKDOWN.md) の **T10**（必要なら）。
+実装: **T1–T10 完了**（R1′-A 第一波）。オフライン回帰は `python3 test_offline_suite.py`（CI に exiftool 込み）。
 
 ---
 

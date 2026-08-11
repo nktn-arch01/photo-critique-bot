@@ -435,10 +435,10 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 
 | 種類 | 内容 |
 |------|------|
-| オフライン | Rating 意味、説明ブロック整形、フォルダ規則、監査 JSON |
+| オフライン | Rating 意味、説明ブロック整形、フォルダ規則、監査 JSON、画素非破壊、失敗継続、Works 無 dop、受け入れ対応表（T10） |
 | 手動・検証 | DxO での Rating/説明の見え方・再読込（A10） |
 | 手動・運用 | 実週次／イベントで M1–M3→DxO H3→現像→Works→痕跡 |
-| 回帰 | `test_offline_suite.py` |
+| 回帰 | `test_offline_suite.py`（CI: `.github/workflows/offline-tests.yml`、exiftool 込み） |
 
 実 API は CI 必須にしない。
 
@@ -502,3 +502,4 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 | 2026-08-11 | 短絡**必須GUI**（`shortlist_gui` / `LuminaShortlist.command`）。監査に `pre_h3`/`post_h3`/`h3_delta` を追加 |
 | 2026-08-11 | T8 `trace_from_works`（Works `_dev` 優先・コピーなし・画優先注記）。GUI／`run_trace_works` 導線 |
 | 2026-08-11 | T9 scanner／講評の **JPEG 正**（Rating/Description）。`.dop` は空欄時フォールバックのみ |
+| 2026-08-11 | T10 オフライン総仕上げ（失敗継続・画素非破壊・Works無dop・受け入れ表・CI exiftool） |
