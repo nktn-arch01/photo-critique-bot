@@ -8,6 +8,13 @@
 - 1枚失敗でバッチ全体を止めない
 
 ブレ指標は Laplacian 分散（Pillow のみ。OpenCV/numpy 非依存）。
+
+使用上の注意（誤判定の想定）:
+- 星空・夜景の黒つぶれ、流し撮り／ICM の強いブレは、意図保護 EXIF が
+  無い／足りないと Rating 0 になりうる。H3 で拾う前提（詳細は
+  docs/R1_DEEP_LOOP_SPEC.md §6.4.1）。
+- 白飛び系は意図保護の対象外。
+- EXIF 欠落 JPEG では保護が効かない。
 """
 
 from __future__ import annotations
