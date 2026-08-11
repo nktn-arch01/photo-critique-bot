@@ -1610,6 +1610,124 @@ def test_r1a_t10_acceptance_offline_matrix():
     assert not library_unit.is_month_folder_name("Works")
 
 
+def test_hotfix_desktop_config_merge_preserves_shortlist_keys():
+    """H1: 講評 GUI 相当の保存でも shortlist/works キーが消えない。"""
+    import tempfile
+
+    from desktop_config import load_config, save_config_merge
+
+    root = Path(tempfile.mkdtemp(prefix="cfg_h1_"))
+    cfg_path = root / "photo_ai_config.json"
+    try:
+        save_config_merge(
+            {
+                "last_dir": "/a",
+                "shortlist_last_dir": "/short",
+                "works_last_dir": "/works",
+                "card_theme": "dark",
+            },
+            path=cfg_path,
+        )
+        # app_gui 相当: last_dir / theme / overwrite だけ更新
+        merged = save_config_merge(
+            {
+                "last_dir": "/critique",
+                "force_overwrite": True,
+                "card_theme": "light",
+            },
+            path=cfg_path,
+        )
+        assert merged["shortlist_last_dir"] == "/short"
+        assert merged["works_last_dir"] == "/works"
+        assert merged["last_dir"] == "/critique"
+        assert merged["card_theme"] == "light"
+        again = load_config(cfg_path)
+        assert again["shortlist_last_dir"] == "/short"
+        assert again["works_last_dir"] == "/works"
+    finally:
+        import shutil
+
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_hotfix_m2_m3_skip_none_rating():
+    """H3: Rating 未書き込み（None）は M2/M3 候補に入れない。"""
+    import shutil
+
+    from iptc_rating_io import ExifToolNotFoundError, require_exiftool, write_rating
+    from shortlist_antenna import AntennaConfig, AntennaScore, run_antenna_on_paths
+    from shortlist_diversity import DiversityConfig, DiversityFeature, run_diversity_on_paths
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_hotfix_m2_m3_skip_none_rating: exiftool missing")
+        return
+
+    root = Path(tempfile.mkdtemp(prefix="none_rating_"))
+    try:
+        with_r = root / "with.jpg"
+        without = root / "none.jpg"
+        Image.new("RGB", (48, 36), (10, 20, 30)).save(with_r, quality=90)
+        Image.new("RGB", (48, 36), (40, 50, 60)).save(without, quality=90)
+        write_rating(with_r, 1)
+        # without: Rating タグなし → None
+
+        def m2_fn(path: Path) -> AntennaScore:
+            return AntennaScore(
+                {"framing": 4, "sensitivity": 4, "story": 3, "technical": 3, "sense": 4},
+                "hot",
+            )
+
+        batch = run_antenna_on_paths(
+            [with_r, without],
+            AntennaConfig(pass_ratio=1.0, min_pass=0),
+            write=False,
+            score_fn=m2_fn,
+        )
+        skipped = [d for d in batch.decisions if d.skipped]
+        assert any(d.path.name == "none.jpg" for d in skipped)
+        assert batch.skipped >= 1
+        # with.jpg だけがスコア対象
+        scored = [d for d in batch.decisions if not d.skipped and d.error is None]
+        assert any(d.path.name == "with.jpg" for d in scored)
+        assert all(d.path.name != "none.jpg" or d.skipped for d in batch.decisions)
+
+        write_rating(with_r, 2)
+
+        def m3_fn(path: Path) -> DiversityFeature:
+            return DiversityFeature(
+                hue_bin=1, luma_bin=2, tags=("海",), quality=4.0, attachment=3.0, reason="x"
+            )
+
+        div = run_diversity_on_paths(
+            [with_r, without],
+            DiversityConfig(keep_ratio=1.0, top_ratio=0.5),
+            write=False,
+            feature_fn=m3_fn,
+        )
+        assert any(d.skipped and d.path.name == "none.jpg" for d in div.decisions)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_hotfix_exception_lambda_captures_message():
+    """H2: except 後もエラー文言をキャプチャできる（NameError 回避パターン）。"""
+    caught: list[str] = []
+
+    def boom():
+        try:
+            raise RuntimeError("simulated-ui-error")
+        except Exception as e:
+            err_msg = str(e)
+            # shortlist_gui と同じ default-arg キャプチャ
+            cb = lambda msg=err_msg: caught.append(msg)
+            cb()
+
+    boom()
+    assert caught == ["simulated-ui-error"]
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -1648,6 +1766,9 @@ def run_all():
     test_r1a_t10_iptc_sync_verify_script_roundtrip()
     test_r1a_t10_no_works_copy_surface()
     test_r1a_t10_acceptance_offline_matrix()
+    test_hotfix_desktop_config_merge_preserves_shortlist_keys()
+    test_hotfix_m2_m3_skip_none_rating()
+    test_hotfix_exception_lambda_captures_message()
     print("test_offline_suite: OK")
 
 

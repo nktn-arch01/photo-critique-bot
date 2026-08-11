@@ -506,7 +506,7 @@ def run_diversity_on_paths(
         path = Path(raw)
         try:
             input_rating = _read_input_rating(path)
-            if input_rating is not None and input_rating < cfg.min_input_rating:
+            if input_rating is None or input_rating < cfg.min_input_rating:
                 result.decisions.append(
                     DiversityDecision(
                         path=path.resolve() if path.exists() else path,
@@ -514,7 +514,7 @@ def run_diversity_on_paths(
                         feature=None,
                         keep_rank=None,
                         passed=False,
-                        rating=input_rating,
+                        rating=input_rating if input_rating is not None else 0,
                         slot="skipped",
                         reason_brief="",
                         skipped=True,

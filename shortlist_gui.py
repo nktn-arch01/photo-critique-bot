@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 import threading
 from pathlib import Path
@@ -24,11 +23,10 @@ from delta_log import (
     record_post_h3,
     summarize_session,
 )
+from desktop_config import load_config as load_shared_config, save_config_merge
 from library_unit import list_source_jpegs, resolve_unit, unit_from_dir
 from shortlist_pipeline import PipelineConfig, PipelineProgress, ShortlistPipeline
 from trace_from_works import TraceConfig, TraceProgress, WorksTraceRunner, list_works_trace_targets
-
-CONFIG_FILE = Path.home() / ".photo_ai_config.json"
 
 
 class ShortlistApp:
@@ -51,36 +49,26 @@ class ShortlistApp:
         self.setup_ui()
 
     def load_config(self) -> dict:
-        default_dir = str(Path.home() / "Desktop")
-        base = {
-            "last_dir": default_dir,
-            "shortlist_last_dir": default_dir,
-            "works_last_dir": default_dir,
-            "force_overwrite": False,
-            "card_theme": "dark",
-        }
-        if CONFIG_FILE.exists():
-            try:
-                data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-                base.update(data if isinstance(data, dict) else {})
-            except Exception:
-                pass
-        if not base.get("shortlist_last_dir"):
-            base["shortlist_last_dir"] = base.get("last_dir", default_dir)
-        if not base.get("works_last_dir"):
-            base["works_last_dir"] = base.get("last_dir", default_dir)
-        return base
+        cfg = load_shared_config(
+            defaults={
+                "force_overwrite": False,
+                "card_theme": DEFAULT_CARD_THEME,
+            }
+        )
+        cfg["force_overwrite"] = bool(cfg.get("force_overwrite", False))
+        cfg["card_theme"] = normalize_card_theme(cfg.get("card_theme", DEFAULT_CARD_THEME))
+        return cfg
 
     def save_config(self, target_dir: str | None = None, *, works_dir: str | None = None) -> None:
         try:
+            updates: dict = {}
             if target_dir:
-                self.config["shortlist_last_dir"] = target_dir
+                updates["shortlist_last_dir"] = target_dir
             if works_dir:
-                self.config["works_last_dir"] = works_dir
-            # 既存キーは壊さない
-            tmp = CONFIG_FILE.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding="utf-8")
-            tmp.replace(CONFIG_FILE)
+                updates["works_last_dir"] = works_dir
+            if not updates:
+                return
+            self.config = save_config_merge(updates, current=self.config)
         except Exception as e:
             self.log(f"設定の保存に失敗: {e}")
 
@@ -420,8 +408,9 @@ class ShortlistApp:
 
             self.root.after(0, _done)
         except Exception as e:
-            self.log(f"エラー: {e}")
-            self.root.after(0, lambda: messagebox.showerror("エラー", str(e)))
+            err_msg = str(e)
+            self.log(f"エラー: {err_msg}")
+            self.root.after(0, lambda msg=err_msg: messagebox.showerror("エラー", msg))
         finally:
             self.root.after(0, self.reset_ui)
 
@@ -525,8 +514,9 @@ class ShortlistApp:
 
             self.root.after(0, _done)
         except Exception as e:
-            self.log(f"痕跡エラー: {e}")
-            self.root.after(0, lambda: messagebox.showerror("エラー", str(e)))
+            err_msg = str(e)
+            self.log(f"痕跡エラー: {err_msg}")
+            self.root.after(0, lambda msg=err_msg: messagebox.showerror("エラー", msg))
         finally:
             self.root.after(0, self.reset_ui)
 

@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 import re
 import threading
 import subprocess
@@ -18,9 +17,8 @@ from card_theme import (
     card_theme_label,
     normalize_card_theme,
 )
+from desktop_config import load_config as load_shared_config, save_config_merge
 from scanner import extract_file_metadata, SUPPORTED_IMAGE_SUFFIXES
-
-CONFIG_FILE = Path.home() / ".photo_ai_config.json"  # 仕様: ユーザーホーム直下（プロジェクト外）
 
 
 class PhotoAICritiqueApp:
@@ -44,31 +42,29 @@ class PhotoAICritiqueApp:
         self.setup_ui()
 
     def load_config(self) -> dict:
-        default_dir = str(Path.home() / "Desktop")
-        if CONFIG_FILE.exists():
-            try:
-                data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-                return {
-                    "last_dir": data.get("last_dir", default_dir),
-                    "force_overwrite": data.get("force_overwrite", False),
-                    "card_theme": normalize_card_theme(data.get("card_theme", DEFAULT_CARD_THEME)),
-                }
-            except Exception:
-                pass
-        return {
-            "last_dir": default_dir,
-            "force_overwrite": False,
-            "card_theme": DEFAULT_CARD_THEME,
-        }
+        """共有設定を読む。短絡 GUI 等が書いたキーは落とさない。"""
+        cfg = load_shared_config(
+            defaults={
+                "force_overwrite": False,
+                "card_theme": DEFAULT_CARD_THEME,
+            }
+        )
+        cfg["force_overwrite"] = bool(cfg.get("force_overwrite", False))
+        cfg["card_theme"] = normalize_card_theme(cfg.get("card_theme", DEFAULT_CARD_THEME))
+        return cfg
 
     def save_config(self, target_dir_str: str):
+        """更新キーだけ merge して保存（shortlist_last_dir / works_last_dir 等を保持）。"""
         try:
-            self.config["last_dir"] = target_dir_str
-            self.config["force_overwrite"] = self.force_overwrite_var.get()
-            self.config["card_theme"] = normalize_card_theme(self.card_theme_var.get())
-            tmp_file = CONFIG_FILE.with_suffix(".tmp")
-            tmp_file.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding="utf-8")
-            tmp_file.replace(CONFIG_FILE)
+            merged = save_config_merge(
+                {
+                    "last_dir": target_dir_str,
+                    "force_overwrite": self.force_overwrite_var.get(),
+                    "card_theme": normalize_card_theme(self.card_theme_var.get()),
+                },
+                current=self.config,
+            )
+            self.config = merged
         except Exception as e:
             self.log(f"⚠️ 設定の保存に失敗しました: {e}")
 

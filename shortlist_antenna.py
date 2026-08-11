@@ -375,7 +375,7 @@ def run_antenna_on_paths(
         path = Path(raw)
         try:
             input_rating = _read_input_rating(path)
-            if input_rating is not None and input_rating < cfg.min_input_rating:
+            if input_rating is None or input_rating < cfg.min_input_rating:
                 result.decisions.append(
                     AntennaDecision(
                         path=path.resolve() if path.exists() else path,
@@ -384,7 +384,7 @@ def run_antenna_on_paths(
                         heat=0.0,
                         rank=None,
                         passed=False,
-                        rating=input_rating,
+                        rating=input_rating if input_rating is not None else 0,
                         reason_brief="",
                         skipped=True,
                         error=None,
