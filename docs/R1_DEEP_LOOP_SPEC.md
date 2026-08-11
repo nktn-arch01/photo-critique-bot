@@ -473,3 +473,4 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 | 2026-08-11 | §6.4.1 に M1 使用上の注意（星空・流し撮り等の誤判定想定）を追記 |
 | 2026-08-11 | T4 `shortlist_antenna`（M2: 軽量 Vision・相対熱量・Rating 2＋`[M2]`）実装 |
 | 2026-08-11 | T5 `shortlist_diversity`（M3: 多様性貪欲選抜・Rating 3/4＋`[M3]`）実装 |
+| 2026-08-11 | T6 `shortlist_pipeline` + `run_shortlist.py`（M1→M2→M3・進捗・中断）実装 |

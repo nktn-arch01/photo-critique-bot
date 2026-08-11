@@ -94,9 +94,10 @@ T0 検証ゲート（IPTC）
 
 | 項目 | 内容 |
 |------|------|
-| 仮モジュール | `shortlist_pipeline.py` + CLI または最小デスクトップ導線 |
+| モジュール | [`shortlist_pipeline.py`](../shortlist_pipeline.py) / CLI [`run_shortlist.py`](../run_shortlist.py) |
 | 内容 | M1→M2→M3 オーケストレーション、進捗、中断、1枚失敗で全体停止しない |
-| 完了条件 | 既存 `app_gui` 講評バッチを壊さない（別導線） |
+| 状態 | **完了（2026-08-11）** |
+| 完了条件 | 既存 `app_gui` 講評バッチを壊さない（別導線）（達成） |
 | 依存 | T3–T5 |
 
 ### T7 — 監査ログ
@@ -169,6 +170,6 @@ T0 検証ゲート（IPTC）
 4. ~~T3 `shortlist_mechanical`（M1）~~ **完了**  
 5. ~~T4 `shortlist_antenna`（M2）~~ **完了**  
 6. ~~T5 `shortlist_diversity`（M3）~~ **完了**  
-7. **T6 パイプライン＋実行口** ← **次ここ**  
-8. **T7 監査ログ**  
+7. ~~T6 `shortlist_pipeline` + `run_shortlist.py`~~ **完了**  
+8. **T7 監査ログ** ← **次ここ**  
 9. **T8 + T9**

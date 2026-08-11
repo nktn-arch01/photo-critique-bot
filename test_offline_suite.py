@@ -920,6 +920,116 @@ def test_diversity_m3_margin_top_and_bias_control():
     shutil.rmtree(td, ignore_errors=True)
 
 
+def test_shortlist_pipeline_m1_m2_m3_and_cancel():
+    """T6: パイプラインが M1→M2→M3 を繋ぐ。中断可能。app_gui 非依存。"""
+    import shutil
+
+    from iptc_rating_io import ExifToolNotFoundError, read_shortlist_meta, require_exiftool, write_rating
+    from shortlist_antenna import AntennaConfig, AntennaScore
+    from shortlist_diversity import DiversityConfig, DiversityFeature
+    from shortlist_pipeline import PipelineConfig, ShortlistPipeline, parse_stages
+
+    assert parse_stages("all") == (True, True, True)
+    assert parse_stages("m1") == (True, False, False)
+    assert parse_stages("m2,m3") == (False, True, True)
+
+    try:
+        require_exiftool()
+    except ExifToolNotFoundError:
+        print("skip test_shortlist_pipeline: exiftool missing")
+        return
+
+    root = Path(tempfile.mkdtemp(prefix="pipe_t6_"))
+    month = root / "202608"
+    month.mkdir()
+    paths = []
+    for i in range(5):
+        p = month / f"p{i}.jpg"
+        # シャープな格子で M1 合格しやすくする
+        img = _make_grid_image((160, 120))
+        img.save(p, "JPEG", quality=95)
+        paths.append(p)
+
+    events = []
+
+    def on_progress(p):
+        events.append(p.stage)
+
+    def m2_fn(path: Path) -> AntennaScore:
+        # 名前の番号で熱量差
+        n = int(path.stem.replace("p", ""))
+        base = 2 + min(3, n)
+        return AntennaScore(
+            {
+                "framing": base,
+                "sensitivity": base,
+                "story": 2,
+                "technical": 2,
+                "sense": 2 + (1 if n >= 3 else 0),
+            },
+            f"m2-{n}",
+        )
+
+    def m3_fn(path: Path) -> DiversityFeature:
+        n = int(path.stem.replace("p", ""))
+        tags = (("海",) if n < 3 else ("都市",))
+        return DiversityFeature(
+            hue_bin=n % 12,
+            luma_bin=2,
+            tags=tags,
+            quality=3.0 + n * 0.3,
+            attachment=3.0,
+            reason=f"m3-{n}",
+        )
+
+    pipe = ShortlistPipeline(
+        PipelineConfig(
+            write=True,
+            m2_score_fn=m2_fn,
+            m3_feature_fn=m3_fn,
+            antenna=AntennaConfig(pass_ratio=0.4),
+            diversity=DiversityConfig(keep_ratio=0.5, top_ratio=0.5),
+        ),
+        on_progress=on_progress,
+    )
+    result = pipe.run_on_dir(month)
+    assert result.status == "completed"
+    assert result.m1 and result.m2 and result.m3
+    assert result.m1.pass_count >= 1
+    assert result.m2.pass_count >= 1
+    assert result.m3.pass_count >= 1
+    assert "m1" in events and "m2" in events and "m3" in events and "done" in events
+    # 最終で 3 or 4 が付いている
+    finals = [read_shortlist_meta(p).rating for p in paths]
+    assert any(r in (3, 4) for r in finals)
+
+    # 中断: M1 開始直後にキャンセル
+    pipe2 = ShortlistPipeline(
+        PipelineConfig(write=False, run_m2=False, run_m3=False),
+    )
+    original_emit = pipe2._emit
+
+    def emit_and_cancel(stage, message, current=None, total=None):
+        original_emit(stage, message, current, total)
+        if stage == "m1" and "開始" in message:
+            pipe2.request_cancel()
+
+    pipe2._emit = emit_and_cancel  # type: ignore[method-assign]
+    cancelled = pipe2.run_on_dir(month)
+    assert cancelled.status == "cancelled"
+    assert cancelled.cancelled
+
+    # stages m1 only
+    pipe3 = ShortlistPipeline(
+        PipelineConfig(write=False, run_m1=True, run_m2=False, run_m3=False),
+    )
+    only_m1 = pipe3.run_on_dir(month)
+    assert only_m1.status == "completed"
+    assert only_m1.m1 is not None and only_m1.m2 is None and only_m1.m3 is None
+
+    shutil.rmtree(root, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -946,6 +1056,7 @@ def run_all():
     test_mechanical_m1_blur_and_intent_protect()
     test_antenna_m2_relative_heat_no_star_gate()
     test_diversity_m3_margin_top_and_bias_control()
+    test_shortlist_pipeline_m1_m2_m3_and_cancel()
     print("test_offline_suite: OK")
 
 

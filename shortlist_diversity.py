@@ -156,6 +156,7 @@ class DiversityBatchResult:
     pass_count: int = 0
     top_count: int = 0
     margin_count: int = 0
+    cancelled: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -491,6 +492,7 @@ def run_diversity_on_paths(
     *,
     write: bool = True,
     feature_fn: FeatureFn | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> DiversityBatchResult:
     """M3 バッチ。feature_fn があれば Vision の代わりに使う。"""
     cfg = config or default_config()
@@ -498,6 +500,9 @@ def run_diversity_on_paths(
     scored: list[tuple[Path, int | None, DiversityFeature]] = []
 
     for raw in paths:
+        if should_cancel and should_cancel():
+            result.cancelled = True
+            break
         path = Path(raw)
         try:
             input_rating = _read_input_rating(path)
@@ -538,9 +543,15 @@ def run_diversity_on_paths(
             )
             result.errors += 1
 
+    if result.cancelled:
+        return result
+
     selected = greedy_diversity_select(scored, cfg)
     # skipped/error を先に入れているので、選抜結果を後ろに追加
     for decision in selected:
+        if should_cancel and should_cancel():
+            result.cancelled = True
+            break
         final = apply_diversity_decision(decision, write=write)
         result.decisions.append(final)
         if final.error:
@@ -563,10 +574,12 @@ def run_diversity_on_unit(
     *,
     write: bool = True,
     feature_fn: FeatureFn | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> DiversityBatchResult:
     return run_diversity_on_paths(
         list_source_jpegs(unit),
         config=config,
         write=write,
         feature_fn=feature_fn,
+        should_cancel=should_cancel,
     )

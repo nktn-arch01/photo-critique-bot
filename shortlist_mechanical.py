@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -110,6 +111,7 @@ class MechanicalBatchResult:
     written: int = 0
     skipped_write: int = 0
     errors: int = 0
+    cancelled: bool = False
 
     @property
     def pass_count(self) -> int:
@@ -345,11 +347,15 @@ def run_mechanical_on_paths(
     config: MechanicalConfig | None = None,
     *,
     write: bool = True,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> MechanicalBatchResult:
     """複数 JPEG に M1 を実行。1枚失敗でも継続。"""
     cfg = config or default_config()
     result = MechanicalBatchResult()
     for raw in paths:
+        if should_cancel and should_cancel():
+            result.cancelled = True
+            break
         path = Path(raw)
         try:
             decision = evaluate_mechanical(path, cfg)
@@ -382,6 +388,12 @@ def run_mechanical_on_unit(
     config: MechanicalConfig | None = None,
     *,
     write: bool = True,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> MechanicalBatchResult:
     """LibraryUnit 直下 JPEG に M1 を実行。"""
-    return run_mechanical_on_paths(list_source_jpegs(unit), config=config, write=write)
+    return run_mechanical_on_paths(
+        list_source_jpegs(unit),
+        config=config,
+        write=write,
+        should_cancel=should_cancel,
+    )

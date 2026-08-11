@@ -130,6 +130,7 @@ class AntennaBatchResult:
     skipped: int = 0
     errors: int = 0
     pass_count: int = 0
+    cancelled: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -360,6 +361,7 @@ def run_antenna_on_paths(
     *,
     write: bool = True,
     score_fn: ScoreFn | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> AntennaBatchResult:
     """M2 バッチ。score_fn があれば Vision の代わりに使う（テスト用）。"""
     cfg = config or default_config()
@@ -367,6 +369,9 @@ def run_antenna_on_paths(
     scored: list[tuple[Path, int | None, AntennaScore]] = []
 
     for raw in paths:
+        if should_cancel and should_cancel():
+            result.cancelled = True
+            break
         path = Path(raw)
         try:
             input_rating = _read_input_rating(path)
@@ -407,8 +412,14 @@ def run_antenna_on_paths(
             )
             result.errors += 1
 
+    if result.cancelled:
+        return result
+
     selected = rank_and_select(scored, cfg)
     for decision in selected:
+        if should_cancel and should_cancel():
+            result.cancelled = True
+            break
         final = apply_antenna_decision(decision, write=write)
         result.decisions.append(final)
         if final.error:
@@ -427,10 +438,12 @@ def run_antenna_on_unit(
     *,
     write: bool = True,
     score_fn: ScoreFn | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> AntennaBatchResult:
     return run_antenna_on_paths(
         list_source_jpegs(unit),
         config=config,
         write=write,
         score_fn=score_fn,
+        should_cancel=should_cancel,
     )
