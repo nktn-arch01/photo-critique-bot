@@ -3,7 +3,7 @@
 R1′-A §0 / §5.1 / docs/IPTC_SYNC_VERIFICATION.md のタグ契約に従う。
 `.dop` / `.xmp` サイドカーは扱わない。書き込みは exiftool 経由。
 
-説明の段ラベル（[M2]/[M3]）は「ブロック置換」で固定:
+説明の段ラベル（[M2]/[M3]）と Phase1 行（TITLE: 等）は「ブロック置換」で固定:
 - 既存の同ラベル行があればその行だけ置き換える
 - 無ければ末尾に追記する
 - ラベル無しのユーザー文は消さない
@@ -43,7 +43,14 @@ READ_TAGS = (
 StageLabel = Literal["M2", "M3"]
 STAGE_LABELS: tuple[StageLabel, ...] = ("M2", "M3")
 
+Phase1Key = Literal["TITLE", "SUMMARY", "SCORES", "CRITIQUE_SUMMARY"]
+PHASE1_KEYS: tuple[Phase1Key, ...] = ("TITLE", "SUMMARY", "SCORES", "CRITIQUE_SUMMARY")
+
 _STAGE_LINE_RE = re.compile(r"^\[(M2|M3)\]\s*(.*)$")
+_PHASE1_LINE_RE = re.compile(
+    r"^(TITLE|SUMMARY|SCORES|CRITIQUE_SUMMARY)\s*[:：]\s*(.*)$",
+    re.IGNORECASE,
+)
 
 
 class ExifToolNotFoundError(RuntimeError):
@@ -69,6 +76,12 @@ class ScreeningMeta:
 
     def stage_reason(self, stage: StageLabel) -> str | None:
         return parse_stage_blocks(self.description).get(stage)
+
+    def phase1_blocks(self) -> dict[Phase1Key, str]:
+        return parse_phase1_blocks(self.description)
+
+    def has_complete_phase1(self) -> bool:
+        return has_complete_phase1_blocks(self.description)
 
 
 # Wave 3 互換 alias（1リリース据え置き）
@@ -247,18 +260,107 @@ def format_rating_display(rating: int | None) -> str:
     return "★" * rating + "☆" * (5 - rating) + f" ({rating}/5)"
 
 
-def strip_stage_reason_lines(description: str) -> str:
-    """説明から [M2]/[M3] 行を除き、ユーザー文・その他だけを残す（講評の意図注入用）。"""
+def parse_phase1_blocks(description: str) -> dict[Phase1Key, str]:
+    """説明文から TITLE / SUMMARY / SCORES / CRITIQUE_SUMMARY 行を取り出す。"""
+    found: dict[Phase1Key, str] = {}
+    if not description:
+        return found
+    for line in description.splitlines():
+        m = _PHASE1_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        key = m.group(1).upper()  # type: ignore[assignment]
+        if key in PHASE1_KEYS:
+            found[key] = m.group(2).strip()  # type: ignore[index]
+    return found
+
+
+def has_complete_phase1_blocks(description: str) -> bool:
+    """4項目すべてが非空で揃っているか。"""
+    blocks = parse_phase1_blocks(description)
+    return all(blocks.get(k, "").strip() for k in PHASE1_KEYS)
+
+
+def strip_phase1_lines(description: str) -> str:
+    """説明から Phase1 ラベル行だけを除く。"""
     if not description:
         return ""
     kept: list[str] = []
     for line in description.splitlines():
-        if _STAGE_LINE_RE.match(line.strip()):
+        if _PHASE1_LINE_RE.match(line.strip()):
             continue
         kept.append(line)
-    # 前後の空行を整理（中間の空行は維持）
-    text = "\n".join(kept).strip()
-    return text
+    return "\n".join(kept).strip()
+
+
+def strip_stage_reason_lines(description: str) -> str:
+    """説明から機械行（[M2]/[M3]・Phase1）を除き、ユーザー文だけを残す。
+
+    講評の user_intent 注入用。Wave C 以降は Phase1 行も機械行として除外する。
+    """
+    if not description:
+        return ""
+    kept: list[str] = []
+    for line in description.splitlines():
+        stripped = line.strip()
+        if _STAGE_LINE_RE.match(stripped) or _PHASE1_LINE_RE.match(stripped):
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def upsert_phase1_blocks(
+    description: str,
+    blocks: dict[str, str],
+) -> str:
+    """Phase1 4項目をブロック置換。ユーザー文・[M2]/[M3] は残す。"""
+    text = description or ""
+    # 既存 Phase1 行を一度除き、正規化した4行をまとめて入れる
+    base_lines = [
+        line
+        for line in text.splitlines()
+        if not _PHASE1_LINE_RE.match(line.strip())
+    ]
+
+    phase_lines: list[str] = []
+    for key in PHASE1_KEYS:
+        raw = blocks.get(key, blocks.get(key.lower(), ""))
+        value = " ".join(str(raw).splitlines()).strip()
+        if not value:
+            continue
+        phase_lines.append(f"{key}: {value}")
+
+    if not phase_lines:
+        return "\n".join(base_lines).strip()
+
+    # 挿入位置: 先頭のユーザー文の直後、最初の [M2]/[M3] より前
+    insert_at = len(base_lines)
+    for i, line in enumerate(base_lines):
+        if _STAGE_LINE_RE.match(line.strip()):
+            insert_at = i
+            break
+
+    out = base_lines[:insert_at]
+    if out and out[-1].strip() != "":
+        out.append("")
+    out.extend(phase_lines)
+    rest = base_lines[insert_at:]
+    if rest:
+        if out and out[-1].strip() != "" and rest[0].strip() != "":
+            out.append("")
+        out.extend(rest)
+
+    while len(out) > 1 and out[-1] == "" and out[-2] == "":
+        out.pop()
+    return "\n".join(out)
+
+
+def write_phase1_blocks(path: Path | str, blocks: dict[str, str]) -> str:
+    """既存説明を読み、Phase1 を upsert して書き戻す。新しい説明全文を返す。"""
+    meta = read_screening_meta(path)
+    updated = upsert_phase1_blocks(meta.description, blocks)
+    write_description(path, updated)
+    return updated
 
 
 def upsert_stage_reason(description: str, stage: StageLabel, reason: str) -> str:

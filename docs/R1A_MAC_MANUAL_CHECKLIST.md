@@ -16,13 +16,13 @@
 
 Mac のリポジトリで（パスは自分の clone 先に合わせる。よくある例: `~/photo-critique-bot`）:
 
-**いま確認したいもの = UX Wave A（PR #10）のとき:**
+**いま確認したいもの = UX Wave C（PR #13）のとき:**
 
 ```bash
 cd ~/photo-critique-bot
 git fetch origin
-git checkout cursor/lumina-ux-wave-a-c35c
-git pull origin cursor/lumina-ux-wave-a-c35c
+git checkout cursor/lumina-ux-wave-c-c35c
+git pull origin cursor/lumina-ux-wave-c-c35c
 ```
 
 **PR が `main` にマージ済みなら:**
@@ -33,7 +33,8 @@ git checkout main
 git pull origin main --ff-only
 ```
 
-初心者向けの **Wave A だけ**の手順は §11.1 を上から順に。
+初心者向けの **Wave C だけ**の手順は §13.1 を上から順に。  
+（過去の Wave A / B は §11 / §12。いまは不要なら飛ばしてよい）
 
 ### 0.2 依存を確認
 
@@ -464,5 +465,57 @@ B2b:
 B3:
 B4:
 気づいたこと:
+```
+
+---
+
+## 13. Wave C（UX・2026-08-12 以降）
+
+ブランチ: `cursor/lumina-ux-wave-c-c35c` / PR #13 / 計画: `docs/R1A_UX_IMPROVEMENT_PLAN.md`（Wave C 節）
+
+| # | 確認 | 結果 |
+|---|------|------|
+| C0 | スクリーニングに「DxO修正後を記録」ボタンが**無い**。「カード生成」がある | |
+| C0b | 書き込みありでスクリーニング後、Console を閉じる → 再起動して監査セッションに H3（修正後）が残っている／ログに自動記録の痕跡 | |
+| C3 | 「カード生成」で Rating 3/4 に `{フォルダ名}Luminaカード/` ができ、DxO の説明に TITLE 等が見える（上書き OFF で再実行するとスキップ） | |
+| C3′ | Works Lumina Review のノート／ログに ファイル名・TITLE〜CRITIQUE_SUMMARY・【1〜7】・メタデータがある（従来どおり）。説明に Phase1 があるコマはカード省略 | |
+| C2 | （任意・LINE）写真1枚でカードが先、続けて【1】【2】【3】。要約テキスト通が無い | |
+| C6 | Lumina Review に「深さ：詳細/簡易」が無い（常にカード＋詳細） | |
+| C7 | `LuminaNotesConsole.command` から起動→閉じると Terminal ウィンドウも閉じる | |
+
+### 13.1 初心者向け：Wave C だけ確認
+
+```bash
+cd ~/photo-critique-bot
+git fetch origin
+git checkout cursor/lumina-ux-wave-c-c35c
+git pull origin cursor/lumina-ux-wave-c-c35c
+python3 console_gui.py
+```
+
+1. **スクリーニング**タブを見る  
+   - 「DxO修正後を記録」が**無い** → C0  
+   - 「カード生成」と「処理済みも上書き」がある → C0  
+2. 対象フォルダで **ドライラン OFF**・M1（必要なら M2/M3）を一度実行し、DxO で Rating を少し変える（または変えなくても可）  
+3. Console を**閉じる**（自動記録が走る）  
+4. 同じフォルダで Console を開き直し、「監査フォルダを開く」→ 最新セッション JSON に `post_h3` / `h3_delta` がある → C0b  
+5. Rating が 3 または 4 の JPEG がある状態で「カード生成」（上書き OFF）  
+   - `{単位名}Luminaカード/` に PNG  
+   - DxO でその JPEG の説明に `TITLE:` など → C3  
+6. **Lumina Review**タブで Works を実行（詳細）。できたノートに【1】〜【7】がある → C3′  
+7. 問題なければ GitHub の PR #13 をマージ（または「マージして」と伝える）
+
+```text
+Wave C Mac 確認
+ブランチ: cursor/lumina-ux-wave-c-c35c
+C0: PASS（2026-08-12・オーナー）
+C0b: PASS（2026-08-12・オーナー）
+C3: PASS（2026-08-12・オーナー）
+C3′: PASS（2026-08-12・オーナー）
+C2: SKIP
+気づいたこと（反映済み）:
+・Review: Description に Phase1 があるコマはカード再生成しない
+・深さ 詳細/簡易 UI 削除（常に Full）
+・LuminaNotesConsole.command 終了時に Terminal ウィンドウを閉じる
 ```
 

@@ -14,9 +14,8 @@ from linebot.models import (
 from critique_engine import generate_critique_for_line
 from generate_critique_card import create_critique_card
 from card_theme import CARD_THEME_DARK, CARD_THEME_LIGHT, card_theme_label
-from line_messaging import push_messages_in_batches, split_full_critique_for_line, split_text_for_line
+from line_messaging import push_messages_in_batches, split_full_critique_for_line
 from supabase_client import SupabaseManager
-from critique_parser import parse_critique_text
 from ai_vision import sniff_image_mime
 from privacy_utils import redact_line_user_id, storage_folder_for_user
 from scanner import extract_file_metadata
@@ -51,17 +50,13 @@ def log_startup_config():
 
 def reply_image_received(reply_token: str, line_user_id: str) -> None:
     """Webhook 内で即時返信（reply_token は約30秒で失効するためここでのみ使用）。"""
-    mode = supabase_mgr.get_user_mode(line_user_id)
-    mode_label = "詳細版" if mode == "full" else "簡易版"
-    wait_hint = "30秒ほど" if mode == "full" else "15秒ほど"
     try:
         line_bot_api.reply_message(
             reply_token,
             TextSendMessage(
                 text=(
-                    f"📷 写真を受け取りました（{mode_label}）。\n"
-                    f"AIが講評とカード画像を作成しています（{wait_hint}）。\n"
-                    "完成次第、このトークに送信します。"
+                    "📷 写真を受け取りました（カード＋対話）。\n"
+                    "まずカードを送り、続けて対話【1】〜【3】を送ります（1分ほど）。"
                 )
             ),
         )
@@ -70,9 +65,11 @@ def reply_image_received(reply_token: str, line_user_id: str) -> None:
 
 
 def process_image_and_reply(line_user_id: str, message_id: str):
+    """Wave C 案2: Compact→カード即時 → Phase1 短命保持 → Full【1-3】追従 → 消去。"""
     temp_dir = Path(tempfile.mkdtemp())
     img_path = temp_dir / "pending.jpg"
     card_path = temp_dir / f"{message_id}_card.png"
+    phase1_cache: str | None = None
 
     try:
         message_content = line_bot_api.get_message_content(message_id)
@@ -82,25 +79,23 @@ def process_image_and_reply(line_user_id: str, message_id: str):
         img_path = temp_dir / f"{message_id}{ext}"
         img_path.write_bytes(image_bytes)
 
-        user_mode = supabase_mgr.get_user_mode(line_user_id)
         user_theme = supabase_mgr.get_user_card_theme(line_user_id)
         print(
-            f"[LINE] user={redact_line_user_id(line_user_id)} mode={user_mode} "
+            f"[LINE] user={redact_line_user_id(line_user_id)} flow=card+dialogue "
             f"theme={user_theme} image={mime} bytes={len(image_bytes)}",
             flush=True,
         )
 
-        # ★ 画像からメタデータ（時間帯情報 time_zone_fact 等）を抽出
         exif_meta, dop_info, _ = extract_file_metadata(img_path)
 
-        critique_text = generate_critique_for_line(
+        # 1) Compact → カード即時
+        phase1_cache = generate_critique_for_line(
             img_path,
             metadata=exif_meta,
             dop_info=dop_info,
-            mode=user_mode,
+            mode="compact",
         )
-
-        create_critique_card(img_path, critique_text, card_path, theme=user_theme)
+        create_critique_card(img_path, phase1_cache, card_path, theme=user_theme)
 
         storage_path = f"{storage_folder_for_user(line_user_id)}/{message_id}_card.png"
         card_public_url = supabase_mgr.upload_card_image(
@@ -109,33 +104,38 @@ def process_image_and_reply(line_user_id: str, message_id: str):
             bucket_name="critique-cards",
         )
 
+        if card_public_url:
+            push_messages_in_batches(
+                line_bot_api,
+                line_user_id,
+                [
+                    ImageSendMessage(
+                        original_content_url=card_public_url,
+                        preview_image_url=card_public_url,
+                    )
+                ],
+            )
+
+        # 2) Full（Phase1 注入）→ 【1】【2】【3】のみ
+        full_text = generate_critique_for_line(
+            img_path,
+            metadata=exif_meta,
+            dop_info=dop_info,
+            mode="full",
+            phase1_override=phase1_cache,
+        )
+
         supabase_mgr.save_critique_log(
             line_user_id=line_user_id,
             image_url="",
-            critique_text=critique_text,
-            card_image_url=card_public_url
+            critique_text=full_text,
+            card_image_url=card_public_url or "",
         )
 
-        messages_to_send = []
-
-        if card_public_url:
-            messages_to_send.append(
-                ImageSendMessage(
-                    original_content_url=card_public_url,
-                    preview_image_url=card_public_url
-                )
-            )
-
-        if user_mode == "full":
-            for part in split_full_critique_for_line(critique_text):
-                messages_to_send.append(TextSendMessage(text=part))
-        else:
-            parsed = parse_critique_text(critique_text)
-            compact_msg = f"📷【{parsed['title']}】\n\n{parsed['point_text']}"
-            for part in split_text_for_line(compact_msg):
-                messages_to_send.append(TextSendMessage(text=part))
-
-        push_messages_in_batches(line_bot_api, line_user_id, messages_to_send)
+        dialogue_parts = split_full_critique_for_line(full_text)
+        text_messages = [TextSendMessage(text=part) for part in dialogue_parts]
+        if text_messages:
+            push_messages_in_batches(line_bot_api, line_user_id, text_messages)
 
     except Exception as e:
         print(f"[Processing Error] {e}", flush=True)
@@ -148,39 +148,34 @@ def process_image_and_reply(line_user_id: str, message_id: str):
         except Exception:
             pass
     finally:
+        phase1_cache = None
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def handle_text_message(reply_token: str, line_user_id: str, text: str):
     if text in ["設定", "せってい", "モード設定"]:
-        current_mode = supabase_mgr.get_user_mode(line_user_id)
-        mode_label = "詳細版" if current_mode == "full" else "簡易版"
-        
-        msg_text = f"⚙️【講評出力モード設定】\n\n現在の設定：【{mode_label}】\n\n変更したいモードを下のボタンから選択してください。"
-        
-        quick_reply = QuickReply(
-            items=[
-                QuickReplyButton(action=MessageAction(label="📷 簡易版にする", text="設定:簡易版")),
-                QuickReplyButton(action=MessageAction(label="📝 詳細版にする", text="設定:詳細版"))
-            ]
+        msg_text = (
+            "⚙️【講評の送り方】\n\n"
+            "現在は【カード＋対話】に統一しています。\n"
+            "写真1枚ごとにカードを先に送り、続けて対話【1】〜【3】を送ります。\n\n"
+            "カードの見た目は「背景」で変更できます。"
         )
         line_bot_api.reply_message(
             reply_token,
-            TextSendMessage(text=msg_text, quick_reply=quick_reply)
+            TextSendMessage(text=msg_text),
         )
 
-    elif text in ["設定:簡易版", "簡易版"]:
-        supabase_mgr.set_user_mode(line_user_id, "compact")
-        line_bot_api.reply_message(
-            reply_token,
-            TextSendMessage(text="📷 講評出力モードを【簡易版】に変更しました。\n次回の写真送信から高速でカード画像と要約が送信されます。")
-        )
-
-    elif text in ["設定:詳細版", "詳細版"]:
+    elif text in ["設定:簡易版", "簡易版", "設定:詳細版", "詳細版"]:
+        # 互換: 旧コマンドは受け付けるが統合フローを案内
         supabase_mgr.set_user_mode(line_user_id, "full")
         line_bot_api.reply_message(
             reply_token,
-            TextSendMessage(text="📝 講評出力モードを【詳細版】に変更しました。\n次回の写真送信からカード画像と全文講評テキストが送信されます。")
+            TextSendMessage(
+                text=(
+                    "📷 講評の送り方は【カード＋対話】に統一されています。\n"
+                    "次回の写真から、カードのあと対話【1】〜【3】が届きます。"
+                )
+            ),
         )
 
     elif text in ["背景", "はいけい", "カード背景"]:
@@ -225,8 +220,8 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
             reply_token,
             TextSendMessage(
                 text=(
-                    "写真を送信いただくと、AIが講評とカード画像を自動生成します📷\n"
-                    "・講評モード切替 → 「設定」\n"
+                    "写真を送信いただくと、カードと対話【1】〜【3】を自動生成します📷\n"
+                    "・送り方の説明 → 「設定」\n"
                     "・カード背景切替 → 「背景」"
                 )
             ),

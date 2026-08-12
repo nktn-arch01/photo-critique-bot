@@ -7,3 +7,16 @@ cd "$CD_PATH" || exit 1
 xattr -d com.apple.quarantine LuminaNotesConsole.command 2>/dev/null
 
 python3 console_gui.py
+status=$?
+
+# .command ダブルクリック起動時: Console 終了後にこの Terminal ウィンドウを閉じる
+# （既存のターミナルから python3 console_gui.py を直接起動した場合はこのスクリプトを通らない）
+osascript >/dev/null 2>&1 <<'EOF' &
+tell application "Terminal"
+  try
+    close front window
+  end try
+end tell
+EOF
+
+exit "$status"

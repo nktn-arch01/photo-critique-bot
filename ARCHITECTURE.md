@@ -39,8 +39,8 @@
   ├── 4. 共通コア (generate_critique_card.py) ➔ カード画像描画（`card_theme`: `dark` / `light`）
   ├── 5. SupabaseManager (supabase_client.py)
   │      ├── Storage (critique-cards) へ PNG アップロード ➔ Public URL 取得
-  │      └── DB (critique_logs / user_settings) へ ログ保存 & モード (`compact`/`full`)・カード背景 (`dark`/`light`) 取得
-  ├── 6. line_messaging.py ➔ 詳細版は ## 【1./【4./【6. 見出しで4分割して push（1リクエスト最大5通）
+  │      └── DB (critique_logs / user_settings) へ ログ保存 & カード背景 (`dark`/`light`) 取得
+  ├── 6. line_messaging.py ➔ Wave C: カード即時 push のあと対話【1】【2】【3】を3通（1リクエスト最大5通）
   ├── 7. LINE Messaging API ➔ 画像カード + テキスト Push 送信
   └── 8. テキスト「背景」➔ QuickReply でライト/ダーク選択 ➔ `user_settings.card_theme` 保存
 
@@ -72,8 +72,7 @@
 - `critique_parser.py`: **【中央テキスト解析エンジン】** AIが出力するテキスト（Phase 1 / Phase 2）をパースし、全角記号や記号揺れ（`##`、`■`、`：`、`（）`、`／`）を100%吸収して統一辞書データへ変換する単一責任モジュール。スコアは旧ラベル互換のうえ正規化表示名へ揃える。
 - `critique_prompts.py`: Phase 1 / Phase 2 プロンプトの**単一ソース**（OpenAI・Gemini 共通。出力フォーマットは `critique_parser` と整合。レンズ固有スタンスは `critique_lens` から注入）。
 - `ai_vision.py`: Vision API アダプタ層。`openai` / `gemini` を環境変数・モデル名で差し替え可能。`system_prompt` で伴走者ロールを渡す。
-- `critique_engine.py`: 2段階分離生成のオーケストレーション。デスクトップは `generate_critique_openai`、LINE は `generate_critique_for_line`（本番は compact/full とも OpenAI）。`lens` 引数（既定 `self`）。
-- `line_messaging.py`: 詳細版は講評見出し（## 【1./【4./【6.）で4通に分割。push は5通/リクエスト上限で batched 送信。
+- `critique_engine.py`: 2段階分離生成のオーケストレーション。デスクトップは `generate_critique_openai`、LINE は `generate_critique_for_line`（本番は compact/full とも OpenAI）。`lens` 引数（既定 `self`）。`phase1_override` で JPEG 埋め込み Phase1 を注入可。
 - `card_theme.py`: カード背景テーマ（`dark` / `light`）の識別子・パレット・正規化の**単一ソース**。
 - `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。Desktop / LINE 共通。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 最大3行・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。SCORES フォントは SUMMARY と同サイズ。カード上のスコアは★のみ（`(n/5)` は出さない。ログは星＋数字）。免責文は出さない。
 - `scanner.py`: **【中央メタデータ解析エンジン】** 撮影 EXIF（exiftool→PIL）と講評用メタの単一入口。**Rating / user_intent は JPEG 正**（`iptc_rating_io`）。`.dop` は空欄時フォールバックのみ（正規表現＋Lua）。
@@ -88,7 +87,10 @@
 - `docs/R1A_MAC_MANUAL_CHECKLIST.md`: **【Mac 手動確認】** オーナー向け GUI／実フォルダ手順（PASS/FAIL 記入）。
 - `docs/R1A_NAMING_CLEANUP.md`: **【命名整理】** 旧 shortlist／trace／評価カード等の棚卸しと段階改修案。
 - `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `XX` 機種接頭辞、Works 月 `YYYYMM` のみ・手動、コピーなし、Lumina Review ログ配置、記録 UI。
-- `iptc_rating_io.py`: **【スクリーニングメタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`RatingPercent` のみでも復元。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。公式 API: `ScreeningMeta` / `read_screening_meta` / `write_screening_decision`（旧 `Shortlist*` は alias）。
+- `iptc_rating_io.py`: **【スクリーニングメタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`RatingPercent` のみでも復元。`[M2]`/`[M3]` ブロック置換。Wave C: Phase1（`TITLE`/`SUMMARY`/`SCORES`/`CRITIQUE_SUMMARY`）も Description にブロック置換。`.dop`/`.xmp` 非依存。公式 API: `ScreeningMeta` / `read_screening_meta` / `write_screening_decision` / `upsert_phase1_blocks`（旧 `Shortlist*` は alias）。
+- `phase1_jpeg.py`: Phase1 講評テキスト ↔ JPEG Description の橋渡し（スクリーニングカード・Lumina Review 共用）。
+- `screening_cards.py`: スクリーニング単位の Rating 3/4 向け Compact カード生成＋ Phase1 IPTC 書込。
+- `line_messaging.py`: Wave C 以降、LINE 対話は ## 【1./【2./【3. で3通分割（カードは別途 Image）。旧4分割は legacy フォールバック。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM|XXYYYYMM` / イベント `YYYYMMDD_名前|XXYYYYMMDD_名前`。Works は `YYYYMM` のみ。規則外サブフォルダはイベントにしない。`is_screening_jpeg`（旧 `is_shortlist_jpeg` は alias）。
 - `shortlist_mechanical.py` / `screening_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。（`screening_*` は Wave 3 再エクスポート）
 - `shortlist_antenna.py` / `screening_antenna.py`: **【M2 アンテナ】** 5軸軽量 Vision＋バッチ内相対熱量。合格 Rating=2＋`[M2]`。★絶対ゲート禁止。
@@ -125,7 +127,7 @@
 
 ### 開発・運用スタイル規定
 - **開発・テスト時**: ターミナルからのコピペ一発実行（CLIテストや単体テストスクリプト）で動作確認を行う。
-- **push 前（任意・推奨）**: API キー不要の `python3 test_offline_suite.py`（パーサー・処理済み判定・LINE 4分割・カード生成レイアウト）。GitHub Actions `Offline tests` ワークフローが同内容を main で自動実行。カード見た目を変える変更では、同スイートのカード自動チェック（サイズ 1080×1350・破損なし・主要文字/写真の描画）を必ず更新・通過させる（規則1レビュー3）。
+- **push 前（任意・推奨）**: API キー不要の `python3 test_offline_suite.py`（パーサー・処理済み判定・LINE 対話3分割・カード生成レイアウト）。GitHub Actions `Offline tests` ワークフローが同内容を main で自動実行。カード見た目を変える変更では、同スイートのカード自動チェック（サイズ 1080×1350・破損なし・主要文字/写真の描画）を必ず更新・通過させる（規則1レビュー3）。
 - **本番の手動確認**: デスクトップ GUI または LINE で代表1枚（簡易/詳細）— OpenAI 実呼び出しは CI では行わない。
 - **本番運用時**: `PhotoAICritique.command` をダブルクリックし、GUI（`app_gui.py`）から対象フォルダを選択して実行する。
 

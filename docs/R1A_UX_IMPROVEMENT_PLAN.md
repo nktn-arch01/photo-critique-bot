@@ -89,15 +89,26 @@
 - [x] B1 薄い流れ案内 — **Mac B1 PASS**
 - [x] Mac: Wave B B1–B4 / B2b すべて PASS（2026-08-12・オーナー確認）
 
-### Wave C（製品・AI 質の中期）— ブランドと対話
+### Wave C（製品・AI 質の中期）— カード／対話／JPEG Phase1 正
 
-| ID | 内容 | メモ |
+オーナー見直し（2026-08-12）後の確定方針。見た目・ランチャー統一は延期。
+
+| ID | 内容 | 状態 |
 |----|------|------|
-| C1 | カードで CRITIQUE_SUMMARY／問いを上位、★を二次表示 | §1.1 / Phase D |
-| C2 | Phase1 content-hash キャッシュ（Compact↔Full 一貫） | PHASE_D F-10 |
-| C3 | 簡易＋問いのみの中間モード（全文7節は full 維持） | §1.2 |
-| C4 | 「そう思う／違う」反応フック（速い輪の種） | 構想 R4′ |
-| C5 | Photo AI 講評と Console の役割表をランチャー／README で一本化 | §1.4 |
+| C0 | H3「DxO修正後を記録」を UI から削除。Console 終了時に自動記録 | 実装 |
+| C1 | カード見た目（★降格等） | **延期**（β公開前） |
+| C2 | LINE 案2: カード即時 → 短命 Phase1 → 対話【1〜3】追従。モード統合 | 実装 |
+| C3 | スクリーニング「カード」生成（Rating 3/4）＋ Description へ Phase1 4項目 | 実装 |
+| C3′ | Lumina Review: 埋め込み Phase1 再利用。ログは従来 Full【1〜7】。未埋め込みは書戻し | 実装 |
+| C4 | 「そう思う／違う」UI | **不做**（DxO Rating 修正＝反応。H3 が記録） |
+| C5 | Photo AI 講評と Console の一本化 | **延期** |
+
+**チャネル契約の違い:**
+
+- LINE 返信: カード＋【1〜3】のみ（CRITIQUE_SUMMARY テキスト通なし）
+- Desktop Works 分析ログ: 従来どおり ファイル名／TITLE／SUMMARY／SCORES／CRITIQUE_SUMMARY／【1〜7】／メタデータ
+
+**IPTC Description（Wave C 拡張）:** `TITLE:` `SUMMARY:` `SCORES:` `CRITIQUE_SUMMARY:` を `[M2]`/`[M3]` と共存（ブロック置換）。DxO 一覧・Works 移動後の正本。
 
 ---
 
@@ -124,3 +135,5 @@
 | 2026-08-12 | Mac 手動: Wave B B1 / B2 / B2b / B3 / B4 すべて PASS |
 | 2026-08-12 | 監査修正: 単位間中止の誤「完了」、イベント未記録 H3 の終了案内、ops 文書整合 |
 | 2026-08-12 | Mac 監査フォロー F1/F2 PASS。Wave B 完了（PR #11 マージ） |
+| 2026-08-12 | Wave C 方針確定・実装: H3 自動、スクリーニングカード＋IPTC Phase1、LINE 案2、Review Phase1 再利用 |
+| 2026-08-12 | Mac Wave C: C0/C0b/C3/C3′ PASS（C2 SKIP）。追記: Review カード省略・深さUI削除・.command で Terminal 終了 |

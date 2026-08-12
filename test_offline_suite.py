@@ -248,14 +248,73 @@ def test_log_manager_wave2_output_names_and_legacy_lookup():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_iptc_phase1_block_upsert_preserves_stages_and_user():
+    from iptc_rating_io import (
+        has_complete_phase1_blocks,
+        parse_phase1_blocks,
+        strip_stage_reason_lines,
+        upsert_phase1_blocks,
+    )
+    from phase1_jpeg import phase1_blocks_to_critique_text
+
+    base = "ユーザーのメモ\n[M2] antenna\n[M3] diversity"
+    blocks = {
+        "TITLE": "題",
+        "SUMMARY": "要",
+        "SCORES": "・構図: ★★★☆☆ (3/5) ・光: ★★★★☆ (4/5)",
+        "CRITIQUE_SUMMARY": "短評です。",
+    }
+    updated = upsert_phase1_blocks(base, blocks)
+    assert "ユーザーのメモ" in updated
+    assert "[M2] antenna" in updated
+    assert "[M3] diversity" in updated
+    parsed = parse_phase1_blocks(updated)
+    assert parsed["TITLE"] == "題"
+    assert parsed["CRITIQUE_SUMMARY"] == "短評です。"
+    assert has_complete_phase1_blocks(updated)
+    # user_intent 用: 機械行は落ちる
+    assert strip_stage_reason_lines(updated) == "ユーザーのメモ"
+    # 再 upsert しても二重にならない
+    again = upsert_phase1_blocks(updated, {**blocks, "TITLE": "新題"})
+    assert again.count("TITLE:") == 1
+    assert "新題" in again
+    text = phase1_blocks_to_critique_text(parse_phase1_blocks(again))
+    from critique_parser import parse_critique_text
+
+    p = parse_critique_text(text)
+    assert p["has_valid_phase1"]
+    assert p["title"] == "新題"
+
+
+def test_line_dialogue_split_sections_1_to_3():
+    from line_messaging import split_dialogue_sections_1_to_3, split_full_critique_for_line
+
+    body = (
+        PHASE1_SAMPLE
+        + "\n---\n"
+        + "## 【1. 情景】\none\n"
+        + "## 【2. 光】\ntwo\n"
+        + "## 【3. 感情】\nthree\n"
+        + "## 【4. EXIF】\nfour\n"
+        + "## 【7. タグ】\n#t\n"
+    )
+    parts = split_dialogue_sections_1_to_3(body)
+    assert len(parts) == 3
+    assert parts[0].startswith("## 【1.")
+    assert parts[1].startswith("## 【2.")
+    assert parts[2].startswith("## 【3.")
+    assert "【4." not in parts[2]
+    # 公開 API も同じ3通
+    assert split_full_critique_for_line(body) == parts
+
+
 def test_line_full_split_four_parts():
+    """旧サンプル（【1】【4】【6】）では Phase1 通を除いた本文側を返す。"""
     combined = PHASE1_SAMPLE + "\n---\n" + PHASE2_SAMPLE
     parts = split_full_critique_for_line(combined)
-    assert len(parts) == 4
-    assert "■TITLE" in parts[0]
-    assert parts[1].startswith("## 【1.")
-    assert "## 【4." in parts[2]
-    assert parts[3].startswith("## 【6.")
+    assert len(parts) >= 1
+    assert parts[0].startswith("## 【1.")
+    assert "■TITLE" not in parts[0]
 
 
 def test_storage_path_from_card_url():
@@ -2267,6 +2326,8 @@ def run_all():
     test_phase_d_p02_uses_datetime_original_not_modify()
     test_log_manager_processed_filename()
     test_line_full_split_four_parts()
+    test_line_dialogue_split_sections_1_to_3()
+    test_iptc_phase1_block_upsert_preserves_stages_and_user()
     test_storage_path_from_card_url()
     test_normalize_card_theme()
     test_create_critique_card_layout()

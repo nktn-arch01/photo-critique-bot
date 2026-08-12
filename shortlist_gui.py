@@ -1,7 +1,7 @@
 """Lumina Notes Console（スクリーニング + Lumina Review の統合 GUI）.
 
 講評バッチ ``app_gui.py`` とは別ウィンドウ・別導線。
-- タブ「スクリーニング」: 月／イベントで M1→M2→M3、DxO 修正後の記録
+- タブ「スクリーニング」: 月／イベントで M1→M2→M3、任意で「カード」生成。H3 は終了時自動
 - タブ「Lumina Review」: Works 月フォルダへカード／ノート／ログ（コピーなし・単独実行可）
 - 進捗・中断・監査ログ。両タブは必須の前後関係ではない
 """
@@ -29,7 +29,6 @@ from library_unit import (
     list_source_jpegs,
     plan_screening_units,
     resolve_session_for_unit,
-    resolve_unit,
     unit_from_dir,
 )
 from ai_vision import get_openai_client
@@ -39,6 +38,7 @@ from screening_pipeline import (
     ScreeningPipeline,
     overall_multi_unit_status,
 )
+from screening_cards import ScreeningCardConfig, ScreeningCardRunner
 from lumina_review import (
     ReviewConfig,
     ReviewProgress,
@@ -118,6 +118,7 @@ class ShortlistApp:
         self.is_running = False
         self.pipeline: ScreeningPipeline | None = None
         self.trace_runner: LuminaReviewRunner | None = None
+        self.card_runner: ScreeningCardRunner | None = None
         self.last_session_path: Path | None = None
         self.config = self.load_config()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -238,21 +239,28 @@ class ShortlistApp:
         )
         self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        h3 = ttk.LabelFrame(parent, text=" DxO 修正後の記録 ", padding="8")
+        h3 = ttk.LabelFrame(parent, text=" 監査・カード ", padding="8")
         h3.pack(fill=tk.X)
         ttk.Label(
             h3,
             text=(
-                "DxO で Rating／説明を直したら押します（必須ではありません。何度でも可）。"
-                "修正前→修正後の差分だけを同じセッションに残します。"
+                "DxO で Rating を直したあとの差分は、ウィンドウを閉じるときに自動で残します"
+                "（手動操作は不要）。\n"
+                "「カード」は Rating 3/4 の JPEG に Phase1 カードを付け、説明欄へ TITLE 等を書き込みます。"
             ),
             wraplength=640,
             justify=tk.LEFT,
         ).pack(anchor=tk.W, pady=(0, 6))
         h3_btns = ttk.Frame(h3)
         h3_btns.pack(fill=tk.X)
-        self.btn_h3 = ttk.Button(h3_btns, text="DxO修正後を記録", command=self.record_h3_after)
-        self.btn_h3.pack(side=tk.LEFT)
+        self.btn_screening_card = _action_button(
+            h3_btns, text="カード生成", command=self.start_screening_card_thread, small=True
+        )
+        self.btn_screening_card.pack(side=tk.LEFT)
+        self.card_force_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            h3_btns, text="処理済みも上書き", variable=self.card_force_var
+        ).pack(side=tk.LEFT, padx=(10, 0))
         self.btn_open_session = ttk.Button(h3_btns, text="監査フォルダを開く", command=self.open_sessions_folder)
         self.btn_open_session.pack(side=tk.LEFT, padx=(8, 0))
         self.session_label = ttk.Label(h3, text="セッション: （まだありません）")
@@ -275,6 +283,8 @@ class ShortlistApp:
             info,
             text=(
                 "Works 月フォルダの JPEG に対話ノート／カードを付けます。\n"
+                "常にカード＋詳細ノート（【1】〜【7】）。\n"
+                "説明に TITLE 等があるコマはカードを作り直しません（ノートは作成）。\n"
                 "スクリーニング無しでも、ここに画像があれば単独で実行できます。\n"
                 "ファイルのコピーはしません。\n\n"
                 "Works は YYYYMM のみ（例: ~/2026/202606）。\n"
@@ -295,16 +305,15 @@ class ShortlistApp:
 
         works_opts = ttk.Frame(works)
         works_opts.pack(fill=tk.X, pady=(8, 0))
-        ttk.Label(works_opts, text="深さ:").pack(side=tk.LEFT)
-        self.trace_mode_var = tk.StringVar(value="full")
-        ttk.Radiobutton(
-            works_opts, text="詳細（カード＋長文）", variable=self.trace_mode_var, value="full"
-        ).pack(side=tk.LEFT, padx=(4, 8))
-        ttk.Radiobutton(
-            works_opts, text="簡易（カードのみ）", variable=self.trace_mode_var, value="compact"
-        ).pack(side=tk.LEFT, padx=(0, 12))
         self.trace_force_var = tk.BooleanVar(value=bool(self.config.get("force_overwrite", False)))
-        ttk.Checkbutton(works_opts, text="処理済みも上書き", variable=self.trace_force_var).pack(side=tk.LEFT)
+        ttk.Checkbutton(works_opts, text="処理済みも上書き", variable=self.trace_force_var).pack(
+            side=tk.LEFT
+        )
+        ttk.Label(
+            works_opts,
+            text="（常にカード＋詳細ノート。説明に Phase1 があるコマはカード省略）",
+            wraplength=420,
+        ).pack(side=tk.LEFT, padx=(12, 0))
 
         theme_row = ttk.Frame(works)
         theme_row.pack(fill=tk.X, pady=(6, 0))
@@ -478,6 +487,8 @@ class ShortlistApp:
                 self.pipeline.request_cancel()
             if self.trace_runner:
                 self.trace_runner.request_cancel()
+            if self.card_runner:
+                self.card_runner.request_cancel()
             self.log("中止リクエストを受け付けました…")
             self.btn_cancel.state(["disabled"])
 
@@ -515,23 +526,44 @@ class ShortlistApp:
                     self.pipeline.request_cancel()
                 if self.trace_runner:
                     self.trace_runner.request_cancel()
+                if self.card_runner:
+                    self.card_runner.request_cancel()
                 self.root.destroy()
             return
 
-        pending = self._pending_h3_list()
-        if pending:
-            lines = [f"・{label}: {path.name}" for label, path in pending[:5]]
-            extra = f"\n・他 {len(pending) - 5} 件" if len(pending) > 5 else ""
-            if not messagebox.askyesno(
-                "記録の確認",
-                "「DxO修正後を記録」がまだの単位があります。\n"
-                + "\n".join(lines)
-                + extra
-                + "\n\nイベントはフォルダを切り替えて記録してください。\n"
-                "後で記録しても大丈夫です。\nこのまま終了しますか？",
-            ):
-                return
+        # Wave C: 未記録 H3 は終了時に自動記録（ユーザー作業ではない）
+        self._auto_record_pending_h3_on_close()
         self.root.destroy()
+
+    def _auto_record_pending_h3_on_close(self) -> None:
+        """コンソール終了時に未記録 H3 を静かに記録する。失敗はログのみ。"""
+        pending = self._pending_h3_list()
+        if not pending:
+            return
+        self._set_status("終了前: DxO修正後を自動記録中…")
+        for label, session in pending:
+            try:
+                sess_doc = load_session(session)
+                if sess_doc.get("write_meta") is False:
+                    self.log(f"H3自動スキップ（ドライラン）: {label} / {session.name}")
+                    continue
+                unit_path_raw = sess_doc.get("library_unit_path")
+                unit_dir = Path(unit_path_raw) if unit_path_raw else None
+                unit = unit_from_dir(unit_dir) if unit_dir and unit_dir.is_dir() else None
+                if unit is None:
+                    self.log(f"H3自動スキップ（単位不明）: {session.name}")
+                    continue
+                doc = record_post_h3(session, unit=unit)
+                delta = doc.get("h3_delta") or {}
+                self.log(
+                    f"H3自動記録: {label} changed={delta.get('changed_count')} "
+                    f"unchanged={delta.get('unchanged_count')}"
+                )
+            except DryRunSessionError as e:
+                self.log(f"H3自動スキップ: {e}")
+            except Exception as e:
+                self.log(f"H3自動記録エラー ({label}): {e}")
+        self._set_status("終了します…")
 
     def start_batch_thread(self) -> None:
         if self.is_running:
@@ -618,7 +650,7 @@ class ShortlistApp:
         _set_action_button_enabled(self.btn_start, False)
         _set_action_button_enabled(self.btn_cancel, True)
         self.btn_browse.config(state=tk.DISABLED)
-        self.btn_h3.config(state=tk.DISABLED)
+        self.btn_screening_card.config(state=tk.DISABLED)
         _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
@@ -690,8 +722,7 @@ class ShortlistApp:
             event_h3_note = ""
             if opts.get("include_events") and not opts.get("dry") and overall == "completed":
                 event_h3_note = (
-                    "\nイベント単位の「DxO修正後を記録」は、"
-                    "各イベントフォルダを選んで行ってください。"
+                    "\n配下イベントの DxO 差分も、コンソール終了時にまとめて自動記録します。"
                 )
 
             def _done() -> None:
@@ -706,12 +737,15 @@ class ShortlistApp:
                     if opts["dry"]:
                         next_steps = (
                             "今回はドライランのため JPEG には書いていません。\n"
-                            "「DxO修正後を記録」は使わず、書き込みありで再実行してください。"
+                            "書き込みありで再実行してください。"
+                            "（ドライラン分は終了時の自動記録対象外です）"
                         )
                     else:
                         next_steps = (
-                            "任意: いまの対象フォルダで「DxO修正後を記録」。"
+                            "DxO で Rating を直したら、このままコンソールを閉じてください"
+                            "（修正後の差分は自動記録されます）。"
                             f"{event_h3_note}\n"
+                            "任意: 同じタブの「カード生成」で Rating 3/4 にカードを付けられます。\n"
                             "Lumina Review は別タブです（Works に画像があれば単独で可）。"
                         )
                     title = "完了"
@@ -752,11 +786,12 @@ class ShortlistApp:
         self.is_running = False
         self.pipeline = None
         self.trace_runner = None
+        self.card_runner = None
         self.progress.stop()
         _set_action_button_enabled(self.btn_start, True)
         _set_action_button_enabled(self.btn_cancel, False)
         self.btn_browse.config(state=tk.NORMAL)
-        self.btn_h3.config(state=tk.NORMAL)
+        self.btn_screening_card.config(state=tk.NORMAL)
         _set_action_button_enabled(self.btn_trace, True)
         self.btn_browse_works.config(state=tk.NORMAL)
         self.dir_entry.config(state=tk.NORMAL)
@@ -800,7 +835,7 @@ class ShortlistApp:
             return
 
         opts = {
-            "mode": self.trace_mode_var.get(),
+            "mode": "full",
             "theme": normalize_card_theme(self.trace_theme_var.get()),
             "force": bool(self.trace_force_var.get()),
         }
@@ -813,16 +848,16 @@ class ShortlistApp:
                 f"\n_dev 優先で撮って出し除外: {len(skipped)} 枚"
                 f"（{names}{more}）"
             )
-        depth_label = "詳細（カード＋長文）" if opts["mode"] == "full" else "簡易（カードのみ）"
         if not messagebox.askyesno(
             "Lumina Review の確認",
             f"Works: {works}\n"
             f"対象: {len(targets)} 枚"
             f"（_dev {selection['dev_count']}／撮って出し {selection['sooc_count']}）"
             f"{skip_note}\n"
-            f"深さ: {depth_label} / テーマ: {opts['theme']}\n"
-            f"上書き: {'する' if opts['force'] else 'しない'}\n\n"
-            "コピーはしません。対話ノート／カードを付けますか？",
+            f"出力: カード＋詳細ノート（【1】〜【7】）\n"
+            f"テーマ: {opts['theme']} / 上書き: {'する' if opts['force'] else 'しない'}\n\n"
+            "説明に TITLE 等があるコマはカードを作り直しません。\n"
+            "コピーはしません。対話ノートを付けますか？",
         ):
             return
 
@@ -833,7 +868,7 @@ class ShortlistApp:
         _set_action_button_enabled(self.btn_start, False)
         _set_action_button_enabled(self.btn_cancel, True)
         self.btn_browse.config(state=tk.DISABLED)
-        self.btn_h3.config(state=tk.DISABLED)
+        self.btn_screening_card.config(state=tk.DISABLED)
         _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
@@ -914,7 +949,7 @@ class ShortlistApp:
         finally:
             self._ui(self.reset_ui)
 
-    def record_h3_after(self) -> None:
+    def start_screening_card_thread(self) -> None:
         if self.is_running:
             messagebox.showwarning("実行中", "別の処理が終わるまでお待ちください。")
             return
@@ -922,89 +957,82 @@ class ShortlistApp:
         if not target.is_dir():
             messagebox.showerror("エラー", "先に対象フォルダを選んでください。")
             return
-        # M2: 手編集でずれても、必ず当該フォルダ配下のセッションだけを使う
-        session = resolve_session_for_unit(target, self.last_session_path)
-        if session is None:
-            messagebox.showwarning(
-                "セッションなし",
-                "このフォルダにスクリーニングセッションがありません。\n先にスクリーニングを実行してください。",
+        unit = unit_from_dir(target)
+        if unit is None:
+            messagebox.showerror(
+                "フォルダ名エラー",
+                "月またはイベントフォルダを選んでください。\n"
+                f"現在: {target.name}",
             )
             return
-        try:
-            sess_doc = load_session(session)
-        except Exception as e:
-            messagebox.showerror("エラー", f"セッションを読めませんでした:\n{e}")
-            return
-        if sess_doc.get("write_meta") is False:
-            messagebox.showwarning(
-                "ドライランのセッション",
-                "このセッションはドライラン（JPEGへ書いていない）です。\n"
-                "偽の差分を避けるため、「DxO修正後を記録」は使えません。\n\n"
-                "ドライランを外してスクリーニングを再実行してから記録してください。",
-            )
+        if not self._ensure_openai_ready():
             return
 
+        force = bool(self.card_force_var.get())
+        theme = normalize_card_theme(self.config.get("card_theme", DEFAULT_CARD_THEME))
         if not messagebox.askyesno(
-            "DxO修正後の記録",
-            f"フォルダ:\n{target}\n\n"
-            f"セッション:\n{session.name}\n\n"
-            "いまの JPEG（DxO で直した内容）を読み取り、\n"
-            "修正前（バッチ直後）との差分を記録します。\n"
-            "（ファイルのコピーはしません）\n"
-            "※ 他のイベント単位は、フォルダを切り替えて別途記録してください。\n"
-            "続行しますか？",
+            "カード生成",
+            f"対象フォルダ:\n{target}\n\n"
+            "Rating 3 または 4 の JPEG にカード（Phase1）を付け、\n"
+            "説明欄へ TITLE / SUMMARY / SCORES / CRITIQUE_SUMMARY を書き込みます。\n"
+            f"処理済み上書き: {'する' if force else 'しない'}\n"
+            f"カード背景: {theme}\n\n"
+            "開始しますか？",
         ):
             return
 
         self.is_running = True
         _set_action_button_enabled(self.btn_start, False)
-        _set_action_button_enabled(self.btn_cancel, False)
+        _set_action_button_enabled(self.btn_cancel, True)
         self.btn_browse.config(state=tk.DISABLED)
-        self.btn_h3.config(state=tk.DISABLED)
+        self.btn_screening_card.config(state=tk.DISABLED)
         _set_action_button_enabled(self.btn_trace, False)
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
         self.progress.start(12)
-        self._set_status("DxO修正後を記録中…")
+        self._set_status("カード生成中…")
         threading.Thread(
-            target=self._run_record_h3, args=(target, session), daemon=True
+            target=self._run_screening_cards,
+            args=(target, force, theme),
+            daemon=True,
         ).start()
 
-    def _run_record_h3(self, target: Path, session: Path) -> None:
+    def _run_screening_cards(self, target: Path, force: bool, theme: str) -> None:
         try:
-            unit = resolve_unit(target)
-            self.log(f"DxO修正後を記録開始: {session.name}")
-            doc = record_post_h3(session, unit=unit)
-            delta = doc.get("h3_delta") or {}
-            self.last_session_path = session
-            self.log(
-                f"DxO修正後を記録: changed={delta.get('changed_count')} "
-                f"unchanged={delta.get('unchanged_count')} "
-                f"transitions={delta.get('transitions')}"
+            def on_progress(event: str, message: str) -> None:
+                self.log(f"[card/{event}] {message}")
+                self._set_status(message)
+
+            self.card_runner = ScreeningCardRunner(
+                ScreeningCardConfig(force_overwrite=force, card_theme=theme),
+                on_progress=on_progress,
             )
+            self.log("=" * 48)
+            self.log(f"スクリーニング カード生成開始: {target}")
+            result = self.card_runner.run_on_dir(target)
+            self.log(
+                f"status={result.status} processed={result.processed} "
+                f"skipped={result.skipped} errors={result.errors}"
+            )
+            self.log("=" * 48)
 
             def _done() -> None:
-                self._refresh_session_label(target)
-                self.status_label.config(text="DxO修正後を記録済み")
+                self.status_label.config(text=f"カード生成 {result.status}")
                 messagebox.showinfo(
-                    "記録完了",
-                    "DxO 修正後を記録しました。\n\n"
-                    f"変化した枚数: {delta.get('changed_count', 0)}\n"
-                    f"変化なし: {delta.get('unchanged_count', 0)}\n"
-                    f"遷移: {delta.get('transitions')}\n\n"
-                    "Lumina Review は別タブです（Works に画像があれば単独で可）。\n"
-                    f"セッション:\n{session.name}",
+                    "カード生成",
+                    f"ステータス: {result.status}\n"
+                    f"新規: {result.processed}\n"
+                    f"スキップ: {result.skipped}\n"
+                    f"エラー: {result.errors}\n\n"
+                    f"カード出力: {target.name}Luminaカード/\n"
+                    "JPEG 説明欄にも TITLE 等が書き込まれます（DxO で一覧可）。",
                 )
 
             self._ui(_done)
-        except DryRunSessionError as e:
-            err_msg = str(e)
-            self.log(f"H3記録拒否: {err_msg}")
-            self._ui(lambda msg=err_msg: messagebox.showwarning("ドライランのセッション", msg))
         except Exception as e:
             err_msg = str(e)
-            self.log(f"H3記録エラー: {err_msg}")
+            self.log(f"カード生成エラー: {err_msg}")
             self._ui(lambda msg=err_msg: messagebox.showerror("エラー", msg))
         finally:
             self._ui(self.reset_ui)

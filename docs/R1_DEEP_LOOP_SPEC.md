@@ -170,14 +170,20 @@ Works に RAW や「同名の競合 JPEG」を置かない。確定コマの撮�
 
 ### 5.1 説明フィールドの書き方
 
-M2/M3 で丸ごと上書きせず、段ラベル付きで残す。
+M2/M3 で丸ごと上書きせず、段ラベル付きで残す。Wave C 以降は Phase1（カード骨）も同じ Description に共存させる。
 
 ```text
+（任意のユーザー文）
+TITLE: …
+SUMMARY: …
+SCORES: …（1行）
+CRITIQUE_SUMMARY: …
 [M2] （アンテナの短い理由）
 [M3] （多様性／上位の短い理由）
 ```
 
-既存のユーザー文がある場合は消さない。実装は **ブロック置換** に固定（`iptc_rating_io.upsert_stage_reason`）。
+既存のユーザー文がある場合は消さない。実装は **ブロック置換** に固定（`iptc_rating_io.upsert_stage_reason` / `upsert_phase1_blocks`）。
+講評の `user_intent` 注入時は `[M2]`/`[M3]` および Phase1 行を除外する。
 
 ---
 
