@@ -14,16 +14,26 @@
 
 ### 0.1 ブランチを取り込む
 
-Mac のリポジトリで（パスは自分の clone 先に合わせる）:
+Mac のリポジトリで（パスは自分の clone 先に合わせる。よくある例: `~/photo-critique-bot`）:
+
+**いま確認したいもの = UX Wave A（PR #10）のとき:**
 
 ```bash
-cd /path/to/photo-critique-bot
+cd ~/photo-critique-bot
 git fetch origin
-git checkout cursor/lumina-dialogue-workflow-spec-e779
-git pull origin cursor/lumina-dialogue-workflow-spec-e779
+git checkout cursor/lumina-ux-wave-a-c35c
+git pull origin cursor/lumina-ux-wave-a-c35c
 ```
 
-または PR #7 が `main` にマージ済みなら `main` でよい。
+**PR が `main` にマージ済みなら:**
+
+```bash
+cd ~/photo-critique-bot
+git checkout main
+git pull origin main --ff-only
+```
+
+初心者向けの **Wave A だけ**の手順は §11.1 を上から順に。
 
 ### 0.2 依存を確認
 
@@ -227,7 +237,7 @@ print(read_screening_meta(p).rating)  # 期待: 3
 
 ## 11. Wave A（UX・2026-08-12 以降）
 
-ブランチ例: `cursor/lumina-ux-wave-a-*` / 計画: `docs/R1A_UX_IMPROVEMENT_PLAN.md`
+ブランチ例: `cursor/lumina-ux-wave-a-c35c` / 計画: `docs/R1A_UX_IMPROVEMENT_PLAN.md`
 
 | # | 確認 | 結果 |
 |---|------|------|
@@ -236,3 +246,180 @@ print(read_screening_meta(p).rating)  # 期待: 3
 | W3 | Works に `A.jpg` + `A_dev.jpg` → 確認ダイアログに撮って出し除外の件数 | |
 | W4 | 書き込みスクリーニング後・未記録のままウィンドウを閉じる → 「記録の確認」 | |
 | W5 | ヘルプが ①②③、Lumina Review 完了が「対話痕跡ができました」系 | |
+
+### 11.1 初心者向け：Wave A だけを順に確認する手順
+
+コードは編集しません。**ターミナルへコピー＆ペースト**と、画面の見た目確認だけです。  
+わからない・FAIL になったら、その番号（例: W3）と画面に出た文言をメモして伝えてください。
+
+#### ステップ0 — ターミナルを開く
+
+1. Mac の「ターミナル」アプリを開く（Spotlight で `ターミナル` と検索でも可）
+2. 次を **まとめて** 貼り付けて Enter
+
+```bash
+cd ~/photo-critique-bot
+git fetch origin
+git checkout cursor/lumina-ux-wave-a-c35c
+git pull origin cursor/lumina-ux-wave-a-c35c
+pwd
+git branch --show-current
+```
+
+**見てほしいこと:** 最後の行が `cursor/lumina-ux-wave-a-c35c` であること。  
+違う／エラーならここで止めて、出た文字をそのまま共有してください。
+
+#### ステップ1 — 確認用フォルダを作る
+
+同じターミナルで:
+
+```bash
+cd ~/photo-critique-bot
+python3 prepare_mac_manual_fixtures.py
+```
+
+**見てほしいこと:** 「作成完了」と出て、Desktop に `LuminaManualCheck` ができること。
+
+Wave A の W3 用に、撮って出し＋`_dev` のペアも足します:
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+works = Path.home() / "Desktop" / "LuminaManualCheck" / "2026" / "202608"
+works.mkdir(parents=True, exist_ok=True)
+
+def save(name, color, label):
+    p = works / name
+    img = Image.new("RGB", (320, 240), color)
+    d = ImageDraw.Draw(img)
+    d.text((40, 100), label, fill=(255, 255, 255))
+    img.save(p, "JPEG", quality=90)
+    print("wrote", p)
+
+save("A.jpg", (90, 40, 40), "A sooc")
+save("A_dev.jpg", (40, 90, 50), "A_dev")
+print("OK: Works に A.jpg と A_dev.jpg を追加しました")
+PY
+```
+
+#### ステップ2 — Console を起動する
+
+Finder で次をダブルクリック:
+
+`~/photo-critique-bot/LuminaNotesConsole.command`
+
+（またはターミナルで）
+
+```bash
+cd ~/photo-critique-bot
+python3 console_gui.py
+```
+
+**見てほしいこと（W5 の前半）:**
+
+- ウィンドウタイトルが **Lumina Notes Console**
+- 上の説明に **① ② ③** がある
+- 枠の見出しがだいたい次のとおり  
+  - `① スクリーニング — 対象フォルダ`  
+  - `② DxO 修正後の記録`  
+  - `③ Lumina Review — Works（コピーなし）`
+
+| # | 結果（自分で記入） |
+|---|-------------------|
+| W5（見た目） | |
+
+#### ステップ3 — W1：APIキー無しでスクリーニングが止まるか
+
+**注意:** キーを一時的にどかすだけです。終わったら必ず戻します。
+
+ターミナル（Console とは別ウィンドウで可）:
+
+```bash
+# 退避（キーがある場合）
+test -f ~/.openai_api_key && mv ~/.openai_api_key ~/.openai_api_key.bak_waveA && echo "退避しました" || echo "もともとキーファイルなし"
+```
+
+Console で:
+
+1. **① 対象フォルダ** → 参照 → `デスクトップ/LuminaManualCheck/OM202608`
+2. チェック: **M1・M2 を ON**（M3 はどちらでも可）、**ドライランは ON でよい**
+3. 「スクリーニングを開始」を押す
+
+**見てほしいこと:** 「実行確認」の前、またはすぐ後に **「APIキーがありません」** 系が出て、長い処理が始まらないこと。
+
+| # | 結果 |
+|---|------|
+| W1 | |
+
+#### ステップ4 — W2：APIキー無しで Lumina Review が止まるか
+
+キーはまだ退避したまま。
+
+1. **③** の Works 参照 → `デスクトップ/LuminaManualCheck/2026/202608`
+2. 「Lumina Review を開始」を押す
+
+**見てほしいこと:** **「APIキーがありません」** が出て、進捗バーが長く動かないこと。
+
+| # | 結果 |
+|---|------|
+| W2 | |
+
+キーを戻す（必須）:
+
+```bash
+test -f ~/.openai_api_key.bak_waveA && mv ~/.openai_api_key.bak_waveA ~/.openai_api_key && echo "キーを戻しました" || echo "戻すバックアップがありません"
+```
+
+#### ステップ5 — W3：撮って出し除外が見えるか
+
+キーを戻したあと、必要なら Console をいったん閉じて開き直す。
+
+1. Works に `…/2026/202608` を選ぶ（ログに「撮って出し除外」と出ればよい）
+2. 「Lumina Review を開始」→ **確認ダイアログ**を読む（まだ「いいえ」で止めてよい）
+
+**見てほしいこと:**
+
+- 対象枚数の内訳に `_dev` と撮って出しがある
+- **「_dev 優先で撮って出し除外: 1 枚」**（または `A.jpg` の名前）が出る
+
+| # | 結果 |
+|---|------|
+| W3 | |
+
+（ここで本番の Review までは不要。W5 の完了文を見たいときだけ「はい」で実行。API 利用あり）
+
+#### ステップ6 — W4：閉じるときに記録確認が出るか
+
+1. ① で `OM202608` を選ぶ
+2. **ドライラン OFF**、**M1 のみ ON**（M2/M3 は OFF）、「スクリーニングを開始」→ 完了まで待つ  
+   （JPEG に Rating が書かれます。確認用フォルダなので問題ありません）
+3. **「DxO修正後を記録」は押さない**
+4. ウィンドウの赤丸で閉じる
+
+**見てほしいこと:** **「記録の確認」** と「後で記録しても大丈夫です」が出る。  
+「いいえ」ならウィンドウが残る。「はい」なら終了。
+
+| # | 結果 |
+|---|------|
+| W4 | |
+
+#### ステップ7 — 結果の伝え方
+
+次をコピーして、チャットか PR #10 に貼ってください。
+
+```text
+Wave A Mac 確認
+ブランチ: cursor/lumina-ux-wave-a-c35c
+W1:
+W2:
+W3:
+W4:
+W5:
+気づいたこと（イメージと違う点）:
+```
+
+各行は `PASS` / `FAIL` / `SKIP` ＋短いメモで十分です。  
+**あなたの役割は「画面がイメージどおりか」の判定だけ**です。直しはこちらで行います。
+
