@@ -83,6 +83,7 @@
 - `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向＋双方向 PASS（2026-08-11）。§0 運用確定。**
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
 - `docs/CURRENT_APP_MAP.md`: **【いまの全体図】** Wave A/B/C 後の入口・2タブ・JPEG Phase1・LINE／Desktop 契約の地図。
+- `docs/R1A_REMAINING_TODO.md`: **【やり残し ToDo】** ストレス低減／Lumina Notes UX／AI 質の未着手・延期項目。
 - `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。UX Wave A 計画は `docs/R1A_UX_IMPROVEMENT_PLAN.md`。
 - `docs/R1A_UX_IMPROVEMENT_PLAN.md`: **【UX 改善計画】** 再レビュー後の Wave A/B/C（ストレス低減・Lumina Notes 語彙・AI 質）。
 - `docs/R1A_MAC_MANUAL_CHECKLIST.md`: **【Mac 手動確認】** オーナー向け GUI／実フォルダ手順（PASS/FAIL 記入）。
