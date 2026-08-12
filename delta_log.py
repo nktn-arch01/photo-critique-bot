@@ -476,6 +476,52 @@ def latest_session_path(unit_path: Path | str) -> Path | None:
     return max(paths, key=lambda p: p.stat().st_mtime)
 
 
+def session_awaits_h3_record(session_file: Path | str) -> bool:
+    """書き込み済みで post_h3 未記録なら True（ドライランは False）。"""
+    try:
+        doc = load_session(session_file)
+    except Exception:
+        return False
+    if doc.get("write_meta") is False:
+        return False
+    summary = summarize_session(doc)
+    if summary.get("has_post_h3"):
+        return False
+    return bool(doc.get("pre_h3") or doc.get("files"))
+
+
+def list_pending_h3_sessions(unit_dir: Path | str) -> list[tuple[str, Path]]:
+    """対象単位（月なら配下イベントも含む）の未記録 H3 セッション一覧.
+
+    戻り値: ``(単位ラベル, セッションパス)``。H3 記録ボタンは従来どおり
+    いまの対象フォルダ1つだが、終了確認・完了案内で漏れを防ぐ。
+    """
+    from library_unit import list_event_units, unit_from_dir
+
+    root = Path(unit_dir)
+    if not root.is_dir():
+        return []
+    unit = unit_from_dir(root)
+    units = []
+    if unit is None:
+        return []
+    units.append(unit)
+    if unit.is_month:
+        try:
+            units.extend(list_event_units(unit))
+        except Exception:
+            pass
+
+    pending: list[tuple[str, Path]] = []
+    for u in units:
+        sess = latest_session_path(u.path)
+        if sess is None:
+            continue
+        if session_awaits_h3_record(sess):
+            pending.append((u.unit_id or u.path.name, sess))
+    return pending
+
+
 @dataclass(frozen=True)
 class SessionSummary:
     path: Path

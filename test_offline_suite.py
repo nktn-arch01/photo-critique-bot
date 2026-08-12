@@ -680,6 +680,129 @@ def test_resolve_session_for_unit_prefers_target_sessions():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_overall_multi_unit_status_cancel_between_units():
+    """監査: 単位間中止は completed に落とさない。"""
+    from screening_pipeline import overall_multi_unit_status
+
+    assert (
+        overall_multi_unit_status(
+            planned_count=3,
+            statuses=["completed"],
+            cancelled_flags=[False],
+            stopped_before_next_unit=True,
+        )
+        == "cancelled"
+    )
+    assert (
+        overall_multi_unit_status(
+            planned_count=2,
+            statuses=["completed", "completed"],
+            cancelled_flags=[False, False],
+            stopped_before_next_unit=False,
+        )
+        == "completed"
+    )
+    assert (
+        overall_multi_unit_status(
+            planned_count=2,
+            statuses=["completed", "cancelled"],
+            cancelled_flags=[False, True],
+            stopped_before_next_unit=False,
+        )
+        == "cancelled"
+    )
+    assert (
+        overall_multi_unit_status(
+            planned_count=2,
+            statuses=[],
+            stopped_before_next_unit=True,
+        )
+        == "cancelled"
+    )
+
+
+def test_list_pending_h3_includes_child_events():
+    """監査: 月を見ると配下イベントの未記録 H3 も列挙する。"""
+    import json
+    import shutil
+
+    from delta_log import list_pending_h3_sessions, sessions_dir
+
+    root = Path(tempfile.mkdtemp(prefix="h3_pending_"))
+    try:
+        month = root / "OM202608"
+        event = month / "OM20260815_旅行"
+        event.mkdir(parents=True)
+        for unit_path, sid in ((month, "monthsess"), (event, "eventsess")):
+            sess = sessions_dir(unit_path)
+            sess.mkdir(parents=True)
+            doc = {
+                "schema": "lumina.shortlist_session.v1",
+                "id": sid,
+                "write_meta": True,
+                "pre_h3": {"files": [{"name": "a.jpg", "rating": 1}]},
+                "post_h3": None,
+                "files": [{"name": "a.jpg", "rating": 1}],
+            }
+            (sess / f"{sid}.json").write_text(json.dumps(doc), encoding="utf-8")
+
+        pending = list_pending_h3_sessions(month)
+        labels = {label for label, _ in pending}
+        assert "OM202608" in labels
+        assert any("旅行" in label or "OM20260815" in label for label in labels)
+        assert len(pending) == 2
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_plan_screening_units_include_child_events():
+    """Wave B2: 月＋配下イベントの実行順。"""
+    import shutil
+
+    from library_unit import plan_screening_units, resolve_unit
+
+    root = Path(tempfile.mkdtemp(prefix="b2_plan_"))
+    try:
+        month = root / "OM202608"
+        event = month / "OM20260815_旅行"
+        event.mkdir(parents=True)
+        unit = resolve_unit(month)
+        alone = plan_screening_units(unit, include_child_events=False)
+        assert len(alone) == 1 and alone[0].is_month
+        with_events = plan_screening_units(unit, include_child_events=True)
+        assert len(with_events) == 2
+        assert with_events[0].is_month
+        assert with_events[1].is_event
+        assert with_events[1].path == event.resolve() or with_events[1].path == event
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_summarize_review_errors_limits_and_formats():
+    """Wave B4: エラー要約は件数制限付きでファイル名を含む。"""
+    from lumina_review import ReviewBatchResult, ReviewItemResult, summarize_review_errors
+
+    result = ReviewBatchResult(
+        works_dir="/tmp/w",
+        status="completed",
+        created_at="t",
+        errors=3,
+        items=[
+            ReviewItemResult("a.jpg", "/a", "error", reason="boom1"),
+            ReviewItemResult("b.jpg", "/b", "processed"),
+            ReviewItemResult("c.jpg", "/c", "error", reason="boom2"),
+            ReviewItemResult("d.jpg", "/d", "error", reason="boom3"),
+        ],
+    )
+    text = summarize_review_errors(result, limit=2)
+    assert "a.jpg" in text and "boom1" in text
+    assert "c.jpg" in text
+    assert "他 1 件" in text
+    assert summarize_review_errors(
+        ReviewBatchResult(works_dir="/tmp/w", status="completed", created_at="t")
+    ) == ""
+
+
 def test_library_unit_discover_and_list_jpegs():
     """T2: 発見・月直下バラ／イベント分離・規則外サブフォルダ除外。"""
     import shutil
@@ -2157,6 +2280,10 @@ def run_all():
     test_iptc_rating_description_roundtrip()
     test_library_unit_naming_rules()
     test_library_unit_prefixed_unit_from_dir()
+    test_overall_multi_unit_status_cancel_between_units()
+    test_list_pending_h3_includes_child_events()
+    test_plan_screening_units_include_child_events()
+    test_summarize_review_errors_limits_and_formats()
     test_resolve_session_for_unit_prefers_target_sessions()
     test_library_unit_discover_and_list_jpegs()
     test_mechanical_m1_blur_and_intent_protect()

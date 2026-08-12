@@ -235,6 +235,21 @@ def list_event_units(month_unit: LibraryUnit) -> list[LibraryUnit]:
     return events
 
 
+def plan_screening_units(
+    unit: LibraryUnit,
+    *,
+    include_child_events: bool = False,
+) -> list[LibraryUnit]:
+    """スクリーニング実行順の単位リスト（Wave B2）.
+
+    - 既定: 選んだ単位だけ（月直下 JPEG のみ／イベント直下のみ）
+    - ``include_child_events`` かつ月: 月 → 配下イベントの順
+    """
+    if include_child_events and unit.is_month:
+        return [unit, *list_event_units(unit)]
+    return [unit]
+
+
 def list_non_event_subdirs(month_unit: LibraryUnit) -> list[Path]:
     """月直下でイベント規則に一致しないサブフォルダ（診断・リネーム案内用）。"""
     if not month_unit.is_month:

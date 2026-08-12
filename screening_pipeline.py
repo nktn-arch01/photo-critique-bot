@@ -12,5 +12,6 @@ from shortlist_pipeline import (  # noqa: F401
     ScreeningPipeline,
     ShortlistPipeline,
     StageName,
+    overall_multi_unit_status,
     parse_stages,
 )

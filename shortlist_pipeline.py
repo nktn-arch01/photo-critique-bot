@@ -306,5 +306,36 @@ def parse_stages(text: str) -> tuple[bool, bool, bool]:
     return ("m1" in parts), ("m2" in parts), ("m3" in parts)
 
 
+def overall_multi_unit_status(
+    *,
+    planned_count: int,
+    statuses: list[str],
+    cancelled_flags: list[bool] | None = None,
+    stopped_before_next_unit: bool = False,
+) -> str:
+    """複数単位バッチの総合ステータス（Wave B2 監査修正）.
+
+    単位のあいだで中止した場合、完了済み結果だけだと ``completed`` に
+    見えてしまうため、``stopped_before_next_unit`` を必須入力とする。
+    """
+    flags = cancelled_flags or [False] * len(statuses)
+    if stopped_before_next_unit:
+        return "cancelled"
+    if any(bool(f) for f in flags) or any(s == "cancelled" for s in statuses):
+        return "cancelled"
+    if any(s == "failed" for s in statuses):
+        return "failed"
+    if (
+        planned_count > 0
+        and len(statuses) == planned_count
+        and statuses
+        and all(s == "completed" for s in statuses)
+    ):
+        return "completed"
+    if not statuses:
+        return "unknown"
+    return "unknown"
+
+
 # Wave 3 互換 alias（1リリース据え置き）
 ScreeningPipeline = ShortlistPipeline

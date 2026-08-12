@@ -1,8 +1,8 @@
 # デスクトップ運用方針（確定メモ）
 
-更新日: 2026-08-11  
+更新日: 2026-08-12  
 位置づけ: オーナー回答に基づく **運用・中優先改修の確定方針**。実装前の契約。  
-関連: [`R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`](R1A_DESKTOP_WALKTHROUGH_BACKLOG.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md)
+関連: [`R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`](R1A_DESKTOP_WALKTHROUGH_BACKLOG.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) / [`R1A_UX_IMPROVEMENT_PLAN.md`](R1A_UX_IMPROVEMENT_PLAN.md)
 
 ---
 
@@ -47,8 +47,9 @@
 | イベント | `XXYYYYMMDD_短い名前`（スペースなし） | `~/OM2026/OM202606/OM20260615_旅行` |
 
 - `XX` は固定の1種類ではなく、**機種ごとに異なる2文字**を許す（同じ庫に `OM*` と `FF*` が混在してよい）。  
-- スクリーニングの対象は **個別指定**（月直下とイベント配下は別バッチ）。  
-- 月バッチは直下 JPEG のみ（イベント配下は含めない）。
+- スクリーニングの対象は **個別指定が基本**（月直下とイベント配下は別バッチ）。  
+  Console では任意で「配下イベントも順に実行」できる（Wave B2）。一括後の「DxO修正後を記録」は **単位ごと**（イベントはフォルダを切り替えて記録）。  
+- 月バッチの既定は直下 JPEG のみ（イベント配下は含めない。上記オプション OFF 時）。
 
 **Works 月との対応（運用）:** 接頭辞2文字を除いた `YYYYMM`。  
 例: `OM202606` → Works `~/2026/202606`。イベント由来の確定コマも同じ月 Works へ集約。
@@ -188,3 +189,4 @@ Works が月のみなら、現行 `DesktopLogManager`（`year_str = name[:4]`、
 | 2026-08-11 | **P1 + M1–M5 実装**: 接頭辞付き unit 受付、Works YYYYMM ゲート、H3 target 正＋ワーカー、開始時スナップショット、共有キー文書化 |
 | 2026-08-11 | **L1–L5 実装**: UI after 安全化、監査 mkdir 撤廃、RatingPercent フォールバック、Works 直下案内、哨兵「なし」スキップ |
 | 2026-08-11 | **命名 Wave 2**: 出力を `{ym}Luminaノート/カード/ログ` に切替。旧「写真分析*」「評価カード」は読込フォールバックのみ |
+| 2026-08-12 | Wave B2: 既定は別バッチのまま。Console 任意「配下イベントも順に実行」。H3 は単位ごと |
