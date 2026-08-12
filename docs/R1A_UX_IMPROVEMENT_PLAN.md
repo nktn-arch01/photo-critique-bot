@@ -80,12 +80,14 @@
 
 ### Wave B 受け入れ条件
 
-- [ ] 月＋イベントでチェック ON → 月→イベント順にログが出る（Mac）
-- [ ] チェック OFF → 従来どおり月直下のみ
-- [ ] Review 完了で「Works フォルダを開きますか？」
-- [x] エラーがある完了文にファイル名が出る — オフライン `test_summarize_review_errors_limits_and_formats`
+- [x] 月＋イベントでチェック ON → 月→イベント順にログが出る — **Mac B2 PASS**
+- [x] チェック OFF → 従来どおり月直下のみ — **Mac B2b PASS**
+- [x] Review 完了で「Works フォルダを開きますか？」— **Mac B3 PASS**
+- [x] エラーがある完了文にファイル名が出る — オフライン＋ **Mac B4 PASS**
 - [x] `python3 test_offline_suite.py` PASS（2026-08-12）
 - [x] `plan_screening_units` オフライン PASS
+- [x] B1 薄い流れ案内 — **Mac B1 PASS**
+- [x] Mac: Wave B B1–B4 / B2b すべて PASS（2026-08-12・オーナー確認）
 
 ### Wave C（製品・AI 質の中期）— ブランドと対話
 
