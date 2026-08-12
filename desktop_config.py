@@ -13,6 +13,7 @@
 - ``last_dir``: 講評 GUI の前回フォルダ
 - ``shortlist_last_dir``: スクリーニング対象の前回フォルダ
 - ``works_last_dir``: Works Lumina Reviewの前回フォルダ
+- ``console_last_tab``: Console の前回タブ（``screening`` / ``review``）
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ def default_config(desktop: str | None = None) -> dict[str, Any]:
         "works_last_dir": base_dir,
         "force_overwrite": False,
         "card_theme": "dark",
+        "console_last_tab": "screening",
     }
 
 

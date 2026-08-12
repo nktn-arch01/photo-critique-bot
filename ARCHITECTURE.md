@@ -83,7 +83,8 @@
 - `docs/R1_DEEP_LOOP_SPEC.md`: **【R1′ 深い輪 機能仕様】** 第一波 R1′-A は JPEG への IPTC Rating／説明書き込みバッチが中心。人の確認と Works 書き出しは DxO 等。メタ一次ソースは JPEG（同期成立時は dop/xmp 不使用）。
 - `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向＋双方向 PASS（2026-08-11）。§0 運用確定。**
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
-- `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。
+- `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。UX Wave A 計画は `docs/R1A_UX_IMPROVEMENT_PLAN.md`。
+- `docs/R1A_UX_IMPROVEMENT_PLAN.md`: **【UX 改善計画】** 再レビュー後の Wave A/B/C（ストレス低減・Lumina Notes 語彙・AI 質）。
 - `docs/R1A_MAC_MANUAL_CHECKLIST.md`: **【Mac 手動確認】** オーナー向け GUI／実フォルダ手順（PASS/FAIL 記入）。
 - `docs/R1A_NAMING_CLEANUP.md`: **【命名整理】** 旧 shortlist／trace／評価カード等の棚卸しと段階改修案。
 - `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `XX` 機種接頭辞、Works 月 `YYYYMM` のみ・手動、コピーなし、Lumina Review ログ配置、記録 UI。
@@ -97,7 +98,7 @@
 - `desktop_config.py`: **【共有設定】** `~/.photo_ai_config.json` の merge 読書き。`card_theme` / `force_overwrite` は講評／Lumina Reviewで共有。
 - `desktop_ui.py`: **【UI安全予約】** ウィンドウ破棄後の `after` を握りつぶす（スクリーニング／講評 GUI 共通）。
 - `prepare_mac_manual_fixtures.py`: Mac 手動確認用の最小フォルダ／JPEG を Desktop に生成。
-- `shortlist_gui.py` / `console_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI。講評 `app_gui` とは別。公式起動は `console_gui.py`。
+- `shortlist_gui.py` / `console_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI（タブ分離。Review は単独実行可）。講評 `app_gui` とは別。公式起動は `console_gui.py`。
 - `LuminaNotesConsole.command`: **Lumina Notes Console** のダブルクリック起動（公式ランチャー）。
 - `LuminaShortlist.command`: 旧名互換スタブ（`LuminaNotesConsole.command` を呼ぶ）。
 - `run_screening.py`: スクリーニング CLI（公式）。`run_shortlist.py` は互換ラッパ。

@@ -237,17 +237,18 @@ def build_antenna_prompt(*, lens: str | None = None) -> str:
         axis_lines.append(f"- {axis.key}（表示名: {axis.label}）: {axis.meaning}")
     axes_block = "\n".join(axis_lines)
     keys = ", ".join(AXIS_KEYS)
-    return f"""この写真を、Lumina Notes の5軸だけで短く採点してください。
-フル講評・長文・見出し・カード項目は不要です。
+    return f"""この写真を、Lumina Notes の5軸だけで短い熱量ラベルにしてください。
+フル対話・長文・見出し・カード項目は不要です。
 
 ## 5軸（深層基準）
 {axes_block}
 
 ## 厳守
 - ★5必須などの絶対ゲートは禁止。観察に応じて1–5の整数を付ける。迷ったら低め。
-- 5軸をできるだけ独立に採点する（同じ理由で複数を5にしない）。
+- 5軸をできるだけ独立にラベルする（同じ理由で複数を5にしない）。
 - 写真にない人物・出来事を story で創作しない。
 - 出力は JSON オブジェクトのみ（前後の説明文禁止）。
+- これは採点ではなく、バッチ内で相対比較するための熱量の気配である。
 
 ## 出力形式
 {{"{AXIS_KEYS[0]}":1,"{AXIS_KEYS[1]}":1,"{AXIS_KEYS[2]}":1,"{AXIS_KEYS[3]}":1,"{AXIS_KEYS[4]}":1,"reason":"40文字以内の日本語で熱量の要点"}}
@@ -260,7 +261,7 @@ def build_antenna_system_prompt(*, lens: str | None = None) -> str:
     lens_obj = get_lens(normalize_lens(lens))
     return (
         f"{lens_obj.system_role} "
-        "今はスクリーニング用のアンテナ採点のみ。評価ではなく熱量の相対比較のための短いスコアを返す。"
+        "今はスクリーニング用のアンテナ（相対熱量）のみ。審判ではなく熱量の相対比較のための短いラベルを返す。"
     )
 
 
