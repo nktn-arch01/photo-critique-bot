@@ -36,7 +36,9 @@ EVENT_PLAIN_RE = re.compile(r"^(\d{8})_([^\s]+)$")
 EVENT_PREFIXED_RE = re.compile(r"^([A-Za-z]{2})(\d{8})_([^\s]+)$")
 EVENT_DISPLAY_RE = re.compile(r"^[\w\-]+$", re.UNICODE)
 
-SHORTLIST_JPEG_SUFFIXES = frozenset({".jpg", ".jpeg"})
+SCREENING_JPEG_SUFFIXES = frozenset({".jpg", ".jpeg"})
+# Wave 3 互換 alias
+SHORTLIST_JPEG_SUFFIXES = SCREENING_JPEG_SUFFIXES
 
 
 @dataclass(frozen=True)
@@ -255,9 +257,13 @@ def discover_units(photos_root: Path | str) -> list[LibraryUnit]:
     return out
 
 
-def is_shortlist_jpeg(path: Path | str) -> bool:
+def is_screening_jpeg(path: Path | str) -> bool:
     p = Path(path)
-    return p.is_file() and p.suffix.lower() in SHORTLIST_JPEG_SUFFIXES and not p.name.startswith(".")
+    return p.is_file() and p.suffix.lower() in SCREENING_JPEG_SUFFIXES and not p.name.startswith(".")
+
+
+# Wave 3 互換 alias
+is_shortlist_jpeg = is_screening_jpeg
 
 
 def iter_direct_jpegs(directory: Path | str) -> Iterator[Path]:
@@ -266,7 +272,7 @@ def iter_direct_jpegs(directory: Path | str) -> Iterator[Path]:
     if not d.is_dir():
         return
     for child in sorted(d.iterdir(), key=lambda x: x.name.lower()):
-        if is_shortlist_jpeg(child):
+        if is_screening_jpeg(child):
             yield child.resolve()
 
 
@@ -312,7 +318,7 @@ def resolve_session_for_unit(
 
     target = Path(unit_dir)
     if preferred is not None and session_belongs_to_unit(preferred, target):
-        return Path(preferred)
+        return Path(preferred).resolve()
     latest = latest_session_path(target)
     if latest is not None:
         return latest

@@ -330,7 +330,7 @@ class PhotoAICritiqueApp:
                         mode="full"
                     )
 
-                    self.log("   └─ 評価カード画像生成中...")
+                    self.log("   └─ カード画像生成中...")
                     card_output_path = log_mgr.get_card_output_path(file_name)
                     create_critique_card(
                         img_path, critique_text, card_output_path, theme=card_theme

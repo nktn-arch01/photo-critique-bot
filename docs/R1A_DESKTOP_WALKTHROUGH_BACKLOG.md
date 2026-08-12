@@ -4,7 +4,7 @@
 位置づけ: **今後の検討・改修バックログ**（実装必須ではないが忘れないための記録）。  
 根拠: R1′-A 完了後のコンセプト／UX／潜在バグ・ウォークスルー。
 
-関連: [`LUMINA_NOTES_SERVICE_CONCEPT.md`](LUMINA_NOTES_SERVICE_CONCEPT.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / **[`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md)（運用方針・確定）** / [`R1A_MAC_MANUAL_CHECKLIST.md`](R1A_MAC_MANUAL_CHECKLIST.md)（手動確認）
+関連: [`LUMINA_NOTES_SERVICE_CONCEPT.md`](LUMINA_NOTES_SERVICE_CONCEPT.md) / [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / **[`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md)（運用方針・確定）** / [`R1A_MAC_MANUAL_CHECKLIST.md`](R1A_MAC_MANUAL_CHECKLIST.md)（手動確認） / [`R1A_NAMING_CLEANUP.md`](R1A_NAMING_CLEANUP.md)（命名整理）
 
 ---
 
@@ -22,7 +22,7 @@
 ## 1. コンセプトとの緊張（検討課題）
 
 1. **「評価ではなく理解」 vs 表層の評価語彙**  
-   Rating 0–4、カード ★5軸、出力フォルダ名「評価カード」。ブランド原則と見え方のすり合わせ（リネーム／コピー／説明 UI）。
+   Rating 0–4、カード ★5軸。出力フォルダ名は Wave 2 で `{ym}Luminaカード` 等へ（読込は旧「評価カード」も可）。残る緊張は Rating／★の見せ方。
 
 2. **「答えではなく対話」 vs 長文講評が主成果**  
    Lumina Review はフル講評中心。「そう思う／違う」の短い反応ループ（速い輪）は未実装。

@@ -304,3 +304,7 @@ def parse_stages(text: str) -> tuple[bool, bool, bool]:
     if unknown:
         raise ValueError(f"未知のステージ: {sorted(unknown)}")
     return ("m1" in parts), ("m2" in parts), ("m3" in parts)
+
+
+# Wave 3 互換 alias（1リリース据え置き）
+ScreeningPipeline = ShortlistPipeline

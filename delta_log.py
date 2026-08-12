@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from iptc_rating_io import read_shortlist_meta
+from iptc_rating_io import read_screening_meta
 from library_unit import LibraryUnit, list_source_jpegs
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ SESSIONS_DIRNAME = "sessions"
 
 
 def sessions_dir(unit_path: Path | str) -> Path:
-    return Path(unit_path) / LUMINA_DIRNAME / SESSIONS_DIRNAME
+    return Path(unit_path).resolve() / LUMINA_DIRNAME / SESSIONS_DIRNAME
 
 
 def session_path(unit_path: Path | str, session_id: str) -> Path:
@@ -159,7 +159,7 @@ def rescan_counts_by_rating(unit: LibraryUnit) -> dict[str, int]:
     out = {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "none": 0, "other": 0}
     for path in list_source_jpegs(unit):
         try:
-            meta = read_shortlist_meta(path)
+            meta = read_screening_meta(path)
         except Exception:
             out["other"] += 1
             continue
@@ -192,7 +192,7 @@ def snapshot_unit_jpeg_state(unit: LibraryUnit) -> list[dict[str, Any]]:
     file_ratings: list[dict[str, Any]] = []
     for jpeg in list_source_jpegs(unit):
         try:
-            meta = read_shortlist_meta(jpeg)
+            meta = read_screening_meta(jpeg)
             file_ratings.append(
                 {
                     "file_name": jpeg.name,
@@ -371,7 +371,7 @@ def list_session_paths(unit_path: Path | str) -> list[Path]:
     root = sessions_dir(unit_path)
     if not root.is_dir():
         return []
-    return sorted(root.glob("*.json"), key=lambda p: p.name)
+    return sorted((p.resolve() for p in root.glob("*.json")), key=lambda p: p.name)
 
 
 def summarize_session(document: dict[str, Any]) -> dict[str, Any]:
@@ -400,15 +400,28 @@ def summarize_session(document: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+class DryRunSessionError(ValueError):
+    """ドライラン（JPEG 未書き込み）のセッションに H3 を記録しようとした。"""
+
+
 def record_post_h3(session_file: Path | str, unit: LibraryUnit | None = None) -> dict[str, Any]:
     """DxO（H3）修正後の状態を記録し、修正前との差分を残す。
 
     - ``pre_h3``: バッチ直後（無ければ files から復元）
     - ``post_h3``: いまの JPEG 再スキャン
     - ``h3_delta``: 前後差分（判定改善用）
+
+    ``write_meta`` が False（ドライラン）のセッションは拒否する。
+    pre_h3 はパイプライン判定値、JPEG は未更新のため偽差分になるため。
     """
     path = Path(session_file)
     doc = load_session(path)
+    if doc.get("write_meta") is False:
+        raise DryRunSessionError(
+            "このセッションはドライラン（JPEGへ書いていない）のため、"
+            "「DxO修正後を記録」は使えません。\n"
+            "ドライランを外してスクリーニングを再実行してから記録してください。"
+        )
     if unit is None:
         unit_path = Path(doc["library_unit_path"])
         from library_unit import unit_from_dir

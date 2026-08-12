@@ -85,30 +85,32 @@
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
 - `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。
 - `docs/R1A_MAC_MANUAL_CHECKLIST.md`: **【Mac 手動確認】** オーナー向け GUI／実フォルダ手順（PASS/FAIL 記入）。
+- `docs/R1A_NAMING_CLEANUP.md`: **【命名整理】** 旧 shortlist／trace／評価カード等の棚卸しと段階改修案。
 - `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `XX` 機種接頭辞、Works 月 `YYYYMM` のみ・手動、コピーなし、Lumina Review ログ配置、記録 UI。
-- `iptc_rating_io.py`: **【スクリーニングメタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`RatingPercent` のみでも復元。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。
-- `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM|XXYYYYMM` / イベント `YYYYMMDD_名前|XXYYYYMMDD_名前`。Works は `YYYYMM` のみ。規則外サブフォルダはイベントにしない。
-- `shortlist_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。
-- `shortlist_antenna.py`: **【M2 アンテナ】** 5軸軽量 Vision＋バッチ内相対熱量。合格 Rating=2＋`[M2]`。★絶対ゲート禁止。
-- `shortlist_diversity.py`: **【M3 多様性】** 品質×多様性の貪欲選抜。余白 Rating=3／上位=4＋`[M3]`。タグ語彙・執着ブーストは設定化。
-- `shortlist_pipeline.py`: **【スクリーニングパイプライン】** M1→M2→M3 オーケストレーション。進捗・中断。講評バッチとは別導線。
-- `delta_log.py`: **【監査ログ】** `{unit}/_lumina/sessions/{id}.json`。`pre_h3` / `post_h3` / `h3_delta`（DxO前後・判定改善）。
+- `iptc_rating_io.py`: **【スクリーニングメタ単一ソース】** JPEG 内 Rating / Description の読み書き（exiftool）。`RatingPercent` のみでも復元。`[M2]`/`[M3]` ブロック置換。`.dop`/`.xmp` 非依存。公式 API: `ScreeningMeta` / `read_screening_meta` / `write_screening_decision`（旧 `Shortlist*` は alias）。
+- `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM|XXYYYYMM` / イベント `YYYYMMDD_名前|XXYYYYMMDD_名前`。Works は `YYYYMM` のみ。規則外サブフォルダはイベントにしない。`is_screening_jpeg`（旧 `is_shortlist_jpeg` は alias）。
+- `shortlist_mechanical.py` / `screening_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。（`screening_*` は Wave 3 再エクスポート）
+- `shortlist_antenna.py` / `screening_antenna.py`: **【M2 アンテナ】** 5軸軽量 Vision＋バッチ内相対熱量。合格 Rating=2＋`[M2]`。★絶対ゲート禁止。
+- `shortlist_diversity.py` / `screening_diversity.py`: **【M3 多様性】** 品質×多様性の貪欲選抜。余白 Rating=3／上位=4＋`[M3]`。タグ語彙・執着ブーストは設定化。
+- `shortlist_pipeline.py` / `screening_pipeline.py`: **【スクリーニングパイプライン】** M1→M2→M3 オーケストレーション。`ScreeningPipeline`（旧 `ShortlistPipeline` は alias）。講評バッチとは別導線。
+- `delta_log.py`: **【監査ログ】** `{unit}/_lumina/sessions/{id}.json`。`pre_h3` / `post_h3` / `h3_delta`（DxO前後・判定改善）。schema `lumina.shortlist_session.v1` 維持。
 - `desktop_config.py`: **【共有設定】** `~/.photo_ai_config.json` の merge 読書き。`card_theme` / `force_overwrite` は講評／Lumina Reviewで共有。
 - `desktop_ui.py`: **【UI安全予約】** ウィンドウ破棄後の `after` を握りつぶす（スクリーニング／講評 GUI 共通）。
 - `prepare_mac_manual_fixtures.py`: Mac 手動確認用の最小フォルダ／JPEG を Desktop に生成。
-- `shortlist_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI。講評 `app_gui` とは別。
-- `LuminaShortlist.command`: Lumina Notes Console のダブルクリック起動。
-- `run_shortlist.py`: スクリーニング CLI（補助）。
-- `trace_from_works.py`: **【Works Lumina Review】** `{stem}_dev.jpg` 優先／撮って出しフォールバック。既存 critique コア再利用。コピーなし。
-- `run_trace_works.py`: Works Lumina Review CLI（補助）。
+- `shortlist_gui.py` / `console_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI。講評 `app_gui` とは別。公式起動は `console_gui.py`。
+- `LuminaNotesConsole.command`: **Lumina Notes Console** のダブルクリック起動（公式ランチャー）。
+- `LuminaShortlist.command`: 旧名互換スタブ（`LuminaNotesConsole.command` を呼ぶ）。
+- `run_screening.py`: スクリーニング CLI（公式）。`run_shortlist.py` は互換ラッパ。
+- `lumina_review.py`: **【Works Lumina Review】** `{stem}_dev.jpg` 優先／撮って出しフォールバック。`LuminaReviewRunner` / `list_works_review_targets`。コピーなし。
+- `trace_from_works.py`: 旧モジュール名の互換再エクスポート。
+- `run_lumina_review.py`: Works Lumina Review CLI（公式）。`run_trace_works.py` は互換ラッパ。
 - `scripts/iptc_sync_verify.py`: `iptc_rating_io` を使う Rating/Description ラウンドトリップ検証。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
 - `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ・カード背景テーマの自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、実行前のライト/ダーク選択、独立例外処理、リアルタイムログ表示、中断制御対応。
 - `analyze_folder.py`: 月別フォルダを一括処理するCLIバッチスクリプト。
-- `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。
+- `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。Wave 2 以降の公式名は `{ym}Luminaノート/カード/ログ`（旧「写真分析*」「評価カード」は読込フォールバック）。
 - `PhotoAICritique.command`: 講評バッチのダブルクリック起動（Gatekeeper属性の自動解除機能付き）。
-- `LuminaShortlist.command`: **Lumina Notes Console** のダブルクリック起動。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)
@@ -174,7 +176,7 @@
 
 ### 規則 8: メタデータ抽出の一元化原則 (DRY原則) と JPEG 正
 - 写真ファイルからのメタ抽出は、すべて `scanner.py` の `extract_file_metadata()` を経由すること。`metadata_extractor.py` は後方互換ラッパのみ（新規コードから呼ばない）。
-- **Rating / Description（user_intent）は JPEG 内を一次ソース**とする（`iptc_rating_io.read_shortlist_meta`）。§0 同期 PASS 後、`.dop` / `.xmp` は講評必須経路に使わない。
+- **Rating / Description（user_intent）は JPEG 内を一次ソース**とする（`iptc_rating_io.read_screening_meta`）。§0 同期 PASS 後、`.dop` / `.xmp` は講評必須経路に使わない。
 - `.dop` は JPEG 側が空のときの**フォールバックのみ**（レガシー資産）。抽出実装は正規表現優先＋ `LuaTableParser` 補完を維持する。
 - 講評プロンプト注入（`CritiquePromptContext`）は `metadata`（JPEG 正）を優先し、`dop_info` は補助とする。
 

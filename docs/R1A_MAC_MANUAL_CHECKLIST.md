@@ -73,7 +73,7 @@ python3 prepare_mac_manual_fixtures.py
 
 ## 1. Lumina Notes Console 起動
 
-Finder で `LuminaShortlist.command` をダブルクリック（またはターミナルで `python3 shortlist_gui.py`）。
+Finder で `LuminaNotesConsole.command` をダブルクリック（旧 `LuminaShortlist.command` も可。またはターミナルで `python3 shortlist_gui.py`）。
 
 | # | 確認 | 結果 |
 |---|------|------|
@@ -175,7 +175,7 @@ Finder で `LuminaShortlist.command` をダブルクリック（またはター�
 
 | # | 確認 | 結果 |
 |---|------|------|
-| F6 | `…/2026/写真分析ログ_2026.txt` など年フォルダ側に年次が出る（既存仕様どおり） | |
+| F6 | `…/2026/Luminaログ_2026.txt` など年フォルダ側に年次が出る（Wave 2 公式名） | |
 
 ---
 
@@ -188,11 +188,11 @@ API／GUI ではなくターミナルで十分:
 IMG=~/Desktop/LuminaManualCheck/OM202608/sample_a.jpg
 exiftool -overwrite_original -Rating= -XMP:Rating= -RatingPercent=60 "$IMG"
 python3 -c "
-from iptc_rating_io import read_shortlist_meta
+from iptc_rating_io import read_screening_meta
 from pathlib import Path
 import os
 p=Path(os.path.expanduser('$IMG'))
-print(read_shortlist_meta(p).rating)  # 期待: 3
+print(read_screening_meta(p).rating)  # 期待: 3
 "
 ```
 

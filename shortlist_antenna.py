@@ -24,8 +24,8 @@ from critique_lens import DEFAULT_LENS, get_lens, normalize_lens
 from iptc_rating_io import (
     ExifToolError,
     ExifToolNotFoundError,
-    read_shortlist_meta,
-    write_shortlist_decision,
+    read_screening_meta,
+    write_screening_decision,
 )
 from library_unit import LibraryUnit, list_source_jpegs
 
@@ -293,7 +293,7 @@ def _truncate_reason(reason: str, max_chars: int) -> str:
 
 def _read_input_rating(path: Path) -> int | None:
     try:
-        return read_shortlist_meta(path).rating
+        return read_screening_meta(path).rating
     except Exception:
         return None
 
@@ -344,7 +344,7 @@ def apply_antenna_decision(
     if not write or decision.skipped or decision.error or not decision.passed:
         return decision
     try:
-        write_shortlist_decision(
+        write_screening_decision(
             decision.path,
             rating=2,
             stage="M2",

@@ -17,6 +17,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
 from delta_log import (
+    DryRunSessionError,
     load_session,
     record_post_h3,
     summarize_session,
@@ -25,17 +26,18 @@ from desktop_config import load_config as load_shared_config, save_config_merge
 from desktop_ui import schedule_on_ui
 from library_unit import (
     is_works_month_folder_name,
+    list_event_units,
     list_source_jpegs,
     resolve_session_for_unit,
     resolve_unit,
     unit_from_dir,
 )
-from shortlist_pipeline import PipelineConfig, PipelineProgress, ShortlistPipeline
-from trace_from_works import (
-    TraceConfig,
-    TraceProgress,
-    WorksTraceRunner,
-    list_works_trace_targets,
+from screening_pipeline import PipelineConfig, PipelineProgress, ScreeningPipeline
+from lumina_review import (
+    ReviewConfig,
+    ReviewProgress,
+    LuminaReviewRunner,
+    list_works_review_targets,
     works_empty_targets_hint,
 )
 
@@ -107,8 +109,8 @@ class ShortlistApp:
             pass
 
         self.is_running = False
-        self.pipeline: ShortlistPipeline | None = None
-        self.trace_runner: WorksTraceRunner | None = None
+        self.pipeline: ScreeningPipeline | None = None
+        self.trace_runner: LuminaReviewRunner | None = None
         self.last_session_path: Path | None = None
         self.config = self.load_config()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -151,7 +153,10 @@ class ShortlistApp:
                 "1. オリジナルの月（YYYYMM または OM202606 等）／イベント（…DD_名前）を選ぶ\n"
                 "2. スクリーニング（M1→M2→M3）を実行 → JPEG に Rating / 説明が付く\n"
                 "3. DxO で確認・修正したあと「修正後を記録」で前後比較を残す\n"
-                "4. Works の月フォルダ（YYYYMM のみ）を選び、Lumina Review（カード／ノート）を付ける"
+                "4. Works の月フォルダ（YYYYMM のみ）を選び、Lumina Review（カード／ノート）を付ける\n\n"
+                "Rating の意味（DxO の「出来の星」とは別）:\n"
+                "  0=除外 / 1=M1合格 / 2=M2合格 / 3=余白 / 4=上位\n"
+                "月フォルダを選んだとき、イベント配下の JPEG は対象外です（別途イベントを指定）。"
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
@@ -297,6 +302,16 @@ class ShortlistApp:
             self.save_config(selected)
             self.log(f"対象フォルダ: {selected}")
             self._refresh_session_label(Path(selected))
+            try:
+                unit = unit_from_dir(Path(selected))
+                if unit is not None and unit.is_month:
+                    events = list_event_units(unit)
+                    if events:
+                        self.log(
+                            f"注意: 月フォルダ直下のみが対象。イベント配下 {len(events)} 件は含めません。"
+                        )
+            except Exception:
+                pass
 
     def browse_works_folder(self) -> None:
         current = self.works_dir_var.get()
@@ -314,7 +329,7 @@ class ShortlistApp:
                 )
             try:
                 works_path = Path(selected)
-                n = len(list_works_trace_targets(works_path))
+                n = len(list_works_review_targets(works_path))
                 hint = works_empty_targets_hint(works_path) if n == 0 else ""
                 self.log(f"Works フォルダ: {selected}（Lumina Review 対象 {n} 枚）{hint.strip()}")
             except Exception as e:
@@ -393,6 +408,18 @@ class ShortlistApp:
             messagebox.showwarning("警告", f"直下に JPEG がありません:\n{target}")
             return
 
+        event_note = ""
+        if unit.is_month:
+            try:
+                events = list_event_units(unit)
+            except Exception:
+                events = []
+            if events:
+                event_note = (
+                    f"\n注意: イベント配下 {len(events)} 件は今回の対象外です"
+                    "（イベントフォルダを別に選んでください）。"
+                )
+
         # M3: 開始時点の UI 値をスナップショット（ワーカーは Tk 変数を読まない）
         opts = {
             "run_m1": bool(self.var_m1.get()),
@@ -411,8 +438,9 @@ class ShortlistApp:
             "実行確認",
             f"対象: {unit.kind} / {unit.unit_id}"
             + (f"（機種 {unit.camera_code}）" if unit.camera_code else "")
-            + f"\nJPEG: {len(jpegs)} 枚\n"
-            f"段: {', '.join(stages)}\n"
+            + f"\nJPEG（直下）: {len(jpegs)} 枚"
+            + event_note
+            + f"\n段: {', '.join(stages)}\n"
             f"書き込み: {'しない（ドライラン）' if opts['dry'] else 'する'}\n\n"
             "スクリーニングを開始しますか？",
         ):
@@ -437,7 +465,7 @@ class ShortlistApp:
                 self.log(f"[{p.stage}] {p.message}")
                 self._set_status(p.message)
 
-            self.pipeline = ShortlistPipeline(
+            self.pipeline = ScreeningPipeline(
                 PipelineConfig(
                     write=not opts["dry"],
                     run_m1=opts["run_m1"],
@@ -468,14 +496,42 @@ class ShortlistApp:
             def _done() -> None:
                 self._refresh_session_label(target)
                 self.status_label.config(text=f"処理{result.status}")
-                msg = (
-                    f"スクリーニングが {result.status} しました。\n\n"
-                    f"JPEG: {result.jpeg_count} 枚\n"
-                    f"セッション: {result.session_path.name if result.session_path else 'なし'}\n\n"
-                    "次: DxO で Rating を確認・修正し、\n"
-                    "「DxO修正後を記録」を押してください。"
-                )
-                messagebox.showinfo("完了", msg)
+                status = result.status or "unknown"
+                session_name = result.session_path.name if result.session_path else "なし"
+                if status == "completed":
+                    if opts["dry"]:
+                        next_steps = (
+                            "今回はドライランのため JPEG には書いていません。\n"
+                            "「DxO修正後を記録」は使わず、書き込みありで再実行してください。"
+                        )
+                    else:
+                        next_steps = (
+                            "次: DxO で Rating を確認・修正し、\n"
+                            "「DxO修正後を記録」を押してください。"
+                        )
+                    title = "完了"
+                    msg = (
+                        f"スクリーニングが完了しました。\n\n"
+                        f"JPEG: {result.jpeg_count} 枚\n"
+                        f"セッション: {session_name}\n\n"
+                        f"{next_steps}"
+                    )
+                elif status == "cancelled":
+                    title = "中止"
+                    msg = (
+                        f"スクリーニングを中止しました。\n\n"
+                        f"JPEG: {result.jpeg_count} 枚\n"
+                        f"セッション: {session_name}"
+                    )
+                else:
+                    title = "未完了"
+                    msg = (
+                        f"スクリーニングは完了しませんでした（{status}）。\n\n"
+                        f"JPEG: {result.jpeg_count} 枚\n"
+                        f"セッション: {session_name}\n"
+                        f"エラー: {result.error or '（詳細はログを確認）'}"
+                    )
+                messagebox.showinfo(title, msg)
 
             self._ui(_done)
         except Exception as e:
@@ -514,7 +570,7 @@ class ShortlistApp:
             )
             return
         try:
-            targets = list_works_trace_targets(works)
+            targets = list_works_review_targets(works)
         except Exception as e:
             messagebox.showerror("エラー", str(e))
             return
@@ -559,12 +615,12 @@ class ShortlistApp:
 
     def _run_trace(self, works: Path, opts: dict) -> None:
         try:
-            def on_progress(p: TraceProgress) -> None:
-                self.log(f"[trace/{p.stage}] {p.message}")
+            def on_progress(p: ReviewProgress) -> None:
+                self.log(f"[review/{p.stage}] {p.message}")
                 self._set_status(p.message)
 
-            self.trace_runner = WorksTraceRunner(
-                TraceConfig(
+            self.trace_runner = LuminaReviewRunner(
+                ReviewConfig(
                     mode=opts["mode"],
                     force_overwrite=opts["force"],
                     card_theme=opts["theme"],
@@ -615,6 +671,19 @@ class ShortlistApp:
             messagebox.showwarning(
                 "セッションなし",
                 "このフォルダにスクリーニングセッションがありません。\n先にスクリーニングを実行してください。",
+            )
+            return
+        try:
+            sess_doc = load_session(session)
+        except Exception as e:
+            messagebox.showerror("エラー", f"セッションを読めませんでした:\n{e}")
+            return
+        if sess_doc.get("write_meta") is False:
+            messagebox.showwarning(
+                "ドライランのセッション",
+                "このセッションはドライラン（JPEGへ書いていない）です。\n"
+                "偽の差分を避けるため、「DxO修正後を記録」は使えません。\n\n"
+                "ドライランを外してスクリーニングを再実行してから記録してください。",
             )
             return
 
@@ -670,6 +739,10 @@ class ShortlistApp:
                 )
 
             self._ui(_done)
+        except DryRunSessionError as e:
+            err_msg = str(e)
+            self.log(f"H3記録拒否: {err_msg}")
+            self._ui(lambda msg=err_msg: messagebox.showwarning("ドライランのセッション", msg))
         except Exception as e:
             err_msg = str(e)
             self.log(f"H3記録エラー: {err_msg}")
