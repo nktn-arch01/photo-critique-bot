@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import subprocess
 import threading
 from pathlib import Path
 import tkinter as tk
@@ -22,11 +21,12 @@ from delta_log import (
     summarize_session,
 )
 from desktop_config import load_config as load_shared_config, save_config_merge
-from desktop_ui import schedule_on_ui
+from desktop_ui import open_in_file_manager, schedule_on_ui
 from library_unit import (
     is_works_month_folder_name,
     list_event_units,
     list_source_jpegs,
+    plan_screening_units,
     resolve_session_for_unit,
     resolve_unit,
     unit_from_dir,
@@ -37,6 +37,7 @@ from lumina_review import (
     ReviewConfig,
     ReviewProgress,
     LuminaReviewRunner,
+    summarize_review_errors,
     summarize_works_review_selection,
     works_empty_targets_hint,
 )
@@ -180,12 +181,12 @@ class ShortlistApp:
         ttk.Label(
             info,
             text=(
+                "流れ（このタブだけ）: 候補付け →（任意）DxO記録\n"
+                "Lumina Review は隣のタブ（独立・必須ではありません）\n\n"
                 "オリジナルの月／イベントを選び、候補の Rating を付けます。\n"
-                "DxO で直したあとは「DxO修正後を記録」（必須ではありません）。\n\n"
-                "Lumina Review は別タブです。スクリーニング無しでも実行できます。\n\n"
+                "月の配下イベントは既定で対象外。必要なときだけ下のチェックをON。\n\n"
                 "Rating（DxO の「出来の星」とは別）:\n"
-                "  0=除外 / 1=M1 / 2=M2 / 3=余白 / 4=上位\n"
-                "月を選ぶとイベント配下は対象外（イベントは別に指定）。"
+                "  0=除外 / 1=M1 / 2=M2 / 3=余白 / 4=上位"
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
@@ -206,12 +207,21 @@ class ShortlistApp:
         self.var_m2 = tk.BooleanVar(value=True)
         self.var_m3 = tk.BooleanVar(value=True)
         self.var_dry = tk.BooleanVar(value=False)
+        self.var_include_events = tk.BooleanVar(value=False)
         ttk.Checkbutton(stage_row, text="M1 機械", variable=self.var_m1).pack(side=tk.LEFT, padx=(0, 12))
         ttk.Checkbutton(stage_row, text="M2 アンテナ", variable=self.var_m2).pack(side=tk.LEFT, padx=(0, 12))
         ttk.Checkbutton(stage_row, text="M3 多様性", variable=self.var_m3).pack(side=tk.LEFT, padx=(0, 12))
         ttk.Checkbutton(opts, text="ドライラン（JPEGへ書かない／監査は残す）", variable=self.var_dry).pack(
             anchor=tk.W, pady=(6, 0)
         )
+        self.chk_include_events = ttk.Checkbutton(
+            opts,
+            text="配下イベントも順に実行（月フォルダのとき）",
+            variable=self.var_include_events,
+        )
+        self.chk_include_events.pack(anchor=tk.W, pady=(4, 0))
+        self.event_option_label = ttk.Label(opts, text="")
+        self.event_option_label.pack(anchor=tk.W, pady=(2, 0))
 
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X, pady=(0, 10))
@@ -241,6 +251,16 @@ class ShortlistApp:
         self.btn_open_session.pack(side=tk.LEFT, padx=(8, 0))
         self.session_label = ttk.Label(h3, text="セッション: （まだありません）")
         self.session_label.pack(anchor=tk.W, pady=(6, 0))
+
+        # 起動時の対象フォルダがあればイベント選択肢を更新
+        try:
+            initial = Path(self.dir_var.get().strip())
+            if initial.is_dir():
+                self._refresh_event_option(unit_from_dir(initial))
+            else:
+                self._refresh_event_option(None)
+        except Exception:
+            self._refresh_event_option(None)
 
     def _build_review_tab(self, parent: ttk.Frame) -> None:
         info = ttk.LabelFrame(parent, text=" このタブでできること ", padding="8")
@@ -345,6 +365,26 @@ class ShortlistApp:
             return
         self.save_config(console_tab=tab_id)
 
+    def _refresh_event_option(self, unit) -> None:
+        """月＋イベントがあるときだけ「配下イベントも順に」を有効化（B2）。"""
+        if unit is not None and getattr(unit, "is_month", False):
+            try:
+                events = list_event_units(unit)
+            except Exception:
+                events = []
+            if events:
+                self.chk_include_events.state(["!disabled"])
+                self.event_option_label.config(
+                    text=f"配下イベント: {len(events)} 件（ON にすると月のあと順に実行）"
+                )
+                return
+        self.var_include_events.set(False)
+        self.chk_include_events.state(["disabled"])
+        if unit is not None and getattr(unit, "is_event", False):
+            self.event_option_label.config(text="イベント単位のため、このフォルダのみ実行します")
+        else:
+            self.event_option_label.config(text="")
+
     def browse_folder(self) -> None:
         current = self.dir_var.get()
         initial = current if Path(current).exists() else str(Path.home())
@@ -358,14 +398,16 @@ class ShortlistApp:
             self._refresh_session_label(Path(selected))
             try:
                 unit = unit_from_dir(Path(selected))
+                self._refresh_event_option(unit)
                 if unit is not None and unit.is_month:
                     events = list_event_units(unit)
-                    if events:
+                    if events and not self.var_include_events.get():
                         self.log(
-                            f"注意: 月フォルダ直下のみが対象。イベント配下 {len(events)} 件は含めません。"
+                            f"注意: 既定は月直下のみ。イベント配下 {len(events)} 件は"
+                            "「配下イベントも順に実行」で含められます。"
                         )
             except Exception:
-                pass
+                self._refresh_event_option(None)
 
     def browse_works_folder(self) -> None:
         current = self.works_dir_var.get()
@@ -514,22 +556,12 @@ class ShortlistApp:
         if needs_api and not self._ensure_openai_ready():
             return
 
-        jpegs = list_source_jpegs(unit)
-        if not jpegs:
-            messagebox.showwarning("警告", f"直下に JPEG がありません:\n{target}")
+        include_events = bool(self.var_include_events.get()) and unit.is_month
+        planned = plan_screening_units(unit, include_child_events=include_events)
+        jpeg_total = sum(len(list_source_jpegs(u)) for u in planned)
+        if jpeg_total <= 0:
+            messagebox.showwarning("警告", f"対象 JPEG がありません:\n{target}")
             return
-
-        event_note = ""
-        if unit.is_month:
-            try:
-                events = list_event_units(unit)
-            except Exception:
-                events = []
-            if events:
-                event_note = (
-                    f"\n注意: イベント配下 {len(events)} 件は今回の対象外です"
-                    "（イベントフォルダを別に選んでください）。"
-                )
 
         # M3: 開始時点の UI 値をスナップショット（ワーカーは Tk 変数を読まない）
         opts = {
@@ -537,6 +569,7 @@ class ShortlistApp:
             "run_m2": bool(self.var_m2.get()),
             "run_m3": bool(self.var_m3.get()),
             "dry": bool(self.var_dry.get()),
+            "include_events": include_events,
         }
         stages = []
         if opts["run_m1"]:
@@ -545,18 +578,40 @@ class ShortlistApp:
             stages.append("M2")
         if opts["run_m3"]:
             stages.append("M3")
+
+        if include_events:
+            event_count = max(0, len(planned) - 1)
+            scope_note = (
+                f"\n実行単位: 月 1 ＋ イベント {event_count} ＝ {len(planned)} 単位"
+                f"（月直下 → イベント順）"
+            )
+        elif unit.is_month:
+            try:
+                events = list_event_units(unit)
+            except Exception:
+                events = []
+            scope_note = (
+                f"\n注意: イベント配下 {len(events)} 件は今回の対象外"
+                "（必要なときは「配下イベントも順に実行」）"
+                if events
+                else ""
+            )
+        else:
+            scope_note = ""
+
         if not messagebox.askyesno(
             "実行確認",
             f"対象: {unit.kind} / {unit.unit_id}"
             + (f"（機種 {unit.camera_code}）" if unit.camera_code else "")
-            + f"\nJPEG（直下）: {len(jpegs)} 枚"
-            + event_note
+            + f"\nJPEG: {jpeg_total} 枚"
+            + scope_note
             + f"\n段: {', '.join(stages)}\n"
             f"書き込み: {'しない（ドライラン）' if opts['dry'] else 'する'}\n\n"
             "スクリーニングを開始しますか？",
         ):
             return
 
+        unit_paths = [u.path for u in planned]
         self.save_config(str(target))
         self.is_running = True
         _set_action_button_enabled(self.btn_start, False)
@@ -567,10 +622,12 @@ class ShortlistApp:
         self.btn_browse_works.config(state=tk.DISABLED)
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
+        self.chk_include_events.state(["disabled"])
         self.progress.start(12)
-        threading.Thread(target=self._run_batch, args=(target, opts), daemon=True).start()
+        threading.Thread(target=self._run_batch, args=(unit_paths, opts), daemon=True).start()
 
-    def _run_batch(self, target: Path, opts: dict) -> None:
+    def _run_batch(self, unit_paths: list[Path], opts: dict) -> None:
+        primary = unit_paths[0] if unit_paths else Path(".")
         try:
             def on_progress(p: PipelineProgress) -> None:
                 self.log(f"[{p.stage}] {p.message}")
@@ -587,29 +644,58 @@ class ShortlistApp:
                 on_progress=on_progress,
             )
             self.log("=" * 48)
-            self.log(f"スクリーニング開始: {target}")
-            result = self.pipeline.run_on_dir(target)
-            self.last_session_path = result.session_path
-            self.log(f"status: {result.status}")
-            self.log(f"counts_hint: {result.counts_by_rating_hint()}")
-            if result.session_path:
-                self.log(f"監査ログ（DxO修正前を含む）: {result.session_path}")
-                try:
-                    summary = summarize_session(load_session(result.session_path))
-                    self.log(
-                        f"pre_h3 counts: {summary.get('pre_h3_counts')} "
-                        f"(この時点が DxO 修正前の記録です)"
-                    )
-                except Exception as e:
-                    self.log(f"サマリ読取注意: {e}")
+            self.log(
+                f"スクリーニング開始: {len(unit_paths)} 単位"
+                + ("（イベント含む）" if opts.get("include_events") else "")
+            )
+
+            results = []
+            for idx, target in enumerate(unit_paths, 1):
+                if self.pipeline.is_cancel_requested():
+                    break
+                self.log(f"--- ({idx}/{len(unit_paths)}) {target.name} ---")
+                result = self.pipeline.run_on_dir(target)
+                results.append(result)
+                self.last_session_path = result.session_path
+                self.log(f"status: {result.status}")
+                self.log(f"counts_hint: {result.counts_by_rating_hint()}")
+                if result.session_path:
+                    self.log(f"監査ログ: {result.session_path}")
+                    try:
+                        summary = summarize_session(load_session(result.session_path))
+                        self.log(
+                            f"pre_h3 counts: {summary.get('pre_h3_counts')} "
+                            f"(この時点が DxO 修正前の記録です)"
+                        )
+                    except Exception as e:
+                        self.log(f"サマリ読取注意: {e}")
+                if result.status == "cancelled" or result.cancelled:
+                    break
+                if result.status == "failed":
+                    break
+
             self.log("=" * 48)
+            jpeg_sum = sum(r.jpeg_count for r in results)
+            statuses = {r.status for r in results}
+            if any(r.status == "cancelled" or r.cancelled for r in results):
+                overall = "cancelled"
+            elif any(r.status == "failed" for r in results):
+                overall = "failed"
+            elif statuses == {"completed"} or (results and all(r.status == "completed" for r in results)):
+                overall = "completed"
+            else:
+                overall = results[-1].status if results else "unknown"
+            last = results[-1] if results else None
+            fail_err = next((r.error for r in results if r.error), None)
 
             def _done() -> None:
-                self._refresh_session_label(target)
-                self.status_label.config(text=f"処理{result.status}")
-                status = result.status or "unknown"
-                session_name = result.session_path.name if result.session_path else "なし"
-                if status == "completed":
+                self._refresh_session_label(primary)
+                self.status_label.config(text=f"処理{overall}")
+                session_name = (
+                    last.session_path.name if last and last.session_path else "なし"
+                )
+                units_done = len(results)
+                if overall == "completed":
                     if opts["dry"]:
                         next_steps = (
                             "今回はドライランのため JPEG には書いていません。\n"
@@ -623,24 +709,25 @@ class ShortlistApp:
                     title = "完了"
                     msg = (
                         f"スクリーニングが完了しました。\n\n"
-                        f"JPEG: {result.jpeg_count} 枚\n"
-                        f"セッション: {session_name}\n\n"
+                        f"単位: {units_done} / JPEG: {jpeg_sum} 枚\n"
+                        f"最後のセッション: {session_name}\n\n"
                         f"{next_steps}"
                     )
-                elif status == "cancelled":
+                elif overall == "cancelled":
                     title = "中止"
                     msg = (
                         f"スクリーニングを中止しました。\n\n"
-                        f"JPEG: {result.jpeg_count} 枚\n"
-                        f"セッション: {session_name}"
+                        f"完了した単位: {units_done}\n"
+                        f"JPEG: {jpeg_sum} 枚\n"
+                        f"最後のセッション: {session_name}"
                     )
                 else:
                     title = "未完了"
                     msg = (
-                        f"スクリーニングは完了しませんでした（{status}）。\n\n"
-                        f"JPEG: {result.jpeg_count} 枚\n"
-                        f"セッション: {session_name}\n"
-                        f"エラー: {result.error or '（詳細はログを確認）'}"
+                        f"スクリーニングは完了しませんでした（{overall}）。\n\n"
+                        f"単位: {units_done} / JPEG: {jpeg_sum} 枚\n"
+                        f"最後のセッション: {session_name}\n"
+                        f"エラー: {fail_err or '（詳細はログを確認）'}"
                     )
                 messagebox.showinfo(title, msg)
 
@@ -665,6 +752,11 @@ class ShortlistApp:
         self.btn_browse_works.config(state=tk.NORMAL)
         self.dir_entry.config(state=tk.NORMAL)
         self.works_entry.config(state=tk.NORMAL)
+        try:
+            unit = unit_from_dir(Path(self.dir_var.get().strip()))
+        except Exception:
+            unit = None
+        self._refresh_event_option(unit)
 
     def start_trace_thread(self) -> None:
         if self.is_running:
@@ -767,29 +859,43 @@ class ShortlistApp:
             def _done() -> None:
                 self.status_label.config(text=f"Lumina Review {result.status}")
                 status = result.status or "unknown"
+                err_block = summarize_review_errors(result)
+                err_note = f"\n\nエラー詳細:\n{err_block}" if err_block else ""
                 if status == "completed":
                     msg = (
                         "対話痕跡ができました。\n\n"
                         f"対象: {result.targets_found} 枚\n"
                         f"新規: {result.processed}\n"
                         f"スキップ: {result.skipped}\n"
-                        f"エラー: {result.errors}\n\n"
-                        f"出力先:\n{works}"
+                        f"エラー: {result.errors}"
+                        f"{err_note}\n\n"
+                        f"出力先:\n{works}\n\n"
+                        "Works フォルダを開きますか？"
                     )
+                    if messagebox.askyesno("Lumina Review", msg):
+                        try:
+                            open_in_file_manager(works)
+                        except Exception as e:
+                            self.log(f"フォルダを開けませんでした: {e}")
+                            messagebox.showwarning("注意", f"フォルダを開けませんでした:\n{e}")
                 elif status == "cancelled":
                     msg = (
                         "Lumina Review を中止しました。\n\n"
                         f"新規: {result.processed} / スキップ: {result.skipped}\n"
+                        f"エラー: {result.errors}"
+                        f"{err_note}\n\n"
                         f"出力先:\n{works}"
                     )
+                    messagebox.showinfo("Lumina Review", msg)
                 else:
                     msg = (
                         f"Lumina Review は完了しませんでした（{status}）。\n\n"
                         f"新規: {result.processed}\n"
-                        f"エラー: {result.errors}\n"
+                        f"エラー: {result.errors}"
+                        f"{err_note}\n\n"
                         f"出力先:\n{works}"
                     )
-                messagebox.showinfo("Lumina Review", msg)
+                    messagebox.showinfo("Lumina Review", msg)
 
             self._ui(_done)
         except Exception as e:
@@ -910,12 +1016,9 @@ class ShortlistApp:
             )
             return
         try:
-            subprocess.run(["open", str(sess.resolve())], check=False)
-        except Exception:
-            try:
-                subprocess.run(["xdg-open", str(sess.resolve())], check=False)
-            except Exception as e:
-                messagebox.showerror("エラー", f"フォルダを開けませんでした:\n{e}")
+            open_in_file_manager(sess)
+        except Exception as e:
+            messagebox.showerror("エラー", f"フォルダを開けませんでした:\n{e}")
 
 
 def main() -> None:

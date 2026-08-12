@@ -424,3 +424,45 @@ W6:
 各行は `PASS` / `FAIL` / `SKIP` ＋短いメモで十分です。  
 **あなたの役割は「画面がイメージどおりか」の判定だけ**です。直しはこちらで行います。
 
+---
+
+## 12. Wave B（UX・2026-08-12 以降）
+
+ブランチ例: `cursor/lumina-ux-wave-b-c35c` / 計画: `docs/R1A_UX_IMPROVEMENT_PLAN.md`
+
+| # | 確認 | 結果 |
+|---|------|------|
+| B1 | スクリーニングタブに「流れ（このタブだけ）」がある（①〜⑤の強制ウィザードではない） | |
+| B2 | 月 `OM202608` で「配下イベントも順に実行」ON → ログに月のあとイベントが続く | |
+| B2b | 同チェック OFF → 月直下のみ（従来どおり） | |
+| B3 | Lumina Review 完了後「Works フォルダを開きますか？」→ はい で Finder | |
+| B4 | （任意）エラー時、完了文にファイル名が出る | |
+
+### 12.1 初心者向け：Wave B だけ確認
+
+```bash
+cd ~/photo-critique-bot
+git fetch origin
+git checkout cursor/lumina-ux-wave-b-c35c
+git pull origin cursor/lumina-ux-wave-b-c35c
+python3 console_gui.py
+```
+
+1. **スクリーニング**タブの説明に「流れ（このタブだけ）」がある → B1  
+2. 対象に `Desktop/LuminaManualCheck/OM202608` を選ぶ  
+3. 「配下イベントも順に実行」にチェック → **ドライラン ON・M1 のみ**で開始  
+4. ログに `OM202608` のあと `OM20260815_旅行` が出る → B2  
+5. チェックを外して再実行 → イベントがログに出ない → B2b  
+6. **Lumina Review**タブで Works `…/2026/202608` を実行（APIキー必要）。完了でフォルダを開く確認 → B3  
+
+```text
+Wave B Mac 確認
+ブランチ: cursor/lumina-ux-wave-b-c35c
+B1:
+B2:
+B2b:
+B3:
+B4:
+気づいたこと:
+```
+

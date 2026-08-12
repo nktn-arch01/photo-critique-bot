@@ -96,6 +96,25 @@ class ReviewBatchResult:
         }
 
 
+def summarize_review_errors(result: ReviewBatchResult, *, limit: int = 5) -> str:
+    """完了ダイアログ用のエラー要約（Wave B4）。空なら空文字。"""
+    lines: list[str] = []
+    if result.error:
+        lines.append(f"バッチ: {result.error}")
+    err_items = [i for i in result.items if i.status == "error"]
+    for item in err_items[:limit]:
+        reason = (item.reason or "不明").strip()
+        if len(reason) > 80:
+            reason = reason[:77] + "…"
+        lines.append(f"・{item.file_name}: {reason}")
+    extra = len(err_items) - limit
+    if extra > 0:
+        lines.append(f"・他 {extra} 件（ログを確認）")
+    if not lines:
+        return ""
+    return "\n".join(lines)
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 

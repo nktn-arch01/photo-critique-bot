@@ -31,3 +31,22 @@ def schedule_on_ui(root: Any, fn: Callable[[], None]) -> bool:
         return True
     except _TclError:
         return False
+
+
+def open_in_file_manager(path: Any) -> None:
+    """Finder / ファイルマネージャでフォルダ（または親）を開く。
+
+    macOS は ``open``、その他は ``xdg-open``。失敗時は例外を投げる。
+    """
+    import subprocess
+    from pathlib import Path
+
+    target = Path(path).expanduser().resolve()
+    if target.is_file():
+        target = target.parent
+    if not target.is_dir():
+        raise NotADirectoryError(f"フォルダがありません: {target}")
+    try:
+        subprocess.run(["open", str(target)], check=False)
+    except Exception:
+        subprocess.run(["xdg-open", str(target)], check=False)

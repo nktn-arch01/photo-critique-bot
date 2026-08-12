@@ -680,6 +680,54 @@ def test_resolve_session_for_unit_prefers_target_sessions():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_plan_screening_units_include_child_events():
+    """Wave B2: 月＋配下イベントの実行順。"""
+    import shutil
+
+    from library_unit import plan_screening_units, resolve_unit
+
+    root = Path(tempfile.mkdtemp(prefix="b2_plan_"))
+    try:
+        month = root / "OM202608"
+        event = month / "OM20260815_旅行"
+        event.mkdir(parents=True)
+        unit = resolve_unit(month)
+        alone = plan_screening_units(unit, include_child_events=False)
+        assert len(alone) == 1 and alone[0].is_month
+        with_events = plan_screening_units(unit, include_child_events=True)
+        assert len(with_events) == 2
+        assert with_events[0].is_month
+        assert with_events[1].is_event
+        assert with_events[1].path == event.resolve() or with_events[1].path == event
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_summarize_review_errors_limits_and_formats():
+    """Wave B4: エラー要約は件数制限付きでファイル名を含む。"""
+    from lumina_review import ReviewBatchResult, ReviewItemResult, summarize_review_errors
+
+    result = ReviewBatchResult(
+        works_dir="/tmp/w",
+        status="completed",
+        created_at="t",
+        errors=3,
+        items=[
+            ReviewItemResult("a.jpg", "/a", "error", reason="boom1"),
+            ReviewItemResult("b.jpg", "/b", "processed"),
+            ReviewItemResult("c.jpg", "/c", "error", reason="boom2"),
+            ReviewItemResult("d.jpg", "/d", "error", reason="boom3"),
+        ],
+    )
+    text = summarize_review_errors(result, limit=2)
+    assert "a.jpg" in text and "boom1" in text
+    assert "c.jpg" in text
+    assert "他 1 件" in text
+    assert summarize_review_errors(
+        ReviewBatchResult(works_dir="/tmp/w", status="completed", created_at="t")
+    ) == ""
+
+
 def test_library_unit_discover_and_list_jpegs():
     """T2: 発見・月直下バラ／イベント分離・規則外サブフォルダ除外。"""
     import shutil
@@ -2157,6 +2205,8 @@ def run_all():
     test_iptc_rating_description_roundtrip()
     test_library_unit_naming_rules()
     test_library_unit_prefixed_unit_from_dir()
+    test_plan_screening_units_include_child_events()
+    test_summarize_review_errors_limits_and_formats()
     test_resolve_session_for_unit_prefers_target_sessions()
     test_library_unit_discover_and_list_jpegs()
     test_mechanical_m1_blur_and_intent_protect()
