@@ -478,8 +478,10 @@ B4:
 | C0 | スクリーニングに「DxO修正後を記録」ボタンが**無い**。「カード生成」がある | |
 | C0b | 書き込みありでスクリーニング後、Console を閉じる → 再起動して監査セッションに H3（修正後）が残っている／ログに自動記録の痕跡 | |
 | C3 | 「カード生成」で Rating 3/4 に `{フォルダ名}Luminaカード/` ができ、DxO の説明に TITLE 等が見える（上書き OFF で再実行するとスキップ） | |
-| C3′ | Works Lumina Review（詳細）のノート／ログに ファイル名・TITLE〜CRITIQUE_SUMMARY・【1〜7】・メタデータがある（従来どおり） | |
+| C3′ | Works Lumina Review のノート／ログに ファイル名・TITLE〜CRITIQUE_SUMMARY・【1〜7】・メタデータがある（従来どおり）。説明に Phase1 があるコマはカード省略 | |
 | C2 | （任意・LINE）写真1枚でカードが先、続けて【1】【2】【3】。要約テキスト通が無い | |
+| C6 | Lumina Review に「深さ：詳細/簡易」が無い（常にカード＋詳細） | |
+| C7 | `LuminaNotesConsole.command` から起動→閉じると Terminal ウィンドウも閉じる | |
 
 ### 13.1 初心者向け：Wave C だけ確認
 
@@ -506,11 +508,14 @@ python3 console_gui.py
 ```text
 Wave C Mac 確認
 ブランチ: cursor/lumina-ux-wave-c-c35c
-C0:
-C0b:
-C3:
-C3′:
-C2: SKIP または PASS
-気づいたこと:
+C0: PASS（2026-08-12・オーナー）
+C0b: PASS（2026-08-12・オーナー）
+C3: PASS（2026-08-12・オーナー）
+C3′: PASS（2026-08-12・オーナー）
+C2: SKIP
+気づいたこと（反映済み）:
+・Review: Description に Phase1 があるコマはカード再生成しない
+・深さ 詳細/簡易 UI 削除（常に Full）
+・LuminaNotesConsole.command 終了時に Terminal ウィンドウを閉じる
 ```
 

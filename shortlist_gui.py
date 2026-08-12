@@ -283,6 +283,8 @@ class ShortlistApp:
             info,
             text=(
                 "Works 月フォルダの JPEG に対話ノート／カードを付けます。\n"
+                "常にカード＋詳細ノート（【1】〜【7】）。\n"
+                "説明に TITLE 等があるコマはカードを作り直しません（ノートは作成）。\n"
                 "スクリーニング無しでも、ここに画像があれば単独で実行できます。\n"
                 "ファイルのコピーはしません。\n\n"
                 "Works は YYYYMM のみ（例: ~/2026/202606）。\n"
@@ -303,16 +305,15 @@ class ShortlistApp:
 
         works_opts = ttk.Frame(works)
         works_opts.pack(fill=tk.X, pady=(8, 0))
-        ttk.Label(works_opts, text="深さ:").pack(side=tk.LEFT)
-        self.trace_mode_var = tk.StringVar(value="full")
-        ttk.Radiobutton(
-            works_opts, text="詳細（カード＋長文）", variable=self.trace_mode_var, value="full"
-        ).pack(side=tk.LEFT, padx=(4, 8))
-        ttk.Radiobutton(
-            works_opts, text="簡易（カードのみ）", variable=self.trace_mode_var, value="compact"
-        ).pack(side=tk.LEFT, padx=(0, 12))
         self.trace_force_var = tk.BooleanVar(value=bool(self.config.get("force_overwrite", False)))
-        ttk.Checkbutton(works_opts, text="処理済みも上書き", variable=self.trace_force_var).pack(side=tk.LEFT)
+        ttk.Checkbutton(works_opts, text="処理済みも上書き", variable=self.trace_force_var).pack(
+            side=tk.LEFT
+        )
+        ttk.Label(
+            works_opts,
+            text="（常にカード＋詳細ノート。説明に Phase1 があるコマはカード省略）",
+            wraplength=420,
+        ).pack(side=tk.LEFT, padx=(12, 0))
 
         theme_row = ttk.Frame(works)
         theme_row.pack(fill=tk.X, pady=(6, 0))
@@ -834,7 +835,7 @@ class ShortlistApp:
             return
 
         opts = {
-            "mode": self.trace_mode_var.get(),
+            "mode": "full",
             "theme": normalize_card_theme(self.trace_theme_var.get()),
             "force": bool(self.trace_force_var.get()),
         }
@@ -847,16 +848,16 @@ class ShortlistApp:
                 f"\n_dev 優先で撮って出し除外: {len(skipped)} 枚"
                 f"（{names}{more}）"
             )
-        depth_label = "詳細（カード＋長文）" if opts["mode"] == "full" else "簡易（カードのみ）"
         if not messagebox.askyesno(
             "Lumina Review の確認",
             f"Works: {works}\n"
             f"対象: {len(targets)} 枚"
             f"（_dev {selection['dev_count']}／撮って出し {selection['sooc_count']}）"
             f"{skip_note}\n"
-            f"深さ: {depth_label} / テーマ: {opts['theme']}\n"
-            f"上書き: {'する' if opts['force'] else 'しない'}\n\n"
-            "コピーはしません。対話ノート／カードを付けますか？",
+            f"出力: カード＋詳細ノート（【1】〜【7】）\n"
+            f"テーマ: {opts['theme']} / 上書き: {'する' if opts['force'] else 'しない'}\n\n"
+            "説明に TITLE 等があるコマはカードを作り直しません。\n"
+            "コピーはしません。対話ノートを付けますか？",
         ):
             return
 

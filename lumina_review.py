@@ -353,13 +353,20 @@ class LuminaReviewRunner:
                             phase1_override=embedded_phase1,
                         )
 
-                    card_path = log_mgr.get_card_output_path(file_name)
-                    create_critique_card(
-                        img_path, critique_text, card_path, theme=theme
-                    )
-                    log_mgr.save_analysis_result(file_name, metadata_block, critique_text)
-                    # Console 未処理 JPEG にも Phase1 を埋め込み（再 Review の正本）
-                    if not had_phase1 or self.config.force_overwrite:
+                    # Phase1 が JPEG にあればスクリーニング等でカード済み → 新規カードは作らない
+                    # （処理済み上書き ON のときだけ再生成）
+                    card_path: Path | None = None
+                    if had_phase1 and not self.config.force_overwrite:
+                        self._emit(
+                            "skip_card",
+                            f"カード省略（説明に Phase1 あり）: {file_name}",
+                            file_name=file_name,
+                        )
+                    else:
+                        card_path = log_mgr.get_card_output_path(file_name)
+                        create_critique_card(
+                            img_path, critique_text, card_path, theme=theme
+                        )
                         try:
                             write_phase1_from_critique(
                                 img_path, critique_text, lens=self.config.lens
@@ -370,6 +377,8 @@ class LuminaReviewRunner:
                                 f"Phase1 IPTC 書込注意 ({file_name}): {iptc_exc}",
                                 file_name=file_name,
                             )
+
+                    log_mgr.save_analysis_result(file_name, metadata_block, critique_text)
                     note_path = _note_path_for(log_mgr, file_name)
 
                     result.processed += 1
@@ -378,7 +387,7 @@ class LuminaReviewRunner:
                             file_name=file_name,
                             path=str(img_path),
                             status="processed",
-                            card_path=str(card_path),
+                            card_path=str(card_path) if card_path else None,
                             note_path=str(note_path),
                             used_dev=used_dev,
                         )

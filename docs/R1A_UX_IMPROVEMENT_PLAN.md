@@ -136,3 +136,4 @@
 | 2026-08-12 | 監査修正: 単位間中止の誤「完了」、イベント未記録 H3 の終了案内、ops 文書整合 |
 | 2026-08-12 | Mac 監査フォロー F1/F2 PASS。Wave B 完了（PR #11 マージ） |
 | 2026-08-12 | Wave C 方針確定・実装: H3 自動、スクリーニングカード＋IPTC Phase1、LINE 案2、Review Phase1 再利用 |
+| 2026-08-12 | Mac Wave C: C0/C0b/C3/C3′ PASS（C2 SKIP）。追記: Review カード省略・深さUI削除・.command で Terminal 終了 |
