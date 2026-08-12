@@ -318,7 +318,7 @@ def resolve_session_for_unit(
 
     target = Path(unit_dir)
     if preferred is not None and session_belongs_to_unit(preferred, target):
-        return Path(preferred)
+        return Path(preferred).resolve()
     latest = latest_session_path(target)
     if latest is not None:
         return latest

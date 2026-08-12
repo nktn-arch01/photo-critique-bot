@@ -662,13 +662,13 @@ def test_resolve_session_for_unit_prefers_target_sessions():
         assert session_belongs_to_unit(path_a, unit_a)
         assert not session_belongs_to_unit(path_b, unit_a)
 
-        # preferred が他 unit なら無視して A 側を返す
+        # preferred が他 unit なら無視して A 側を返す（resolve 済みパス）
         got = resolve_session_for_unit(unit_a, preferred=path_b)
-        assert got == path_a
+        assert got == path_a.resolve()
 
         # preferred が正しければそれを返す
         got2 = resolve_session_for_unit(unit_a, preferred=path_a)
-        assert got2 == path_a
+        assert got2 == path_a.resolve()
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
