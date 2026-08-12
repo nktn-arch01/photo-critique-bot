@@ -1260,6 +1260,35 @@ def test_delta_log_session_reload_and_summary():
     shutil.rmtree(root, ignore_errors=True)
 
 
+def test_list_session_paths_matches_resolved_pipeline_path():
+    """Mac /var→/private/var 等: unit.path は resolve 済み、列挙も同じ正規形に揃える。"""
+    import shutil
+
+    from delta_log import list_session_paths
+
+    root = Path(tempfile.mkdtemp(prefix="delta_path_"))
+    try:
+        real_month = root / "real202608"
+        real_month.mkdir()
+        sess_dir = real_month / "_lumina" / "sessions"
+        sess_dir.mkdir(parents=True)
+        session_file = sess_dir / "abc123.json"
+        session_file.write_text('{"id":"abc123"}\n', encoding="utf-8")
+
+        alias_month = root / "alias202608"
+        alias_month.symlink_to(real_month)
+
+        resolved_session = session_file.resolve()
+        listed_via_alias = list_session_paths(alias_month)
+        listed_via_real = list_session_paths(real_month.resolve())
+
+        assert resolved_session in listed_via_alias
+        assert resolved_session in listed_via_real
+        assert listed_via_alias == listed_via_real
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_h3_delta_builder_for_judgment_improvement():
     """DxO前後差分が遷移表になること（判定改善用）。"""
     from delta_log import build_h3_delta
@@ -2082,6 +2111,7 @@ def run_all():
     test_diversity_m3_margin_top_and_bias_control()
     test_shortlist_pipeline_m1_m2_m3_and_cancel()
     test_delta_log_session_reload_and_summary()
+    test_list_session_paths_matches_resolved_pipeline_path()
     test_h3_delta_builder_for_judgment_improvement()
     test_works_trace_dev_preference_and_no_copy()
     test_scanner_jpeg_primary_over_dop_for_intent_and_rating()

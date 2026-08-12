@@ -32,7 +32,7 @@ SESSIONS_DIRNAME = "sessions"
 
 
 def sessions_dir(unit_path: Path | str) -> Path:
-    return Path(unit_path) / LUMINA_DIRNAME / SESSIONS_DIRNAME
+    return Path(unit_path).resolve() / LUMINA_DIRNAME / SESSIONS_DIRNAME
 
 
 def session_path(unit_path: Path | str, session_id: str) -> Path:
@@ -371,7 +371,7 @@ def list_session_paths(unit_path: Path | str) -> list[Path]:
     root = sessions_dir(unit_path)
     if not root.is_dir():
         return []
-    return sorted(root.glob("*.json"), key=lambda p: p.name)
+    return sorted((p.resolve() for p in root.glob("*.json")), key=lambda p: p.name)
 
 
 def summarize_session(document: dict[str, Any]) -> dict[str, Any]:
