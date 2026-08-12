@@ -85,6 +85,7 @@
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
 - `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。UX Wave A 計画は `docs/R1A_UX_IMPROVEMENT_PLAN.md`。
 - `docs/R1A_UX_IMPROVEMENT_PLAN.md`: **【UX 改善計画】** 再レビュー後の Wave A/B/C（ストレス低減・Lumina Notes 語彙・AI 質）。
+- `docs/CURRENT_APP_MAP.md`: **【現状マップ】** 入口・Console タブ・公式名／旧 alias・共通コアの図解（オーナー向け）。
 - `docs/R1A_MAC_MANUAL_CHECKLIST.md`: **【Mac 手動確認】** オーナー向け GUI／実フォルダ手順（PASS/FAIL 記入）。
 - `docs/R1A_NAMING_CLEANUP.md`: **【命名整理】** 旧 shortlist／trace／評価カード等の棚卸しと段階改修案。
 - `docs/R1A_DESKTOP_OPS_POLICY.md`: **【運用方針・確定】** オリジナル `XX` 機種接頭辞、Works 月 `YYYYMM` のみ・手動、コピーなし、Lumina Review ログ配置、記録 UI。
