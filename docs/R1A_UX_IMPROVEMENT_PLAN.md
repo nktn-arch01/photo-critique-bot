@@ -92,12 +92,13 @@
 
 ## 3. Wave A 受け入れ条件
 
-- [x] M2/M3 ON でキー無し → 開始前にエラー（バッチ途中で落ちない）— 実装済み（Mac で W1 確認）
-- [x] Lumina Review でキー無し → 同上 — 実装済み（Mac で W2）
-- [x] `_dev` と撮って出しが両方あるフォルダで、確認文に「撮って出し除外 N」が出る — 実装＋オフラインテスト
-- [x] 書き込みスクリーニング後・未記録のまま閉じると確認が出る（キャンセルで残れる）— 実装済み（Mac で W4）
+- [x] M2/M3 ON でキー無し → 開始前にエラー（バッチ途中で落ちない）— **Mac W1 PASS**
+- [x] Lumina Review でキー無し → 同上 — **Mac W2 PASS**
+- [x] `_dev` と撮って出しが両方あるフォルダで、確認文に「撮って出し除外 N」が出る — **Mac W3 PASS**＋オフラインテスト
+- [x] 書き込みスクリーニング後・未記録のまま閉じると確認が出る（キャンセルで残れる）— **Mac W4 PASS**
 - [x] `python3 test_offline_suite.py` PASS（2026-08-12）
-- [ ] Mac: [`R1A_MAC_MANUAL_CHECKLIST.md`](R1A_MAC_MANUAL_CHECKLIST.md) の Wave A 追記行（W1–W5）
+- [x] Mac: Wave A W1–W6 PASS（2026-08-12・オーナー確認）。W5 文言の細かい見直しは後回し可
+- [x] A6 タブ分離（スクリーニング｜Lumina Review）— **Mac W6 PASS**
 
 ---
 
