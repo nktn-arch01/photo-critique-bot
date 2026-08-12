@@ -22,6 +22,7 @@ from critique_engine import generate_critique
 from critique_lens import DEFAULT_LENS
 from generate_critique_card import create_critique_card
 from log_manager import DesktopLogManager
+from phase1_jpeg import read_phase1_critique_text, write_phase1_from_critique
 from scanner import extract_file_metadata
 
 JPEG_SUFFIXES = frozenset({".jpg", ".jpeg"})
@@ -331,6 +332,9 @@ class LuminaReviewRunner:
                         else:
                             exif_meta["critique_image_kind"] = "sooc_export"
 
+                    embedded_phase1 = read_phase1_critique_text(img_path, lens=self.config.lens)
+                    had_phase1 = embedded_phase1 is not None
+
                     if self.config.critique_fn is not None:
                         critique_text = self.config.critique_fn(
                             img_path,
@@ -346,6 +350,7 @@ class LuminaReviewRunner:
                             dop_info=dop_info,
                             mode=self.config.mode,
                             lens=self.config.lens,
+                            phase1_override=embedded_phase1,
                         )
 
                     card_path = log_mgr.get_card_output_path(file_name)
@@ -353,6 +358,18 @@ class LuminaReviewRunner:
                         img_path, critique_text, card_path, theme=theme
                     )
                     log_mgr.save_analysis_result(file_name, metadata_block, critique_text)
+                    # Console 未処理 JPEG にも Phase1 を埋め込み（再 Review の正本）
+                    if not had_phase1 or self.config.force_overwrite:
+                        try:
+                            write_phase1_from_critique(
+                                img_path, critique_text, lens=self.config.lens
+                            )
+                        except Exception as iptc_exc:
+                            self._emit(
+                                "warn",
+                                f"Phase1 IPTC 書込注意 ({file_name}): {iptc_exc}",
+                                file_name=file_name,
+                            )
                     note_path = _note_path_for(log_mgr, file_name)
 
                     result.processed += 1

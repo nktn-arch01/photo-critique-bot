@@ -10,18 +10,52 @@ LINE_TEXT_MESSAGE_MAX = 5000
 LINE_SAFE_CHUNK_SIZE = 4800
 LINE_MAX_MESSAGES_PER_REQUEST = 5
 
-# 詳細版講評本文の見出し（表記揺れ: ## の後ろの空白、全角数字は非対応）
-_FULL_SECTION_HEADING = re.compile(r"##\s*【([146])\.")
+# Wave C: 対話は 【1】【2】【3】のみを3通（カードは別途 Image）
+_DIALOGUE_SECTION_HEADING = re.compile(r"##\s*【([123])\.")
 
 
-def split_full_critique_for_line(text: str) -> list[str]:
-    """
-    詳細版全文を読みやすい4通に分割する。
-    1通目: ## 【1. より前（Phase1 の TITLE/SUMMARY/SCORES 等）
-    2通目: ## 【1. 〜 ## 【4. より前
-    3通目: ## 【4. 〜 ## 【6. より前
-    4通目: ## 【6. 〜 末尾（【7】含む）
-    """
+def split_dialogue_sections_1_to_3(text: str) -> list[str]:
+    """Full 講評から 【1】【2】【3】をそれぞれ1通ずつ取り出す（カード・Phase1見出しは含めない）。"""
+    text = text.strip()
+    if not text:
+        return []
+
+    indices: dict[str, int] = {}
+    for m in _DIALOGUE_SECTION_HEADING.finditer(text):
+        num = m.group(1)
+        if num not in indices:
+            indices[num] = m.start()
+
+    i1 = indices.get("1")
+    if i1 is None:
+        # フォールバック: 旧4分割互換（Phase1+【1〜】がまとまっている場合）
+        return split_full_critique_for_line_legacy(text)
+
+    i2 = indices.get("2")
+    i3 = indices.get("3")
+    # 【4】以降は捨てる
+    end_of_3 = None
+    m4 = re.search(r"##\s*【4\.", text)
+    if m4:
+        end_of_3 = m4.start()
+
+    parts: list[str] = []
+    if i2 is not None:
+        parts.append(text[i1:i2].strip())
+        if i3 is not None:
+            parts.append(text[i2:i3].strip())
+            parts.append(text[i3:end_of_3].strip() if end_of_3 is not None else text[i3:].strip())
+        else:
+            parts.append(text[i2:end_of_3].strip() if end_of_3 is not None else text[i2:].strip())
+    else:
+        parts.append(text[i1:end_of_3].strip() if end_of_3 is not None else text[i1:].strip())
+
+    return [p for p in parts if p]
+
+
+def split_full_critique_for_line_legacy(text: str) -> list[str]:
+    """旧: 詳細版を4通分割（Phase1 + 【1】/【4】/【6】）。テスト・フォールバック用。"""
+    _FULL_SECTION_HEADING = re.compile(r"##\s*【([146])\.")
     text = text.strip()
     if not text:
         return []
@@ -53,6 +87,24 @@ def split_full_critique_for_line(text: str) -> list[str]:
         parts.append("")
 
     return [p for p in parts if p]
+
+
+def split_full_critique_for_line(text: str) -> list[str]:
+    """Wave C: LINE 対話返信は 【1】【2】【3】の3通（カードは別送）。
+
+    本文に 【2】【3】見出しが無い旧サンプルでは legacy 4分割にフォールバックする。
+    """
+    text = text.strip()
+    if not text:
+        return []
+    if _DIALOGUE_SECTION_HEADING.search(text) and re.search(r"##\s*【2\.", text):
+        return split_dialogue_sections_1_to_3(text)
+    # 【1】と【4】だけの旧テストデータ → 対話部分だけ返す意図で legacy の2通目以降
+    legacy = split_full_critique_for_line_legacy(text)
+    if len(legacy) >= 2 and "■TITLE" in legacy[0]:
+        # Phase1 通を除き、本文側を返す（最大3通）
+        return legacy[1:4]
+    return split_dialogue_sections_1_to_3(text)
 
 
 def split_text_for_line(text: str, max_len: int = LINE_SAFE_CHUNK_SIZE) -> list[str]:
