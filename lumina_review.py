@@ -22,6 +22,7 @@ from critique_engine import generate_critique
 from critique_lens import DEFAULT_LENS
 from generate_critique_card import create_critique_card
 from log_manager import DesktopLogManager
+from phase1_jpeg import read_phase1_critique_text, write_phase1_from_critique
 from scanner import extract_file_metadata
 
 JPEG_SUFFIXES = frozenset({".jpg", ".jpeg"})
@@ -331,6 +332,9 @@ class LuminaReviewRunner:
                         else:
                             exif_meta["critique_image_kind"] = "sooc_export"
 
+                    embedded_phase1 = read_phase1_critique_text(img_path, lens=self.config.lens)
+                    had_phase1 = embedded_phase1 is not None
+
                     if self.config.critique_fn is not None:
                         critique_text = self.config.critique_fn(
                             img_path,
@@ -346,12 +350,34 @@ class LuminaReviewRunner:
                             dop_info=dop_info,
                             mode=self.config.mode,
                             lens=self.config.lens,
+                            phase1_override=embedded_phase1,
                         )
 
-                    card_path = log_mgr.get_card_output_path(file_name)
-                    create_critique_card(
-                        img_path, critique_text, card_path, theme=theme
-                    )
+                    # Phase1 が JPEG にあればスクリーニング等でカード済み → 新規カードは作らない
+                    # （処理済み上書き ON のときだけ再生成）
+                    card_path: Path | None = None
+                    if had_phase1 and not self.config.force_overwrite:
+                        self._emit(
+                            "skip_card",
+                            f"カード省略（説明に Phase1 あり）: {file_name}",
+                            file_name=file_name,
+                        )
+                    else:
+                        card_path = log_mgr.get_card_output_path(file_name)
+                        create_critique_card(
+                            img_path, critique_text, card_path, theme=theme
+                        )
+                        try:
+                            write_phase1_from_critique(
+                                img_path, critique_text, lens=self.config.lens
+                            )
+                        except Exception as iptc_exc:
+                            self._emit(
+                                "warn",
+                                f"Phase1 IPTC 書込注意 ({file_name}): {iptc_exc}",
+                                file_name=file_name,
+                            )
+
                     log_mgr.save_analysis_result(file_name, metadata_block, critique_text)
                     note_path = _note_path_for(log_mgr, file_name)
 
@@ -361,7 +387,7 @@ class LuminaReviewRunner:
                             file_name=file_name,
                             path=str(img_path),
                             status="processed",
-                            card_path=str(card_path),
+                            card_path=str(card_path) if card_path else None,
                             note_path=str(note_path),
                             used_dev=used_dev,
                         )

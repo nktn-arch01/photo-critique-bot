@@ -1,7 +1,7 @@
 # IPTC 同期検証（A10 / R1′-A §0.1）
 
-更新日: 2026-08-11  
-関連: [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) §0
+更新日: 2026-08-12  
+関連: [`R1_DEEP_LOOP_SPEC.md`](R1_DEEP_LOOP_SPEC.md) §0 / §5.1
 
 ## 方針（**運用確定**・2026-08-11）
 
@@ -10,7 +10,7 @@ JPEG メタと DxO の同期は検証 PASS。**`.dop` / `.xmp` は使わない�
 | 用途 | 一次ソース |
 |------|------------|
 | スクリーニング | JPEG 内 Rating + Description（IPTC/XMP） |
-| 講評 | 画（JPEG 画素）＋撮影 EXIF |
+| 講評 | 画（JPEG 画素）＋撮影 EXIF。Phase1 が Description にあれば再利用 |
 
 ## 書き込みタグ契約（ファイル側・単一ソース候補）
 
@@ -19,7 +19,7 @@ JPEG メタと DxO の同期は検証 PASS。**`.dop` / `.xmp` は使わない�
 | Rating | `Rating`（XMP-xmp）, `XMP:Rating`, `RatingPercent`（目安: rating×20） |
 | 説明 | `ImageDescription`（IFD0）, `XMP-dc:Description`, `IPTC:Caption-Abstract` |
 
-説明文面は `[M2] …` / `[M3] …` の段ラベル付き（仕様 §5.1）。
+説明文面は `[M2] …` / `[M3] …` の段ラベルに加え、Wave C で Phase1 行（`TITLE:` / `SUMMARY:` / `SCORES:` / `CRITIQUE_SUMMARY:`）を共存可（仕様 §5.1）。新タグは増やさない（同じ Description 三系統）。
 
 ---
 
