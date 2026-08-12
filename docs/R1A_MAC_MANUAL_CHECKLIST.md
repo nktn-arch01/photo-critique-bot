@@ -16,13 +16,13 @@
 
 Mac のリポジトリで（パスは自分の clone 先に合わせる。よくある例: `~/photo-critique-bot`）:
 
-**いま確認したいもの = UX Wave A（PR #10）のとき:**
+**いま確認したいもの = UX Wave C（PR #13）のとき:**
 
 ```bash
 cd ~/photo-critique-bot
 git fetch origin
-git checkout cursor/lumina-ux-wave-a-c35c
-git pull origin cursor/lumina-ux-wave-a-c35c
+git checkout cursor/lumina-ux-wave-c-c35c
+git pull origin cursor/lumina-ux-wave-c-c35c
 ```
 
 **PR が `main` にマージ済みなら:**
@@ -33,7 +33,8 @@ git checkout main
 git pull origin main --ff-only
 ```
 
-初心者向けの **Wave A だけ**の手順は §11.1 を上から順に。
+初心者向けの **Wave C だけ**の手順は §13.1 を上から順に。  
+（過去の Wave A / B は §11 / §12。いまは不要なら飛ばしてよい）
 
 ### 0.2 依存を確認
 
