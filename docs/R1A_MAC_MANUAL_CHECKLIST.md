@@ -467,3 +467,50 @@ B4:
 気づいたこと:
 ```
 
+---
+
+## 13. Wave C（UX・2026-08-12 以降）
+
+ブランチ: `cursor/lumina-ux-wave-c-c35c` / PR #13 / 計画: `docs/R1A_UX_IMPROVEMENT_PLAN.md`（Wave C 節）
+
+| # | 確認 | 結果 |
+|---|------|------|
+| C0 | スクリーニングに「DxO修正後を記録」ボタンが**無い**。「カード生成」がある | |
+| C0b | 書き込みありでスクリーニング後、Console を閉じる → 再起動して監査セッションに H3（修正後）が残っている／ログに自動記録の痕跡 | |
+| C3 | 「カード生成」で Rating 3/4 に `{フォルダ名}Luminaカード/` ができ、DxO の説明に TITLE 等が見える（上書き OFF で再実行するとスキップ） | |
+| C3′ | Works Lumina Review（詳細）のノート／ログに ファイル名・TITLE〜CRITIQUE_SUMMARY・【1〜7】・メタデータがある（従来どおり） | |
+| C2 | （任意・LINE）写真1枚でカードが先、続けて【1】【2】【3】。要約テキスト通が無い | |
+
+### 13.1 初心者向け：Wave C だけ確認
+
+```bash
+cd ~/photo-critique-bot
+git fetch origin
+git checkout cursor/lumina-ux-wave-c-c35c
+git pull origin cursor/lumina-ux-wave-c-c35c
+python3 console_gui.py
+```
+
+1. **スクリーニング**タブを見る  
+   - 「DxO修正後を記録」が**無い** → C0  
+   - 「カード生成」と「処理済みも上書き」がある → C0  
+2. 対象フォルダで **ドライラン OFF**・M1（必要なら M2/M3）を一度実行し、DxO で Rating を少し変える（または変えなくても可）  
+3. Console を**閉じる**（自動記録が走る）  
+4. 同じフォルダで Console を開き直し、「監査フォルダを開く」→ 最新セッション JSON に `post_h3` / `h3_delta` がある → C0b  
+5. Rating が 3 または 4 の JPEG がある状態で「カード生成」（上書き OFF）  
+   - `{単位名}Luminaカード/` に PNG  
+   - DxO でその JPEG の説明に `TITLE:` など → C3  
+6. **Lumina Review**タブで Works を実行（詳細）。できたノートに【1】〜【7】がある → C3′  
+7. 問題なければ GitHub の PR #13 をマージ（または「マージして」と伝える）
+
+```text
+Wave C Mac 確認
+ブランチ: cursor/lumina-ux-wave-c-c35c
+C0:
+C0b:
+C3:
+C3′:
+C2: SKIP または PASS
+気づいたこと:
+```
+
