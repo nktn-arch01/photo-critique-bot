@@ -680,6 +680,81 @@ def test_resolve_session_for_unit_prefers_target_sessions():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_overall_multi_unit_status_cancel_between_units():
+    """監査: 単位間中止は completed に落とさない。"""
+    from screening_pipeline import overall_multi_unit_status
+
+    assert (
+        overall_multi_unit_status(
+            planned_count=3,
+            statuses=["completed"],
+            cancelled_flags=[False],
+            stopped_before_next_unit=True,
+        )
+        == "cancelled"
+    )
+    assert (
+        overall_multi_unit_status(
+            planned_count=2,
+            statuses=["completed", "completed"],
+            cancelled_flags=[False, False],
+            stopped_before_next_unit=False,
+        )
+        == "completed"
+    )
+    assert (
+        overall_multi_unit_status(
+            planned_count=2,
+            statuses=["completed", "cancelled"],
+            cancelled_flags=[False, True],
+            stopped_before_next_unit=False,
+        )
+        == "cancelled"
+    )
+    assert (
+        overall_multi_unit_status(
+            planned_count=2,
+            statuses=[],
+            stopped_before_next_unit=True,
+        )
+        == "cancelled"
+    )
+
+
+def test_list_pending_h3_includes_child_events():
+    """監査: 月を見ると配下イベントの未記録 H3 も列挙する。"""
+    import json
+    import shutil
+
+    from delta_log import list_pending_h3_sessions, sessions_dir
+
+    root = Path(tempfile.mkdtemp(prefix="h3_pending_"))
+    try:
+        month = root / "OM202608"
+        event = month / "OM20260815_旅行"
+        event.mkdir(parents=True)
+        for unit_path, sid in ((month, "monthsess"), (event, "eventsess")):
+            sess = sessions_dir(unit_path)
+            sess.mkdir(parents=True)
+            doc = {
+                "schema": "lumina.shortlist_session.v1",
+                "id": sid,
+                "write_meta": True,
+                "pre_h3": {"files": [{"name": "a.jpg", "rating": 1}]},
+                "post_h3": None,
+                "files": [{"name": "a.jpg", "rating": 1}],
+            }
+            (sess / f"{sid}.json").write_text(json.dumps(doc), encoding="utf-8")
+
+        pending = list_pending_h3_sessions(month)
+        labels = {label for label, _ in pending}
+        assert "OM202608" in labels
+        assert any("旅行" in label or "OM20260815" in label for label in labels)
+        assert len(pending) == 2
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_plan_screening_units_include_child_events():
     """Wave B2: 月＋配下イベントの実行順。"""
     import shutil
@@ -2205,6 +2280,8 @@ def run_all():
     test_iptc_rating_description_roundtrip()
     test_library_unit_naming_rules()
     test_library_unit_prefixed_unit_from_dir()
+    test_overall_multi_unit_status_cancel_between_units()
+    test_list_pending_h3_includes_child_events()
     test_plan_screening_units_include_child_events()
     test_summarize_review_errors_limits_and_formats()
     test_resolve_session_for_unit_prefers_target_sessions()

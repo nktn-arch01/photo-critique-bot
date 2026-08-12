@@ -16,6 +16,7 @@ from tkinter import filedialog, messagebox, ttk
 from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
 from delta_log import (
     DryRunSessionError,
+    list_pending_h3_sessions,
     load_session,
     record_post_h3,
     summarize_session,
@@ -32,7 +33,12 @@ from library_unit import (
     unit_from_dir,
 )
 from ai_vision import get_openai_client
-from screening_pipeline import PipelineConfig, PipelineProgress, ScreeningPipeline
+from screening_pipeline import (
+    PipelineConfig,
+    PipelineProgress,
+    ScreeningPipeline,
+    overall_multi_unit_status,
+)
 from lumina_review import (
     ReviewConfig,
     ReviewProgress,
@@ -491,25 +497,16 @@ class ShortlistApp:
             return False
 
     def _pending_h3_session(self) -> Path | None:
-        """対象フォルダに、書き込み済みで post_h3 未記録の最新セッションがあれば返す。"""
+        """互換: 対象フォルダ（＋月ならイベント）の未記録のうち先頭。"""
+        pending = self._pending_h3_list()
+        return pending[0][1] if pending else None
+
+    def _pending_h3_list(self) -> list[tuple[str, Path]]:
+        """いまの対象フォルダ基準の未記録 H3（月なら配下イベントも含む）。"""
         target = Path(self.dir_var.get().strip())
         if not target.is_dir():
-            return None
-        session = resolve_session_for_unit(target, self.last_session_path)
-        if session is None:
-            return None
-        try:
-            doc = load_session(session)
-        except Exception:
-            return None
-        if doc.get("write_meta") is False:
-            return None
-        summary = summarize_session(doc)
-        if summary.get("has_post_h3"):
-            return None
-        if not (doc.get("pre_h3") or doc.get("files")):
-            return None
-        return session
+            return []
+        return list_pending_h3_sessions(target)
 
     def on_closing(self) -> None:
         if self.is_running:
@@ -521,12 +518,16 @@ class ShortlistApp:
                 self.root.destroy()
             return
 
-        pending = self._pending_h3_session()
-        if pending is not None:
+        pending = self._pending_h3_list()
+        if pending:
+            lines = [f"・{label}: {path.name}" for label, path in pending[:5]]
+            extra = f"\n・他 {len(pending) - 5} 件" if len(pending) > 5 else ""
             if not messagebox.askyesno(
                 "記録の確認",
-                "「DxO修正後を記録」がまだです。\n"
-                f"セッション: {pending.name}\n\n"
+                "「DxO修正後を記録」がまだの単位があります。\n"
+                + "\n".join(lines)
+                + extra
+                + "\n\nイベントはフォルダを切り替えて記録してください。\n"
                 "後で記録しても大丈夫です。\nこのまま終了しますか？",
             ):
                 return
@@ -650,8 +651,10 @@ class ShortlistApp:
             )
 
             results = []
+            stopped_before_next_unit = False
             for idx, target in enumerate(unit_paths, 1):
                 if self.pipeline.is_cancel_requested():
+                    stopped_before_next_unit = True
                     break
                 self.log(f"--- ({idx}/{len(unit_paths)}) {target.name} ---")
                 result = self.pipeline.run_on_dir(target)
@@ -676,17 +679,20 @@ class ShortlistApp:
 
             self.log("=" * 48)
             jpeg_sum = sum(r.jpeg_count for r in results)
-            statuses = {r.status for r in results}
-            if any(r.status == "cancelled" or r.cancelled for r in results):
-                overall = "cancelled"
-            elif any(r.status == "failed" for r in results):
-                overall = "failed"
-            elif statuses == {"completed"} or (results and all(r.status == "completed" for r in results)):
-                overall = "completed"
-            else:
-                overall = results[-1].status if results else "unknown"
+            overall = overall_multi_unit_status(
+                planned_count=len(unit_paths),
+                statuses=[r.status for r in results],
+                cancelled_flags=[bool(r.cancelled) for r in results],
+                stopped_before_next_unit=stopped_before_next_unit,
+            )
             last = results[-1] if results else None
             fail_err = next((r.error for r in results if r.error), None)
+            event_h3_note = ""
+            if opts.get("include_events") and not opts.get("dry") and overall == "completed":
+                event_h3_note = (
+                    "\nイベント単位の「DxO修正後を記録」は、"
+                    "各イベントフォルダを選んで行ってください。"
+                )
 
             def _done() -> None:
                 self._refresh_session_label(primary)
@@ -695,6 +701,7 @@ class ShortlistApp:
                     last.session_path.name if last and last.session_path else "なし"
                 )
                 units_done = len(results)
+                planned = len(unit_paths)
                 if overall == "completed":
                     if opts["dry"]:
                         next_steps = (
@@ -703,30 +710,32 @@ class ShortlistApp:
                         )
                     else:
                         next_steps = (
-                            "任意: DxO で確認・直したら「DxO修正後を記録」。\n"
+                            "任意: いまの対象フォルダで「DxO修正後を記録」。"
+                            f"{event_h3_note}\n"
                             "Lumina Review は別タブです（Works に画像があれば単独で可）。"
                         )
                     title = "完了"
                     msg = (
                         f"スクリーニングが完了しました。\n\n"
-                        f"単位: {units_done} / JPEG: {jpeg_sum} 枚\n"
-                        f"最後のセッション: {session_name}\n\n"
+                        f"単位: {units_done}/{planned} / JPEG: {jpeg_sum} 枚\n"
+                        f"対象フォルダのセッション表示: 月側を優先\n"
+                        f"最後に処理したセッション: {session_name}\n\n"
                         f"{next_steps}"
                     )
                 elif overall == "cancelled":
                     title = "中止"
                     msg = (
                         f"スクリーニングを中止しました。\n\n"
-                        f"完了した単位: {units_done}\n"
+                        f"処理した単位: {units_done}/{planned}\n"
                         f"JPEG: {jpeg_sum} 枚\n"
-                        f"最後のセッション: {session_name}"
+                        f"最後に処理したセッション: {session_name}"
                     )
                 else:
                     title = "未完了"
                     msg = (
                         f"スクリーニングは完了しませんでした（{overall}）。\n\n"
-                        f"単位: {units_done} / JPEG: {jpeg_sum} 枚\n"
-                        f"最後のセッション: {session_name}\n"
+                        f"単位: {units_done}/{planned} / JPEG: {jpeg_sum} 枚\n"
+                        f"最後に処理したセッション: {session_name}\n"
                         f"エラー: {fail_err or '（詳細はログを確認）'}"
                     )
                 messagebox.showinfo(title, msg)
@@ -941,7 +950,9 @@ class ShortlistApp:
             f"セッション:\n{session.name}\n\n"
             "いまの JPEG（DxO で直した内容）を読み取り、\n"
             "修正前（バッチ直後）との差分を記録します。\n"
-            "（ファイルのコピーはしません）\n続行しますか？",
+            "（ファイルのコピーはしません）\n"
+            "※ 他のイベント単位は、フォルダを切り替えて別途記録してください。\n"
+            "続行しますか？",
         ):
             return
 
