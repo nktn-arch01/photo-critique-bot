@@ -113,16 +113,8 @@ def is_dev_export(path: Path) -> bool:
     return path.suffix.lower() in JPEG_SUFFIXES and path.stem.lower().endswith(DEV_STEM_SUFFIX)
 
 
-def list_works_review_targets(works_dir: Path) -> list[Path]:
-    """Works 直下の Lumina Review 対象 JPEG を列挙（コピーしない）.
-
-    優先順（stem 単位）:
-    1. ``{stem}_dev.jpg``
-    2. なければ撮って出し ``.jpg`` / ``.jpeg``
-    3. どちらも無ければその stem は対象外（保留相当＝リストに出さない）
-
-    運用契約どおり **直下のみ**（サブフォルダは再帰しない）。
-    """
+def _works_review_slots(works_dir: Path) -> dict[str, dict[str, Path | None]]:
+    """Works 直下 JPEG を base stem → {dev, sooc} に分類（直下のみ）。"""
     root = Path(works_dir)
     if not root.is_dir():
         raise NotADirectoryError(f"Works フォルダがありません: {root}")
@@ -146,15 +138,48 @@ def list_works_review_targets(works_dir: Path) -> list[Path]:
             slot["dev"] = path
         else:
             slot["sooc"] = path
+    return by_base
 
+
+def list_works_review_targets(works_dir: Path) -> list[Path]:
+    """Works 直下の Lumina Review 対象 JPEG を列挙（コピーしない）.
+
+    優先順（stem 単位）:
+    1. ``{stem}_dev.jpg``
+    2. なければ撮って出し ``.jpg`` / ``.jpeg``
+    3. どちらも無ければその stem は対象外（保留相当＝リストに出さない）
+
+    運用契約どおり **直下のみ**（サブフォルダは再帰しない）。
+    """
+    return list(summarize_works_review_selection(works_dir)["targets"])
+
+
+def summarize_works_review_selection(works_dir: Path | str) -> dict:
+    """Lumina Review 対象の内訳（§2.6: _dev 優先で外した撮って出しを見える化）.
+
+    戻り値キー:
+    - ``targets``: 実際にレビューする Path リスト
+    - ``dev_count`` / ``sooc_count``: 対象のうち _dev / 撮って出しの枚数
+    - ``sooc_skipped``: _dev があるため対象外になった撮って出し Path リスト
+    """
+    by_base = _works_review_slots(Path(works_dir))
     targets: list[Path] = []
+    sooc_skipped: list[Path] = []
     for base in sorted(by_base.keys()):
         slot = by_base[base]
         if slot["dev"] is not None:
             targets.append(slot["dev"])
+            if slot["sooc"] is not None:
+                sooc_skipped.append(slot["sooc"])
         elif slot["sooc"] is not None:
             targets.append(slot["sooc"])
-    return targets
+
+    return {
+        "targets": targets,
+        "dev_count": sum(1 for p in targets if is_dev_export(p)),
+        "sooc_count": sum(1 for p in targets if not is_dev_export(p)),
+        "sooc_skipped": sooc_skipped,
+    }
 
 
 def count_jpegs_in_immediate_subdirs(works_dir: Path | str) -> int:

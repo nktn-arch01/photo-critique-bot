@@ -148,6 +148,13 @@ def test_self_lens_prompts():
     assert "曖昧さの肯定" in p2
     assert "DateTimeOriginal" in p2
     assert "時計帯ヒント" in p2
+    # Wave A5: 審判語を避け、観察／対話の語彙へ
+    assert "基本評価" not in p2
+    assert "確定評価の維持" not in p2
+    assert "観察スナップショット" in p2 or "事前確定の観察結果" in p2
+    assert "確定観察との整合" in p2
+    assert "★評価" not in p1
+    assert "★スナップショット" in p1
 
 
 def test_time_zone_fact_labels_avoid_banned_stems():
@@ -1984,6 +1991,45 @@ def test_low_priority_rating_percent_fallback():
     assert _parse_rating({}) is None
 
 
+def test_works_review_selection_summarizes_sooc_skipped():
+    """Wave A2: _dev 優先で外した撮って出しを summarize で見える化。"""
+    import shutil
+
+    from PIL import Image
+
+    from lumina_review import list_works_review_targets, summarize_works_review_selection
+
+    root = Path(tempfile.mkdtemp(prefix="ux_a2_works_"))
+    try:
+        works = root / "202608"
+        works.mkdir()
+        Image.new("RGB", (16, 12), (10, 20, 30)).save(works / "A.jpg", quality=85)
+        Image.new("RGB", (16, 12), (40, 50, 60)).save(works / "A_dev.jpg", quality=85)
+        Image.new("RGB", (16, 12), (70, 80, 90)).save(works / "B.jpg", quality=85)
+
+        summary = summarize_works_review_selection(works)
+        names = [p.name for p in summary["targets"]]
+        assert names == ["A_dev.jpg", "B.jpg"]
+        assert summary["dev_count"] == 1
+        assert summary["sooc_count"] == 1
+        assert [p.name for p in summary["sooc_skipped"]] == ["A.jpg"]
+        assert list_works_review_targets(works) == summary["targets"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_antenna_prompt_avoids_judge_vocabulary():
+    """Wave A5: M2 プロンプトは採点語より熱量ラベル。"""
+    from screening_antenna import build_antenna_prompt, build_antenna_system_prompt
+
+    user = build_antenna_prompt()
+    system = build_antenna_system_prompt()
+    assert "熱量" in user
+    assert "短く採点" not in user
+    assert "採点ではなく" in user
+    assert "審判" in system or "相対熱量" in system
+
+
 def test_low_priority_works_subdir_hint():
     """L4: 直下0枚でもサブフォルダに JPEG があれば案内。再帰列挙はしない。"""
     import shutil
@@ -2129,6 +2175,8 @@ def run_all():
     test_low_priority_sessions_open_does_not_mkdir()
     test_low_priority_rating_percent_fallback()
     test_low_priority_works_subdir_hint()
+    test_works_review_selection_summarizes_sooc_skipped()
+    test_antenna_prompt_avoids_judge_vocabulary()
     test_low_priority_prompt_pick_skips_sentinel_nashi()
     test_dry_run_session_rejects_record_post_h3()
     print("test_offline_suite: OK")

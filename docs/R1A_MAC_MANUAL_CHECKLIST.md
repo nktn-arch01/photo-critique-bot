@@ -222,3 +222,17 @@ print(read_screening_meta(p).rating)  # 期待: 3
 - **任意:** A4, C3, G1、API が要る Lumina Review フル実行  
 
 すべて必須寄りが PASS なら、R1′-A デスクトップ運用の手動確認は完了扱いにできる。
+
+---
+
+## 11. Wave A（UX・2026-08-12 以降）
+
+ブランチ例: `cursor/lumina-ux-wave-a-*` / 計画: `docs/R1A_UX_IMPROVEMENT_PLAN.md`
+
+| # | 確認 | 結果 |
+|---|------|------|
+| W1 | APIキーを一時退避した状態で M2 ON → 開始前に「APIキーがありません」 | |
+| W2 | 同上で Lumina Review → 開始前にキーエラー（バッチ途中ではない） | |
+| W3 | Works に `A.jpg` + `A_dev.jpg` → 確認ダイアログに撮って出し除外の件数 | |
+| W4 | 書き込みスクリーニング後・未記録のままウィンドウを閉じる → 「記録の確認」 | |
+| W5 | ヘルプが ①②③、Lumina Review 完了が「対話痕跡ができました」系 | |

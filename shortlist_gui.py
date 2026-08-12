@@ -32,12 +32,13 @@ from library_unit import (
     resolve_unit,
     unit_from_dir,
 )
+from ai_vision import get_openai_client
 from screening_pipeline import PipelineConfig, PipelineProgress, ScreeningPipeline
 from lumina_review import (
     ReviewConfig,
     ReviewProgress,
     LuminaReviewRunner,
-    list_works_review_targets,
+    summarize_works_review_selection,
     works_empty_targets_hint,
 )
 
@@ -145,23 +146,22 @@ class ShortlistApp:
         main = ttk.Frame(self.root, padding="15")
         main.pack(fill=tk.BOTH, expand=True)
 
-        info = ttk.LabelFrame(main, text=" この画面でできること ", padding="8")
+        info = ttk.LabelFrame(main, text=" 使い方（深い輪） ", padding="8")
         info.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(
             info,
             text=(
-                "1. オリジナルの月（YYYYMM または OM202606 等）／イベント（…DD_名前）を選ぶ\n"
-                "2. スクリーニング（M1→M2→M3）を実行 → JPEG に Rating / 説明が付く\n"
-                "3. DxO で確認・修正したあと「修正後を記録」で前後比較を残す\n"
-                "4. Works の月フォルダ（YYYYMM のみ）を選び、Lumina Review（カード／ノート）を付ける\n\n"
-                "Rating の意味（DxO の「出来の星」とは別）:\n"
-                "  0=除外 / 1=M1合格 / 2=M2合格 / 3=余白 / 4=上位\n"
-                "月フォルダを選んだとき、イベント配下の JPEG は対象外です（別途イベントを指定）。"
+                "① オリジナル（月／イベント）を選ぶ → スクリーニング\n"
+                "② DxO で確認・直す → 「DxO修正後を記録」（何度でも可）\n"
+                "③ Works 月フォルダへ手動配置 → Lumina Review（対話ノート／カード）\n\n"
+                "Rating はパイプライン状態です（DxO の「出来の星」とは別）:\n"
+                "  0=除外 / 1=M1 / 2=M2 / 3=余白 / 4=上位\n"
+                "月を選ぶとイベント配下は対象外（イベントは別に指定）。"
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
 
-        folder = ttk.LabelFrame(main, text=" 対象フォルダ ", padding="10")
+        folder = ttk.LabelFrame(main, text=" ① スクリーニング — 対象フォルダ ", padding="10")
         folder.pack(fill=tk.X, pady=(0, 10))
         self.dir_var = tk.StringVar(value=self.config.get("shortlist_last_dir", ""))
         self.dir_entry = ttk.Entry(folder, textvariable=self.dir_var, font=("Helvetica", 11))
@@ -169,7 +169,7 @@ class ShortlistApp:
         self.btn_browse = ttk.Button(folder, text=" 参照... ", command=self.browse_folder)
         self.btn_browse.pack(side=tk.RIGHT)
 
-        opts = ttk.LabelFrame(main, text=" 実行オプション ", padding="8")
+        opts = ttk.LabelFrame(main, text=" ① 実行オプション ", padding="8")
         opts.pack(fill=tk.X, pady=(0, 10))
         stage_row = ttk.Frame(opts)
         stage_row.pack(fill=tk.X)
@@ -217,11 +217,14 @@ class ShortlistApp:
         self.btn_cancel.state(["disabled"])
         self.btn_cancel.pack(side=tk.RIGHT)
 
-        h3 = ttk.LabelFrame(main, text=" DxO 修正後の記録（判定改善用） ", padding="8")
+        h3 = ttk.LabelFrame(main, text=" ② DxO 修正後の記録 ", padding="8")
         h3.pack(fill=tk.X)
         ttk.Label(
             h3,
-            text="バッチ後に DxO で Rating／説明を直したら、ここを押して「修正前→修正後」を同じセッションに残します。",
+            text=(
+                "DxO で Rating／説明を直したら押します（必須ではありません。何度でも可）。"
+                "修正前→修正後の差分だけを同じセッションに残します。"
+            ),
             wraplength=640,
             justify=tk.LEFT,
         ).pack(anchor=tk.W, pady=(0, 6))
@@ -234,15 +237,14 @@ class ShortlistApp:
         self.session_label = ttk.Label(h3, text="セッション: （まだありません）")
         self.session_label.pack(anchor=tk.W, pady=(6, 0))
 
-        works = ttk.LabelFrame(main, text=" Works Lumina Review（コピーなし） ", padding="8")
+        works = ttk.LabelFrame(main, text=" ③ Lumina Review — Works（コピーなし） ", padding="8")
         works.pack(fill=tk.X, pady=(10, 0))
         ttk.Label(
             works,
             text=(
                 "Works は月フォルダ YYYYMM のみ（例: ~/2026/202606）。"
-                "イベント用サブフォルダは使いません。"
-                "同一コマは {stem}_dev.jpg を優先し、なければ撮って出し .jpg。"
-                "ファイルのコピーはしません。"
+                "同一コマは {stem}_dev.jpg を優先（撮って出しは確認時に枚数表示）。"
+                "コピーはしません。"
             ),
             wraplength=640,
             justify=tk.LEFT,
@@ -257,14 +259,14 @@ class ShortlistApp:
 
         works_opts = ttk.Frame(works)
         works_opts.pack(fill=tk.X, pady=(6, 0))
-        ttk.Label(works_opts, text="モード:").pack(side=tk.LEFT)
+        ttk.Label(works_opts, text="深さ:").pack(side=tk.LEFT)
         self.trace_mode_var = tk.StringVar(value="full")
-        ttk.Radiobutton(works_opts, text="詳細 (full)", variable=self.trace_mode_var, value="full").pack(
-            side=tk.LEFT, padx=(4, 8)
-        )
-        ttk.Radiobutton(works_opts, text="簡易 (compact)", variable=self.trace_mode_var, value="compact").pack(
-            side=tk.LEFT, padx=(0, 12)
-        )
+        ttk.Radiobutton(
+            works_opts, text="詳細（カード＋長文）", variable=self.trace_mode_var, value="full"
+        ).pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Radiobutton(
+            works_opts, text="簡易（カードのみ）", variable=self.trace_mode_var, value="compact"
+        ).pack(side=tk.LEFT, padx=(0, 12))
         self.trace_force_var = tk.BooleanVar(value=bool(self.config.get("force_overwrite", False)))
         ttk.Checkbutton(works_opts, text="処理済みも上書き", variable=self.trace_force_var).pack(side=tk.LEFT)
 
@@ -329,9 +331,16 @@ class ShortlistApp:
                 )
             try:
                 works_path = Path(selected)
-                n = len(list_works_review_targets(works_path))
+                summary = summarize_works_review_selection(works_path)
+                n = len(summary["targets"])
+                skipped = len(summary["sooc_skipped"])
                 hint = works_empty_targets_hint(works_path) if n == 0 else ""
-                self.log(f"Works フォルダ: {selected}（Lumina Review 対象 {n} 枚）{hint.strip()}")
+                skip_note = f"／_dev優先で撮って出し除外 {skipped}" if skipped else ""
+                self.log(
+                    f"Works フォルダ: {selected}"
+                    f"（対象 {n} 枚＝_dev {summary['dev_count']}＋撮って出し {summary['sooc_count']}"
+                    f"{skip_note}）{hint.strip()}"
+                )
             except Exception as e:
                 self.log(f"Works フォルダ: {selected}（列挙注意: {e}）")
 
@@ -372,6 +381,42 @@ class ShortlistApp:
             self.log("中止リクエストを受け付けました…")
             self.btn_cancel.state(["disabled"])
 
+    def _ensure_openai_ready(self) -> bool:
+        """M2/M3 または Lumina Review の開始前に API キーを確認（§2.5 / Wave A1）。"""
+        try:
+            get_openai_client()
+            return True
+        except Exception as e:
+            messagebox.showerror(
+                "APIキーがありません",
+                "OpenAI APIキーを用意してから実行してください。\n\n"
+                "置き場所: ~/.openai_api_key\n"
+                "または環境変数 OPENAI_API_KEY\n\n"
+                f"詳細: {e}",
+            )
+            return False
+
+    def _pending_h3_session(self) -> Path | None:
+        """対象フォルダに、書き込み済みで post_h3 未記録の最新セッションがあれば返す。"""
+        target = Path(self.dir_var.get().strip())
+        if not target.is_dir():
+            return None
+        session = resolve_session_for_unit(target, self.last_session_path)
+        if session is None:
+            return None
+        try:
+            doc = load_session(session)
+        except Exception:
+            return None
+        if doc.get("write_meta") is False:
+            return None
+        summary = summarize_session(doc)
+        if summary.get("has_post_h3"):
+            return None
+        if not (doc.get("pre_h3") or doc.get("files")):
+            return None
+        return session
+
     def on_closing(self) -> None:
         if self.is_running:
             if messagebox.askyesno("確認", "処理実行中です。終了しますか？"):
@@ -380,8 +425,18 @@ class ShortlistApp:
                 if self.trace_runner:
                     self.trace_runner.request_cancel()
                 self.root.destroy()
-        else:
-            self.root.destroy()
+            return
+
+        pending = self._pending_h3_session()
+        if pending is not None:
+            if not messagebox.askyesno(
+                "記録の確認",
+                "「DxO修正後を記録」がまだです。\n"
+                f"セッション: {pending.name}\n\n"
+                "後で記録しても大丈夫です。\nこのまま終了しますか？",
+            ):
+                return
+        self.root.destroy()
 
     def start_batch_thread(self) -> None:
         if self.is_running:
@@ -401,6 +456,10 @@ class ShortlistApp:
             return
         if not (self.var_m1.get() or self.var_m2.get() or self.var_m3.get()):
             messagebox.showwarning("警告", "M1 / M2 / M3 のいずれかを選んでください。")
+            return
+
+        needs_api = bool(self.var_m2.get() or self.var_m3.get())
+        if needs_api and not self._ensure_openai_ready():
             return
 
         jpegs = list_source_jpegs(unit)
@@ -506,8 +565,8 @@ class ShortlistApp:
                         )
                     else:
                         next_steps = (
-                            "次: DxO で Rating を確認・修正し、\n"
-                            "「DxO修正後を記録」を押してください。"
+                            "次: DxO で確認・直したら「DxO修正後を記録」。\n"
+                            "その後 Works 月フォルダへ置き、Lumina Review へ。"
                         )
                     title = "完了"
                     msg = (
@@ -570,7 +629,8 @@ class ShortlistApp:
             )
             return
         try:
-            targets = list_works_review_targets(works)
+            selection = summarize_works_review_selection(works)
+            targets = selection["targets"]
         except Exception as e:
             messagebox.showerror("エラー", str(e))
             return
@@ -583,18 +643,33 @@ class ShortlistApp:
             )
             return
 
+        if not self._ensure_openai_ready():
+            return
+
         opts = {
             "mode": self.trace_mode_var.get(),
             "theme": normalize_card_theme(self.trace_theme_var.get()),
             "force": bool(self.trace_force_var.get()),
         }
+        skipped = selection["sooc_skipped"]
+        skip_note = ""
+        if skipped:
+            names = ", ".join(p.name for p in skipped[:5])
+            more = f" 他{len(skipped) - 5}件" if len(skipped) > 5 else ""
+            skip_note = (
+                f"\n_dev 優先で撮って出し除外: {len(skipped)} 枚"
+                f"（{names}{more}）"
+            )
+        depth_label = "詳細（カード＋長文）" if opts["mode"] == "full" else "簡易（カードのみ）"
         if not messagebox.askyesno(
             "Lumina Review の確認",
             f"Works: {works}\n"
-            f"対象: {len(targets)} 枚（_dev 優先）\n"
-            f"モード: {opts['mode']} / テーマ: {opts['theme']}\n"
+            f"対象: {len(targets)} 枚"
+            f"（_dev {selection['dev_count']}／撮って出し {selection['sooc_count']}）"
+            f"{skip_note}\n"
+            f"深さ: {depth_label} / テーマ: {opts['theme']}\n"
             f"上書き: {'する' if opts['force'] else 'しない'}\n\n"
-            "ファイルのコピーは行いません。\nLumina Review を開始しますか？",
+            "コピーはしません。対話ノート／カードを付けますか？",
         ):
             return
 
@@ -639,15 +714,30 @@ class ShortlistApp:
 
             def _done() -> None:
                 self.status_label.config(text=f"Lumina Review {result.status}")
-                messagebox.showinfo(
-                    "Lumina Review 完了",
-                    f"Lumina Review が {result.status} しました。\n\n"
-                    f"対象: {result.targets_found} 枚\n"
-                    f"新規: {result.processed}\n"
-                    f"スキップ: {result.skipped}\n"
-                    f"エラー: {result.errors}\n\n"
-                    f"出力先:\n{works}",
-                )
+                status = result.status or "unknown"
+                if status == "completed":
+                    msg = (
+                        "対話痕跡ができました。\n\n"
+                        f"対象: {result.targets_found} 枚\n"
+                        f"新規: {result.processed}\n"
+                        f"スキップ: {result.skipped}\n"
+                        f"エラー: {result.errors}\n\n"
+                        f"出力先:\n{works}"
+                    )
+                elif status == "cancelled":
+                    msg = (
+                        "Lumina Review を中止しました。\n\n"
+                        f"新規: {result.processed} / スキップ: {result.skipped}\n"
+                        f"出力先:\n{works}"
+                    )
+                else:
+                    msg = (
+                        f"Lumina Review は完了しませんでした（{status}）。\n\n"
+                        f"新規: {result.processed}\n"
+                        f"エラー: {result.errors}\n"
+                        f"出力先:\n{works}"
+                    )
+                messagebox.showinfo("Lumina Review", msg)
 
             self._ui(_done)
         except Exception as e:
@@ -734,8 +824,8 @@ class ShortlistApp:
                     f"変化した枚数: {delta.get('changed_count', 0)}\n"
                     f"変化なし: {delta.get('unchanged_count', 0)}\n"
                     f"遷移: {delta.get('transitions')}\n\n"
-                    f"フォルダ:\n{target}\n"
-                    f"ファイル:\n{session}",
+                    "次: Works 月フォルダへ置いて Lumina Review へ。\n"
+                    f"セッション:\n{session.name}",
                 )
 
             self._ui(_done)
