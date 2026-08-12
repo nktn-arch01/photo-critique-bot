@@ -502,9 +502,9 @@ def test_iptc_rating_description_roundtrip():
     from iptc_rating_io import (
         ExifToolNotFoundError,
         rating_to_percent,
-        read_shortlist_meta,
+        read_screening_meta,
         require_exiftool,
-        write_shortlist_decision,
+        write_screening_decision,
         write_stage_reason,
     )
 
@@ -522,21 +522,21 @@ def test_iptc_rating_description_roundtrip():
     Image.new("RGB", (80, 60), (40, 80, 120)).save(jpeg, "JPEG", quality=90)
 
     desc = "[M2] Lumina sync test reason\n[M3] diversity placeholder"
-    meta = write_shortlist_decision(jpeg, rating=3, description=desc)
+    meta = write_screening_decision(jpeg, rating=3, description=desc)
     assert meta.rating == 3
     assert meta.description == desc
     assert meta.stage_reason("M2") == "Lumina sync test reason"
     assert meta.stage_reason("M3") == "diversity placeholder"
 
     # 段追記: 既存 M2 を残しつつ M3 を置換、Rating も更新
-    write_shortlist_decision(jpeg, rating=4, stage="M3", reason="top pick")
-    again = read_shortlist_meta(jpeg)
+    write_screening_decision(jpeg, rating=4, stage="M3", reason="top pick")
+    again = read_screening_meta(jpeg)
     assert again.rating == 4
     assert again.stage_reason("M2") == "Lumina sync test reason"
     assert again.stage_reason("M3") == "top pick"
 
     write_stage_reason(jpeg, "M2", "updated antenna")
-    final = read_shortlist_meta(jpeg)
+    final = read_screening_meta(jpeg)
     assert final.stage_reason("M2") == "updated antenna"
     assert final.rating == 4  # Description のみ更新でも Rating は維持
 
@@ -750,8 +750,8 @@ def test_mechanical_m1_blur_and_intent_protect():
     import shutil
     from PIL import ImageFilter
 
-    from iptc_rating_io import ExifToolNotFoundError, read_shortlist_meta, require_exiftool
-    from shortlist_mechanical import (
+    from iptc_rating_io import ExifToolNotFoundError, read_screening_meta, require_exiftool
+    from screening_mechanical import (
         CaptureSettings,
         MechanicalConfig,
         evaluate_mechanical,
@@ -814,8 +814,8 @@ def test_mechanical_m1_blur_and_intent_protect():
 
     written = run_mechanical_on_paths([sharp_p, blur_p], cfg, write=True)
     assert written.written == 2
-    assert read_shortlist_meta(sharp_p).rating == 1
-    assert read_shortlist_meta(blur_p).rating == 0
+    assert read_screening_meta(sharp_p).rating == 1
+    assert read_screening_meta(blur_p).rating == 0
     assert Image.open(sharp_p).size == before
     shutil.rmtree(td, ignore_errors=True)
 
@@ -826,11 +826,11 @@ def test_antenna_m2_relative_heat_no_star_gate():
 
     from iptc_rating_io import (
         ExifToolNotFoundError,
-        read_shortlist_meta,
+        read_screening_meta,
         require_exiftool,
         write_rating,
     )
-    from shortlist_antenna import (
+    from screening_antenna import (
         AntennaConfig,
         AntennaScore,
         compute_heat,
@@ -915,13 +915,13 @@ def test_antenna_m2_relative_heat_no_star_gate():
     assert batch.pass_count == 2
     assert batch.written == 2
 
-    meta4 = read_shortlist_meta(paths[4])
-    meta3 = read_shortlist_meta(paths[3])
-    meta0 = read_shortlist_meta(paths[0])
+    meta4 = read_screening_meta(paths[4])
+    meta3 = read_screening_meta(paths[3])
+    meta0 = read_screening_meta(paths[0])
     assert meta4.rating == 2 and meta4.stage_reason("M2")
     assert meta3.rating == 2
     assert meta0.rating == 1  # 非合格は1のまま
-    assert read_shortlist_meta(zero).rating == 0
+    assert read_screening_meta(zero).rating == 0
 
     # ★5なしのバッチでも相対上位が合格
     flat = {
@@ -944,8 +944,8 @@ def test_antenna_m2_relative_heat_no_star_gate():
         score_fn=lambda p: flat[p],
     )
     assert batch2.pass_count == 1
-    assert read_shortlist_meta(paths[2]).rating == 2
-    assert "flat-best" in (read_shortlist_meta(paths[2]).stage_reason("M2") or "")
+    assert read_screening_meta(paths[2]).rating == 2
+    assert "flat-best" in (read_screening_meta(paths[2]).stage_reason("M2") or "")
 
     shutil.rmtree(td, ignore_errors=True)
 
@@ -956,11 +956,11 @@ def test_diversity_m3_margin_top_and_bias_control():
 
     from iptc_rating_io import (
         ExifToolNotFoundError,
-        read_shortlist_meta,
+        read_screening_meta,
         require_exiftool,
         write_rating,
     )
-    from shortlist_diversity import (
+    from screening_diversity import (
         DiversityConfig,
         DiversityFeature,
         diversity_distance,
@@ -1052,11 +1052,11 @@ def test_diversity_m3_margin_top_and_bias_control():
     assert batch.margin_count == 1
     assert batch.written == 2
 
-    ratings = {p.name: read_shortlist_meta(p).rating for p in paths}
+    ratings = {p.name: read_screening_meta(p).rating for p in paths}
     assert 4 in ratings.values()
     assert 3 in ratings.values()
-    assert read_shortlist_meta(paths[0]).stage_reason("M3")
-    assert read_shortlist_meta(low).rating == 1
+    assert read_screening_meta(paths[0]).stage_reason("M3")
+    assert read_screening_meta(low).rating == 1
     # 非合格は2のままが残る
     assert sum(1 for r in ratings.values() if r == 2) == 3
 
@@ -1067,10 +1067,10 @@ def test_shortlist_pipeline_m1_m2_m3_and_cancel():
     """T6: パイプラインが M1→M2→M3 を繋ぐ。中断可能。app_gui 非依存。"""
     import shutil
 
-    from iptc_rating_io import ExifToolNotFoundError, read_shortlist_meta, require_exiftool, write_rating
-    from shortlist_antenna import AntennaConfig, AntennaScore
-    from shortlist_diversity import DiversityConfig, DiversityFeature
-    from shortlist_pipeline import PipelineConfig, ShortlistPipeline, parse_stages
+    from iptc_rating_io import ExifToolNotFoundError, read_screening_meta, require_exiftool, write_rating
+    from screening_antenna import AntennaConfig, AntennaScore
+    from screening_diversity import DiversityConfig, DiversityFeature
+    from screening_pipeline import PipelineConfig, ScreeningPipeline, parse_stages
 
     assert parse_stages("all") == (True, True, True)
     assert parse_stages("m1") == (True, False, False)
@@ -1125,7 +1125,7 @@ def test_shortlist_pipeline_m1_m2_m3_and_cancel():
             reason=f"m3-{n}",
         )
 
-    pipe = ShortlistPipeline(
+    pipe = ScreeningPipeline(
         PipelineConfig(
             write=True,
             m2_score_fn=m2_fn,
@@ -1146,11 +1146,11 @@ def test_shortlist_pipeline_m1_m2_m3_and_cancel():
     assert result.session_path.is_file()
     assert "_lumina/sessions" in str(result.session_path).replace("\\", "/")
     # 最終で 3 or 4 が付いている
-    finals = [read_shortlist_meta(p).rating for p in paths]
+    finals = [read_screening_meta(p).rating for p in paths]
     assert any(r in (3, 4) for r in finals)
 
     # 中断: M1 開始直後にキャンセル
-    pipe2 = ShortlistPipeline(
+    pipe2 = ScreeningPipeline(
         PipelineConfig(write=False, run_m2=False, run_m3=False),
     )
     original_emit = pipe2._emit
@@ -1166,7 +1166,7 @@ def test_shortlist_pipeline_m1_m2_m3_and_cancel():
     assert cancelled.cancelled
 
     # stages m1 only
-    pipe3 = ShortlistPipeline(
+    pipe3 = ScreeningPipeline(
         PipelineConfig(write=False, run_m1=True, run_m2=False, run_m3=False),
     )
     only_m1 = pipe3.run_on_dir(month)
@@ -1188,9 +1188,9 @@ def test_delta_log_session_reload_and_summary():
         summarize_session,
     )
     from iptc_rating_io import ExifToolNotFoundError, require_exiftool, write_rating
-    from shortlist_antenna import AntennaConfig, AntennaScore
-    from shortlist_diversity import DiversityConfig, DiversityFeature
-    from shortlist_pipeline import PipelineConfig, ShortlistPipeline
+    from screening_antenna import AntennaConfig, AntennaScore
+    from screening_diversity import DiversityConfig, DiversityFeature
+    from screening_pipeline import PipelineConfig, ScreeningPipeline
 
     try:
         require_exiftool()
@@ -1219,7 +1219,7 @@ def test_delta_log_session_reload_and_summary():
         n = int(path.stem.replace("s", ""))
         return DiversityFeature(n, 2, ("海",) if n % 2 == 0 else ("都市",), 3.5 + n * 0.2, 3.0, f"d{n}")
 
-    result = ShortlistPipeline(
+    result = ScreeningPipeline(
         PipelineConfig(
             write=True,
             m2_score_fn=m2_fn,
@@ -1291,11 +1291,11 @@ def test_works_trace_dev_preference_and_no_copy():
     from PIL import Image
 
     from critique_prompts import CritiquePromptContext, build_phase1_prompt, build_phase2_prompt
-    from trace_from_works import (
-        TraceConfig,
-        WorksTraceRunner,
+    from lumina_review import (
+        ReviewConfig,
+        LuminaReviewRunner,
         is_dev_export,
-        list_works_trace_targets,
+        list_works_review_targets,
         works_base_stem,
     )
 
@@ -1320,7 +1320,7 @@ def test_works_trace_dev_preference_and_no_copy():
         (works / "ignore.txt").write_text("x", encoding="utf-8")
         (works / "._A.jpg").write_bytes(b"")
 
-        targets = list_works_trace_targets(works)
+        targets = list_works_review_targets(works)
         names = [p.name for p in targets]
         assert names == ["A_dev.jpg", "B.jpg", "C_dev.jpg"]
         assert "A.jpg" not in names
@@ -1365,8 +1365,8 @@ def test_works_trace_dev_preference_and_no_copy():
             seen_meta.append(dict(metadata))
             return fake_critique
 
-        runner = WorksTraceRunner(
-            TraceConfig(
+        runner = LuminaReviewRunner(
+            ReviewConfig(
                 mode="full",
                 force_overwrite=False,
                 card_theme="dark",
@@ -1417,7 +1417,7 @@ def test_scanner_jpeg_primary_over_dop_for_intent_and_rating():
         format_rating_display,
         require_exiftool,
         strip_stage_reason_lines,
-        write_shortlist_decision,
+        write_screening_decision,
     )
     from scanner import extract_file_metadata
 
@@ -1437,7 +1437,7 @@ def test_scanner_jpeg_primary_over_dop_for_intent_and_rating():
         Image.new("RGB", (48, 32), color=(20, 40, 60)).save(jpeg, quality=90)
 
         desc = "夕景ではなく光の角度を見たい\n[M2] relative heat note\n[M3] diversity pick"
-        write_shortlist_decision(jpeg, rating=4, description=desc)
+        write_screening_decision(jpeg, rating=4, description=desc)
 
         # 衝突する .dop（古い／誤った値）を隣に置く
         dop = root / "T9_sample.jpg.dop"
@@ -1503,9 +1503,9 @@ def test_r1a_t10_shortlist_write_preserves_pixels():
 
     from iptc_rating_io import (
         ExifToolNotFoundError,
-        read_shortlist_meta,
+        read_screening_meta,
         require_exiftool,
-        write_shortlist_decision,
+        write_screening_decision,
     )
 
     try:
@@ -1521,14 +1521,14 @@ def test_r1a_t10_shortlist_write_preserves_pixels():
         before = _pixel_digest(jpeg)
         size_before = jpeg.stat().st_size
 
-        write_shortlist_decision(
+        write_screening_decision(
             jpeg,
             rating=3,
             description="ユーザー文\n[M2] antenna\n[M3] diversity",
         )
         after = _pixel_digest(jpeg)
         assert before == after, "画素ダイジェストが変わった（画素破壊の疑い）"
-        meta = read_shortlist_meta(jpeg)
+        meta = read_screening_meta(jpeg)
         assert meta.rating == 3
         assert "[M2]" in meta.description
         # メタ追記でファイルサイズは変わり得るが、極端な縮小（再エンコード破壊）はしない
@@ -1542,8 +1542,8 @@ def test_r1a_t10_pipeline_continues_on_item_failure():
     import shutil
 
     from iptc_rating_io import ExifToolNotFoundError, require_exiftool, write_rating
-    from shortlist_antenna import AntennaConfig, AntennaScore
-    from shortlist_pipeline import PipelineConfig, ShortlistPipeline
+    from screening_antenna import AntennaConfig, AntennaScore
+    from screening_pipeline import PipelineConfig, ScreeningPipeline
 
     try:
         require_exiftool()
@@ -1575,7 +1575,7 @@ def test_r1a_t10_pipeline_continues_on_item_failure():
                 f"ok-{n}",
             )
 
-        pipe = ShortlistPipeline(
+        pipe = ScreeningPipeline(
             PipelineConfig(
                 write=True,
                 run_m1=False,
@@ -1602,8 +1602,8 @@ def test_r1a_t10_dry_run_does_not_write_rating():
     """T10: dry-run（write=False）では Rating を書き換えない。"""
     import shutil
 
-    from iptc_rating_io import ExifToolNotFoundError, read_shortlist_meta, require_exiftool, write_rating
-    from shortlist_pipeline import PipelineConfig, ShortlistPipeline
+    from iptc_rating_io import ExifToolNotFoundError, read_screening_meta, require_exiftool, write_rating
+    from screening_pipeline import PipelineConfig, ScreeningPipeline
 
     try:
         require_exiftool()
@@ -1618,9 +1618,9 @@ def test_r1a_t10_dry_run_does_not_write_rating():
         p = month / "blur.jpg"
         Image.new("RGB", (80, 60), color=(128, 128, 128)).save(p, quality=50)
         write_rating(p, 2)
-        before = read_shortlist_meta(p).rating
+        before = read_screening_meta(p).rating
 
-        pipe = ShortlistPipeline(
+        pipe = ScreeningPipeline(
             PipelineConfig(
                 write=False,
                 run_m1=True,
@@ -1631,7 +1631,7 @@ def test_r1a_t10_dry_run_does_not_write_rating():
         )
         result = pipe.run_on_dir(month)
         assert result.status == "completed"
-        assert read_shortlist_meta(p).rating == before == 2
+        assert read_screening_meta(p).rating == before == 2
         assert result.session_path is not None
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -1642,7 +1642,7 @@ def test_r1a_t10_works_without_dop_no_error():
     import shutil
 
     from scanner import extract_file_metadata
-    from trace_from_works import list_works_trace_targets
+    from lumina_review import list_works_review_targets
 
     root = Path(tempfile.mkdtemp(prefix="lumina_t10_works_"))
     try:
@@ -1655,7 +1655,7 @@ def test_r1a_t10_works_without_dop_no_error():
         Image.new("RGB", (40, 30), color=(19, 19, 19)).save(dev, quality=90)
         Image.new("RGB", (40, 30), color=(29, 29, 29)).save(only, quality=90)
 
-        targets = list_works_trace_targets(works)
+        targets = list_works_review_targets(works)
         assert [p.name for p in targets] == ["W1_dev.jpg", "W2.jpg"]
         assert not any(works.glob("*.dop"))
 
@@ -1708,16 +1708,20 @@ def test_r1a_t10_no_works_copy_surface():
     """T10 / A6: Works コピー API を持たない（Lumina Review は読取のみ）。"""
     import inspect
 
-    import trace_from_works as tw
-    from trace_from_works import TraceBatchResult
+    import lumina_review as tw
+    from lumina_review import ReviewBatchResult
 
     src = inspect.getsource(tw)
     assert "shutil.copy" not in src
     assert "shutil.move" not in src
     assert "copy2" not in src
+    assert hasattr(tw, "list_works_review_targets")
+    assert hasattr(tw, "LuminaReviewRunner")
+    # Wave 3: 旧名 alias も残す
     assert hasattr(tw, "list_works_trace_targets")
     assert hasattr(tw, "WorksTraceRunner")
-    empty = TraceBatchResult(works_dir="/tmp", status="completed", created_at="x")
+    assert tw.WorksTraceRunner is tw.LuminaReviewRunner
+    empty = ReviewBatchResult(works_dir="/tmp", status="completed", created_at="x")
     assert empty.to_dict()["copy_performed"] is False
 
 
@@ -1726,20 +1730,20 @@ def test_r1a_t10_acceptance_offline_matrix():
     import delta_log
     import iptc_rating_io
     import library_unit
-    import shortlist_antenna
-    import shortlist_diversity
-    import shortlist_mechanical
-    import shortlist_pipeline
-    import trace_from_works
+    import screening_antenna
+    import screening_diversity
+    import screening_mechanical
+    import screening_pipeline
+    import lumina_review
 
     matrix = {
-        "A1": (library_unit, shortlist_pipeline),
-        "A2": (shortlist_mechanical,),
-        "A3": (shortlist_antenna,),
-        "A4": (shortlist_diversity,),
+        "A1": (library_unit, screening_pipeline),
+        "A2": (screening_mechanical,),
+        "A3": (screening_antenna,),
+        "A4": (screening_diversity,),
         "A5": (iptc_rating_io,),
-        "A6": (trace_from_works,),
-        "A7": (trace_from_works,),
+        "A6": (lumina_review,),
+        "A7": (lumina_review,),
         "A8": (delta_log,),
         "A9": ("app_gui.py", "analyze_folder.py"),
         "A10": ("docs/IPTC_SYNC_VERIFICATION.md", "scripts/iptc_sync_verify.py"),
@@ -1754,6 +1758,11 @@ def test_r1a_t10_acceptance_offline_matrix():
     assert library_unit.is_month_folder_name("202608")
     assert library_unit.is_event_folder_name("20260810_京都")
     assert not library_unit.is_month_folder_name("Works")
+    # Wave 3: 公式名と旧 alias が同一オブジェクト
+    assert iptc_rating_io.ShortlistMeta is iptc_rating_io.ScreeningMeta
+    assert iptc_rating_io.read_shortlist_meta is iptc_rating_io.read_screening_meta
+    assert screening_pipeline.ShortlistPipeline is screening_pipeline.ScreeningPipeline
+    assert library_unit.is_shortlist_jpeg is library_unit.is_screening_jpeg
 
 
 def test_hotfix_desktop_config_merge_preserves_shortlist_keys():
@@ -1801,8 +1810,8 @@ def test_hotfix_m2_m3_skip_none_rating():
     import shutil
 
     from iptc_rating_io import ExifToolNotFoundError, require_exiftool, write_rating
-    from shortlist_antenna import AntennaConfig, AntennaScore, run_antenna_on_paths
-    from shortlist_diversity import DiversityConfig, DiversityFeature, run_diversity_on_paths
+    from screening_antenna import AntennaConfig, AntennaScore, run_antenna_on_paths
+    from screening_diversity import DiversityConfig, DiversityFeature, run_diversity_on_paths
 
     try:
         require_exiftool()
@@ -1952,9 +1961,9 @@ def test_low_priority_works_subdir_hint():
 
     from PIL import Image
 
-    from trace_from_works import (
+    from lumina_review import (
         count_jpegs_in_immediate_subdirs,
-        list_works_trace_targets,
+        list_works_review_targets,
         works_empty_targets_hint,
     )
 
@@ -1965,14 +1974,14 @@ def test_low_priority_works_subdir_hint():
         nested.mkdir(parents=True)
         Image.new("RGB", (16, 12), (1, 2, 3)).save(nested / "hidden.jpg", quality=85)
 
-        assert list_works_trace_targets(works) == []
+        assert list_works_review_targets(works) == []
         assert count_jpegs_in_immediate_subdirs(works) == 1
         hint = works_empty_targets_hint(works)
         assert "サブフォルダ" in hint
         assert "1 枚" in hint
 
         Image.new("RGB", (16, 12), (4, 5, 6)).save(works / "P1_dev.jpg", quality=85)
-        assert [p.name for p in list_works_trace_targets(works)] == ["P1_dev.jpg"]
+        assert [p.name for p in list_works_review_targets(works)] == ["P1_dev.jpg"]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

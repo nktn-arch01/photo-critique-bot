@@ -32,12 +32,12 @@ from library_unit import (
     resolve_unit,
     unit_from_dir,
 )
-from shortlist_pipeline import PipelineConfig, PipelineProgress, ShortlistPipeline
-from trace_from_works import (
-    TraceConfig,
-    TraceProgress,
-    WorksTraceRunner,
-    list_works_trace_targets,
+from screening_pipeline import PipelineConfig, PipelineProgress, ScreeningPipeline
+from lumina_review import (
+    ReviewConfig,
+    ReviewProgress,
+    LuminaReviewRunner,
+    list_works_review_targets,
     works_empty_targets_hint,
 )
 
@@ -109,8 +109,8 @@ class ShortlistApp:
             pass
 
         self.is_running = False
-        self.pipeline: ShortlistPipeline | None = None
-        self.trace_runner: WorksTraceRunner | None = None
+        self.pipeline: ScreeningPipeline | None = None
+        self.trace_runner: LuminaReviewRunner | None = None
         self.last_session_path: Path | None = None
         self.config = self.load_config()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -329,7 +329,7 @@ class ShortlistApp:
                 )
             try:
                 works_path = Path(selected)
-                n = len(list_works_trace_targets(works_path))
+                n = len(list_works_review_targets(works_path))
                 hint = works_empty_targets_hint(works_path) if n == 0 else ""
                 self.log(f"Works フォルダ: {selected}（Lumina Review 対象 {n} 枚）{hint.strip()}")
             except Exception as e:
@@ -465,7 +465,7 @@ class ShortlistApp:
                 self.log(f"[{p.stage}] {p.message}")
                 self._set_status(p.message)
 
-            self.pipeline = ShortlistPipeline(
+            self.pipeline = ScreeningPipeline(
                 PipelineConfig(
                     write=not opts["dry"],
                     run_m1=opts["run_m1"],
@@ -570,7 +570,7 @@ class ShortlistApp:
             )
             return
         try:
-            targets = list_works_trace_targets(works)
+            targets = list_works_review_targets(works)
         except Exception as e:
             messagebox.showerror("エラー", str(e))
             return
@@ -615,12 +615,12 @@ class ShortlistApp:
 
     def _run_trace(self, works: Path, opts: dict) -> None:
         try:
-            def on_progress(p: TraceProgress) -> None:
+            def on_progress(p: ReviewProgress) -> None:
                 self.log(f"[review/{p.stage}] {p.message}")
                 self._set_status(p.message)
 
-            self.trace_runner = WorksTraceRunner(
-                TraceConfig(
+            self.trace_runner = LuminaReviewRunner(
+                ReviewConfig(
                     mode=opts["mode"],
                     force_overwrite=opts["force"],
                     card_theme=opts["theme"],

@@ -491,9 +491,9 @@ def _coalesce_text(*candidates: str | None, default: str = "なし") -> str:
 def _read_jpeg_rating_description(file_path: Path) -> tuple[int | None, str, str]:
     """JPEG 内 Rating / Description（§0 一次ソース）。失敗時は (None, '', reason)。"""
     try:
-        from iptc_rating_io import ExifToolError, ExifToolNotFoundError, IptcIoError, read_shortlist_meta
+        from iptc_rating_io import ExifToolError, ExifToolNotFoundError, IptcIoError, read_screening_meta
 
-        meta = read_shortlist_meta(file_path)
+        meta = read_screening_meta(file_path)
         return meta.rating, meta.description or "", "jpeg_iptc"
     except ExifToolNotFoundError:
         return None, "", "exiftool_missing"

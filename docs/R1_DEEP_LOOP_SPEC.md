@@ -369,14 +369,14 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 
 スクリーニングの実行口（T6）:
 
-- **必須・主経路:** GUI [`shortlist_gui.py`](../shortlist_gui.py) / ダブルクリック [`LuminaNotesConsole.command`](../LuminaNotesConsole.command)（旧 [`LuminaShortlist.command`](../LuminaShortlist.command) は互換スタブ）
-- 補助: CLI [`run_shortlist.py`](../run_shortlist.py)（`--dir` / `--stages` / `--dry-run`）
+- **必須・主経路:** GUI [`console_gui.py`](../console_gui.py)（実装本体 [`shortlist_gui.py`](../shortlist_gui.py)）/ ダブルクリック [`LuminaNotesConsole.command`](../LuminaNotesConsole.command)（旧 [`LuminaShortlist.command`](../LuminaShortlist.command) は互換スタブ）
+- 補助: CLI [`run_screening.py`](../run_screening.py)（旧 [`run_shortlist.py`](../run_shortlist.py) は互換ラッパ）（`--dir` / `--stages` / `--dry-run`）
 
 Lumina Review（T8）:
 
 - **主経路:** 同 GUI の「Works Lumina Review」セクション（フォルダ指定・モード・テーマ・中断）
-- 補助: CLI [`run_trace_works.py`](../run_trace_works.py)（`--dir` / `--mode` / `--force`）
-- コア: [`trace_from_works.py`](../trace_from_works.py)（`_dev` 優先・コピーなし・画優先プロンプト）
+- 補助: CLI [`run_lumina_review.py`](../run_lumina_review.py)（旧 [`run_trace_works.py`](../run_trace_works.py) は互換ラッパ）（`--dir` / `--mode` / `--force`）
+- コア: [`lumina_review.py`](../lumina_review.py)（旧 [`trace_from_works.py`](../trace_from_works.py) は再エクスポート。`_dev` 優先・コピーなし・画優先プロンプト）
 
 講評バッチ GUI（`app_gui.py` / `PhotoAICritique.command`）とは**別アプリ**。既存キーを壊さない。
 
@@ -449,13 +449,13 @@ Lumina Review（T8）:
 | 仮モジュール | 責任 |
 |--------------|------|
 | `library_unit.py` | 月／イベント列挙 |
-| `shortlist_pipeline.py` | M1→M2→M3 オーケストレーション |
-| `shortlist_mechanical.py` | M1 |
-| `shortlist_antenna.py` | M2 |
-| `shortlist_diversity.py` | M3 |
+| `screening_pipeline.py` / `shortlist_pipeline.py` | M1→M2→M3 オーケストレーション |
+| `screening_mechanical.py` / `shortlist_mechanical.py` | M1 |
+| `screening_antenna.py` / `shortlist_antenna.py` | M2 |
+| `screening_diversity.py` / `shortlist_diversity.py` | M3 |
 | `iptc_rating_io.py` | JPEG の Rating／説明 読み書き単一ソース（exiftool）。`[M2]`/`[M3]` ブロック置換 API |
 | `delta_log.py` | 監査 |
-| `trace_from_works.py` | Works 指定のLumina Review |
+| `lumina_review.py`（旧 `trace_from_works.py`） | Works 指定の Lumina Review |
 | 既存コア | scanner（撮影 EXIF＋**JPEG 正の Rating/Description**）/ critique_engine / card / DesktopLogManager。`.dop` は空欄時フォールバックのみ（T9） |
 
 ---

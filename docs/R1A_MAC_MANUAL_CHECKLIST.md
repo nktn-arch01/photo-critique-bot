@@ -188,11 +188,11 @@ API／GUI ではなくターミナルで十分:
 IMG=~/Desktop/LuminaManualCheck/OM202608/sample_a.jpg
 exiftool -overwrite_original -Rating= -XMP:Rating= -RatingPercent=60 "$IMG"
 python3 -c "
-from iptc_rating_io import read_shortlist_meta
+from iptc_rating_io import read_screening_meta
 from pathlib import Path
 import os
 p=Path(os.path.expanduser('$IMG'))
-print(read_shortlist_meta(p).rating)  # 期待: 3
+print(read_screening_meta(p).rating)  # 期待: 3
 "
 ```
 

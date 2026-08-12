@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from iptc_rating_io import read_shortlist_meta
+from iptc_rating_io import read_screening_meta
 from library_unit import LibraryUnit, list_source_jpegs
 
 if TYPE_CHECKING:
@@ -159,7 +159,7 @@ def rescan_counts_by_rating(unit: LibraryUnit) -> dict[str, int]:
     out = {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "none": 0, "other": 0}
     for path in list_source_jpegs(unit):
         try:
-            meta = read_shortlist_meta(path)
+            meta = read_screening_meta(path)
         except Exception:
             out["other"] += 1
             continue
@@ -192,7 +192,7 @@ def snapshot_unit_jpeg_state(unit: LibraryUnit) -> list[dict[str, Any]]:
     file_ratings: list[dict[str, Any]] = []
     for jpeg in list_source_jpegs(unit):
         try:
-            meta = read_shortlist_meta(jpeg)
+            meta = read_screening_meta(jpeg)
             file_ratings.append(
                 {
                     "file_name": jpeg.name,

@@ -6,4 +6,4 @@ cd "$CD_PATH" || exit 1
 # 起動時の Gatekeeper ブロック属性を自動削除
 xattr -d com.apple.quarantine LuminaNotesConsole.command 2>/dev/null
 
-python3 shortlist_gui.py
+python3 console_gui.py

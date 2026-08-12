@@ -94,7 +94,7 @@ T0 検証ゲート（IPTC）
 
 | 項目 | 内容 |
 |------|------|
-| モジュール | [`shortlist_pipeline.py`](../shortlist_pipeline.py) / **必須GUI** [`shortlist_gui.py`](../shortlist_gui.py) / CLI [`run_shortlist.py`](../run_shortlist.py) |
+| モジュール | [`screening_pipeline.py`](../screening_pipeline.py)（実装 [`shortlist_pipeline.py`](../shortlist_pipeline.py)）/ **必須GUI** [`console_gui.py`](../console_gui.py) / CLI [`run_screening.py`](../run_screening.py) |
 | 内容 | M1→M2→M3 オーケストレーション、進捗、中断、1枚失敗で全体停止しない |
 | 状態 | **完了（GUI必須化 2026-08-11）** |
 | 完了条件 | 既存 `app_gui` 講評バッチを壊さない（別導線）。**スクリーニングの主実行口は GUI** |
@@ -114,11 +114,11 @@ T0 検証ゲート（IPTC）
 
 | 項目 | 内容 |
 |------|------|
-| 仮モジュール | `trace_from_works.py` |
+| 仮モジュール | `lumina_review.py`（旧 `trace_from_works.py` は互換再エクスポート） |
 | 内容 | ユーザー指定フォルダ上の `{stem}_dev.jpg` 優先（なければ撮って出し）に既存講評カード／ノート／ログ |
 | 完了条件 | コピー機能なし。既存コア再利用。画優先の注記をプロンプトへ（必要なら T9 と同時） |
+| 実装 | **完了** — `LuminaReviewRunner` / `list_works_review_targets`（旧名 alias あり）。GUI: Console の「Works Lumina Review」。補助 CLI: `run_lumina_review.py`。プロンプトに画優先注記（`pixel_priority`） |
 | 依存 | T1（読取）, 既存 critique コア |
-| 実装 | **完了** — `WorksTraceRunner` / `list_works_trace_targets`。GUI: `shortlist_gui` の「Works Lumina Review」。補助 CLI: `run_trace_works.py`。プロンプトに画優先注記（`pixel_priority`） |
 
 ### T9 — scanner / 講評の JPEG 正への移行
 

@@ -59,7 +59,7 @@ class IptcIoError(ValueError):
 
 
 @dataclass(frozen=True)
-class ShortlistMeta:
+class ScreeningMeta:
     """JPEG から読んだスクリーニング用メタ（一次ソース）。"""
 
     path: Path
@@ -69,6 +69,10 @@ class ShortlistMeta:
 
     def stage_reason(self, stage: StageLabel) -> str | None:
         return parse_stage_blocks(self.description).get(stage)
+
+
+# Wave 3 互換 alias（1リリース据え置き）
+ShortlistMeta = ScreeningMeta
 
 
 def require_exiftool() -> str:
@@ -165,15 +169,19 @@ def _pick_description(raw: dict[str, str]) -> str:
     return ""
 
 
-def read_shortlist_meta(path: Path | str) -> ShortlistMeta:
+def read_screening_meta(path: Path | str) -> ScreeningMeta:
     jpeg = _ensure_jpeg_path(path)
     raw = read_raw_tags(jpeg)
-    return ShortlistMeta(
+    return ScreeningMeta(
         path=jpeg,
         rating=_parse_rating(raw),
         description=_pick_description(raw),
         raw_tags=raw,
     )
+
+
+# Wave 3 互換 alias
+read_shortlist_meta = read_screening_meta
 
 
 def write_rating(path: Path | str, rating: int) -> None:
@@ -290,20 +298,20 @@ def upsert_stage_reason(description: str, stage: StageLabel, reason: str) -> str
 
 def write_stage_reason(path: Path | str, stage: StageLabel, reason: str) -> str:
     """既存説明を読み、段理由を upsert して書き戻す。新しい説明全文を返す。"""
-    meta = read_shortlist_meta(path)
+    meta = read_screening_meta(path)
     updated = upsert_stage_reason(meta.description, stage, reason)
     write_description(path, updated)
     return updated
 
 
-def write_shortlist_decision(
+def write_screening_decision(
     path: Path | str,
     *,
     rating: int,
     stage: StageLabel | None = None,
     reason: str | None = None,
     description: str | None = None,
-) -> ShortlistMeta:
+) -> ScreeningMeta:
     """スクリーニング1コマ分の書き込みヘルパ。
 
     - ``description`` を渡すとその全文を書く
@@ -314,11 +322,15 @@ def write_shortlist_decision(
     if description is not None:
         final_desc = description
     elif stage is not None and reason is not None:
-        current = read_shortlist_meta(jpeg).description
+        current = read_screening_meta(jpeg).description
         final_desc = upsert_stage_reason(current, stage, reason)
     else:
         write_rating(jpeg, rating)
-        return read_shortlist_meta(jpeg)
+        return read_screening_meta(jpeg)
 
     write_rating_and_description(jpeg, rating, final_desc)
-    return read_shortlist_meta(jpeg)
+    return read_screening_meta(jpeg)
+
+
+# Wave 3 互換 alias
+write_shortlist_decision = write_screening_decision

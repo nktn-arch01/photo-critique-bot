@@ -35,14 +35,14 @@
 
 | 現状 | 問題 | 改修案 | リスク |
 |------|------|--------|--------|
-| `shortlist_*.py` 一式 | 製品語はスクリーニング | **パッケージ化** `screening/` に移すか、ファイルを `screening_*.py` にリネーム | 大。テスト・docs 全更新 |
-| `run_shortlist.py` | CLI 名が旧 | `run_screening.py`（旧は薄いラッパ） | 低〜中 |
-| `trace_from_works.py` / `run_trace_works.py` | 「trace」＝旧痕跡 | `lumina_review.py` / `run_lumina_review.py` | 中 |
-| `WorksTraceRunner` / `list_works_trace_targets` | クラス・関数が trace | `LuminaReviewRunner` / `list_works_review_targets`（エイリアス残す） | 中 |
-| `iptc_rating_io.ShortlistMeta` / `write_shortlist_decision` / `read_shortlist_meta` | shortlist 語 | `ScreeningMeta` / `write_screening_decision` 等＋旧名 alias | 中（多用） |
-| `is_shortlist_jpeg` | 同上 | `is_screening_jpeg` | 低 |
+| `shortlist_*.py` 一式 | 製品語はスクリーニング | **`screening_*.py` 再エクスポート追加**（実装は当面 shortlist_*。パッケージ化は任意） | 中 |
+| `run_shortlist.py` | CLI 名が旧 | ✅ `run_screening.py`（旧は薄いラッパ） | 低〜中 |
+| `trace_from_works.py` / `run_trace_works.py` | 「trace」＝旧痕跡 | ✅ `lumina_review.py` / `run_lumina_review.py` | 中 |
+| `WorksTraceRunner` / `list_works_trace_targets` | クラス・関数が trace | ✅ `LuminaReviewRunner` / `list_works_review_targets`（エイリアス残す） | 中 |
+| `iptc_rating_io.ShortlistMeta` / `write_shortlist_decision` / `read_shortlist_meta` | shortlist 語 | ✅ `ScreeningMeta` / `write_screening_decision` 等＋旧名 alias | 中（多用） |
+| `is_shortlist_jpeg` | 同上 | ✅ `is_screening_jpeg` | 低 |
 | schema `lumina.shortlist_session.v1` | JSON 永続 | **v1 は維持**（互換）。v2 で `lumina.screening_session.v2` | 高（既存セッション） |
-| ログ prefix `[trace/…]` | GUI ログが旧語 | `[review/…]` に変更 | 低 |
+| ログ prefix `[trace/…]` | GUI ログが旧語 | ✅ `[review/…]` に変更（Wave 1） | 低 |
 
 ### C. 設定キー（`~/.photo_ai_config.json`）
 
@@ -97,14 +97,20 @@
 2. ✅ 処理済み判定・ノート／カードパス解決は **旧名も探索**（`resolve_note_path` / `resolve_card_path`）  
 3. ✅ 移行メモを OPS_POLICY §6 に追記  
 
-### Wave 3 — コード識別子（大きな diff）
+### Wave 3 — コード識別子（大きな diff）（**完了 2026-08-12**）
 
-1. 公開関数に新名＋旧名 alias（1リリース据え置き）  
-2. テスト・docs を新名に切替  
-3. alias 削除  
-4. （任意）`screening/` パッケージ化  
+1. ✅ 公開関数に新名＋旧名 alias（1リリース据え置き）  
+   - `ScreeningMeta` / `read_screening_meta` / `write_screening_decision`  
+   - `is_screening_jpeg`  
+   - `LuminaReviewRunner` / `list_works_review_targets` / `ReviewConfig` 等  
+   - `ScreeningPipeline`  
+2. ✅ テスト・docs を新名に切替（旧 CLI／モジュールは薄いラッパ／再エクスポート）  
+   - `run_screening.py` / `run_lumina_review.py` / `lumina_review.py`  
+   - `screening_*.py` / `console_gui.py`  
+3. ⏳ alias 削除（次リリース以降）  
+4. ✅ （任意）`screening_*` / `console_gui` を公式入口として追加（実装本体は当面 `shortlist_*`）  
 
-**schema `lumina.shortlist_session.v1` は Wave 3 でも無理に変えない。** 変えるなら専用マイグレーション。
+**schema `lumina.shortlist_session.v1` は Wave 3 でも変更しない。** 変えるなら専用マイグレーション。
 
 ### やらない／後回し
 
@@ -142,3 +148,4 @@
 | 2026-08-11 | 初版。ウォークスルー再確認後の棚卸し |
 | 2026-08-11 | Wave 1 完了（ランチャー・ログ prefix・SPEC/ARCHITECTURE・app_gui 文言） |
 | 2026-08-11 | Wave 2 完了（Lumina* 出力名・旧名フォールバック・OPS_POLICY 移行メモ） |
+| 2026-08-12 | Wave 3 完了（公開識別子の新名＋旧 alias、CLI/モジュール入口、schema v1 維持） |
