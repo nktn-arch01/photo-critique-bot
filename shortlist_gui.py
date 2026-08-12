@@ -1,10 +1,9 @@
 """Lumina Notes Console（スクリーニング + Lumina Review の統合 GUI）.
 
 講評バッチ ``app_gui.py`` とは別ウィンドウ・別導線。
-- 月／イベントフォルダを選んで M1→M2→M3 を実行
-- 進捗・中断・監査ログ自動保存
-- DxO（H3）修正後の記録ボタン（pre_h3 / post_h3 / h3_delta）
-- Works（確定フォルダ）を指定して Lumina Review（カード／ノート／ログ）（T8・コピーなし）
+- タブ「スクリーニング」: 月／イベントで M1→M2→M3、DxO 修正後の記録
+- タブ「Lumina Review」: Works 月フォルダへカード／ノート／ログ（コピーなし・単独実行可）
+- 進捗・中断・監査ログ。両タブは必須の前後関係ではない
 """
 
 from __future__ import annotations
@@ -102,8 +101,8 @@ class ShortlistApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Lumina Notes Console")
-        self.root.geometry("720x860")
-        self.root.minsize(640, 720)
+        self.root.geometry("720x820")
+        self.root.minsize(640, 700)
         try:
             self.root.tk.call("tk", "scaling", 2.0)
         except Exception:
@@ -123,19 +122,32 @@ class ShortlistApp:
             defaults={
                 "force_overwrite": False,
                 "card_theme": DEFAULT_CARD_THEME,
+                "console_last_tab": "screening",
             }
         )
         cfg["force_overwrite"] = bool(cfg.get("force_overwrite", False))
         cfg["card_theme"] = normalize_card_theme(cfg.get("card_theme", DEFAULT_CARD_THEME))
+        tab = str(cfg.get("console_last_tab") or "screening").strip().lower()
+        cfg["console_last_tab"] = "review" if tab == "review" else "screening"
         return cfg
 
-    def save_config(self, target_dir: str | None = None, *, works_dir: str | None = None) -> None:
+    def save_config(
+        self,
+        target_dir: str | None = None,
+        *,
+        works_dir: str | None = None,
+        console_tab: str | None = None,
+    ) -> None:
         try:
             updates: dict = {}
             if target_dir:
                 updates["shortlist_last_dir"] = target_dir
             if works_dir:
                 updates["works_last_dir"] = works_dir
+            if console_tab:
+                updates["console_last_tab"] = (
+                    "review" if console_tab == "review" else "screening"
+                )
             if not updates:
                 return
             self.config = save_config_merge(updates, current=self.config)
@@ -146,22 +158,39 @@ class ShortlistApp:
         main = ttk.Frame(self.root, padding="15")
         main.pack(fill=tk.BOTH, expand=True)
 
-        info = ttk.LabelFrame(main, text=" 使い方（深い輪） ", padding="8")
+        self.notebook = ttk.Notebook(main)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.tab_screening = ttk.Frame(self.notebook, padding="8")
+        self.tab_review = ttk.Frame(self.notebook, padding="8")
+        self.notebook.add(self.tab_screening, text=" スクリーニング ")
+        self.notebook.add(self.tab_review, text=" Lumina Review ")
+
+        self._build_screening_tab(self.tab_screening)
+        self._build_review_tab(self.tab_review)
+        self._build_shared_status(main)
+
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        if self.config.get("console_last_tab") == "review":
+            self.notebook.select(self.tab_review)
+
+    def _build_screening_tab(self, parent: ttk.Frame) -> None:
+        info = ttk.LabelFrame(parent, text=" このタブでできること ", padding="8")
         info.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(
             info,
             text=(
-                "① オリジナル（月／イベント）を選ぶ → スクリーニング\n"
-                "② DxO で確認・直す → 「DxO修正後を記録」（何度でも可）\n"
-                "③ Works 月フォルダへ手動配置 → Lumina Review（対話ノート／カード）\n\n"
-                "Rating はパイプライン状態です（DxO の「出来の星」とは別）:\n"
+                "オリジナルの月／イベントを選び、候補の Rating を付けます。\n"
+                "DxO で直したあとは「DxO修正後を記録」（必須ではありません）。\n\n"
+                "Lumina Review は別タブです。スクリーニング無しでも実行できます。\n\n"
+                "Rating（DxO の「出来の星」とは別）:\n"
                 "  0=除外 / 1=M1 / 2=M2 / 3=余白 / 4=上位\n"
                 "月を選ぶとイベント配下は対象外（イベントは別に指定）。"
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
 
-        folder = ttk.LabelFrame(main, text=" ① スクリーニング — 対象フォルダ ", padding="10")
+        folder = ttk.LabelFrame(parent, text=" 対象フォルダ ", padding="10")
         folder.pack(fill=tk.X, pady=(0, 10))
         self.dir_var = tk.StringVar(value=self.config.get("shortlist_last_dir", ""))
         self.dir_entry = ttk.Entry(folder, textvariable=self.dir_var, font=("Helvetica", 11))
@@ -169,7 +198,7 @@ class ShortlistApp:
         self.btn_browse = ttk.Button(folder, text=" 参照... ", command=self.browse_folder)
         self.btn_browse.pack(side=tk.RIGHT)
 
-        opts = ttk.LabelFrame(main, text=" ① 実行オプション ", padding="8")
+        opts = ttk.LabelFrame(parent, text=" 実行オプション ", padding="8")
         opts.pack(fill=tk.X, pady=(0, 10))
         stage_row = ttk.Frame(opts)
         stage_row.pack(fill=tk.X)
@@ -184,40 +213,16 @@ class ShortlistApp:
             anchor=tk.W, pady=(6, 0)
         )
 
-        prog = ttk.Frame(main)
-        prog.pack(fill=tk.X, pady=(0, 8))
-        self.status_label = ttk.Label(prog, text="準備完了", font=("Helvetica", 10))
-        self.status_label.pack(anchor=tk.W, pady=(0, 5))
-        self.progress = ttk.Progressbar(prog, mode="indeterminate")
-        self.progress.pack(fill=tk.X)
-
-        log_frame = ttk.LabelFrame(main, text=" 実行ログ ", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        self.log_text = tk.Text(
-            log_frame, wrap=tk.WORD, font=("Menlo", 10), state=tk.DISABLED, bg="#1e1e1e", fg="#d4d4d4"
-        )
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.log_text.config(yscrollcommand=scroll.set)
-
-        actions = ttk.Frame(main)
-        actions.pack(fill=tk.X, pady=(0, 8))
+        actions = ttk.Frame(parent)
+        actions.pack(fill=tk.X, pady=(0, 10))
         self.btn_start = _action_button(
             actions,
             text="スクリーニングを開始",
             command=self.start_batch_thread,
         )
-        self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        self.btn_cancel = _action_button(
-            actions,
-            text="中止",
-            command=self.request_cancel,
-        )
-        self.btn_cancel.state(["disabled"])
-        self.btn_cancel.pack(side=tk.RIGHT)
+        self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        h3 = ttk.LabelFrame(main, text=" ② DxO 修正後の記録 ", padding="8")
+        h3 = ttk.LabelFrame(parent, text=" DxO 修正後の記録 ", padding="8")
         h3.pack(fill=tk.X)
         ttk.Label(
             h3,
@@ -237,18 +242,23 @@ class ShortlistApp:
         self.session_label = ttk.Label(h3, text="セッション: （まだありません）")
         self.session_label.pack(anchor=tk.W, pady=(6, 0))
 
-        works = ttk.LabelFrame(main, text=" ③ Lumina Review — Works（コピーなし） ", padding="8")
-        works.pack(fill=tk.X, pady=(10, 0))
+    def _build_review_tab(self, parent: ttk.Frame) -> None:
+        info = ttk.LabelFrame(parent, text=" このタブでできること ", padding="8")
+        info.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(
-            works,
+            info,
             text=(
-                "Works は月フォルダ YYYYMM のみ（例: ~/2026/202606）。"
-                "同一コマは {stem}_dev.jpg を優先（撮って出しは確認時に枚数表示）。"
-                "コピーはしません。"
+                "Works 月フォルダの JPEG に対話ノート／カードを付けます。\n"
+                "スクリーニング無しでも、ここに画像があれば単独で実行できます。\n"
+                "ファイルのコピーはしません。\n\n"
+                "Works は YYYYMM のみ（例: ~/2026/202606）。\n"
+                "同一コマは {stem}_dev.jpg を優先（撮って出し除外は確認時に表示）。"
             ),
-            wraplength=640,
             justify=tk.LEFT,
-        ).pack(anchor=tk.W, pady=(0, 6))
+        ).pack(anchor=tk.W)
+
+        works = ttk.LabelFrame(parent, text=" Works 月フォルダ ", padding="8")
+        works.pack(fill=tk.X, pady=(0, 10))
         works_row = ttk.Frame(works)
         works_row.pack(fill=tk.X)
         self.works_dir_var = tk.StringVar(value=self.config.get("works_last_dir", ""))
@@ -258,7 +268,7 @@ class ShortlistApp:
         self.btn_browse_works.pack(side=tk.RIGHT)
 
         works_opts = ttk.Frame(works)
-        works_opts.pack(fill=tk.X, pady=(6, 0))
+        works_opts.pack(fill=tk.X, pady=(8, 0))
         ttk.Label(works_opts, text="深さ:").pack(side=tk.LEFT)
         self.trace_mode_var = tk.StringVar(value="full")
         ttk.Radiobutton(
@@ -271,7 +281,7 @@ class ShortlistApp:
         ttk.Checkbutton(works_opts, text="処理済みも上書き", variable=self.trace_force_var).pack(side=tk.LEFT)
 
         theme_row = ttk.Frame(works)
-        theme_row.pack(fill=tk.X, pady=(4, 0))
+        theme_row.pack(fill=tk.X, pady=(6, 0))
         ttk.Label(theme_row, text="カード背景:").pack(side=tk.LEFT)
         self.trace_theme_var = tk.StringVar(
             value=normalize_card_theme(self.config.get("card_theme", DEFAULT_CARD_THEME))
@@ -283,15 +293,57 @@ class ShortlistApp:
             side=tk.LEFT
         )
 
-        works_btns = ttk.Frame(works)
-        works_btns.pack(fill=tk.X, pady=(8, 0))
+        works_btns = ttk.Frame(parent)
+        works_btns.pack(fill=tk.X, pady=(0, 4))
         self.btn_trace = _action_button(
             works_btns,
             text="Lumina Review を開始",
-            small=True,
             command=self.start_trace_thread,
         )
         self.btn_trace.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    def _build_shared_status(self, parent: ttk.Frame) -> None:
+        prog = ttk.Frame(parent)
+        prog.pack(fill=tk.X, pady=(10, 8))
+        top = ttk.Frame(prog)
+        top.pack(fill=tk.X)
+        self.status_label = ttk.Label(top, text="準備完了", font=("Helvetica", 10))
+        self.status_label.pack(side=tk.LEFT, anchor=tk.W)
+        self.btn_cancel = _action_button(
+            top,
+            text="中止",
+            small=True,
+            command=self.request_cancel,
+        )
+        self.btn_cancel.state(["disabled"])
+        self.btn_cancel.pack(side=tk.RIGHT)
+        self.progress = ttk.Progressbar(prog, mode="indeterminate")
+        self.progress.pack(fill=tk.X, pady=(5, 0))
+
+        log_frame = ttk.LabelFrame(parent, text=" 実行ログ（両タブ共通） ", padding="10")
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        self.log_text = tk.Text(
+            log_frame, wrap=tk.WORD, font=("Menlo", 10), state=tk.DISABLED, bg="#1e1e1e", fg="#d4d4d4"
+        )
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.config(yscrollcommand=scroll.set)
+
+    def _current_tab_id(self) -> str:
+        try:
+            current = self.notebook.select()
+            if current == str(self.tab_review):
+                return "review"
+        except Exception:
+            pass
+        return "screening"
+
+    def _on_tab_changed(self, _event=None) -> None:
+        tab_id = self._current_tab_id()
+        if self.config.get("console_last_tab") == tab_id:
+            return
+        self.save_config(console_tab=tab_id)
 
     def browse_folder(self) -> None:
         current = self.dir_var.get()
@@ -565,8 +617,8 @@ class ShortlistApp:
                         )
                     else:
                         next_steps = (
-                            "次: DxO で確認・直したら「DxO修正後を記録」。\n"
-                            "その後 Works 月フォルダへ置き、Lumina Review へ。"
+                            "任意: DxO で確認・直したら「DxO修正後を記録」。\n"
+                            "Lumina Review は別タブです（Works に画像があれば単独で可）。"
                         )
                     title = "完了"
                     msg = (
@@ -824,7 +876,7 @@ class ShortlistApp:
                     f"変化した枚数: {delta.get('changed_count', 0)}\n"
                     f"変化なし: {delta.get('unchanged_count', 0)}\n"
                     f"遷移: {delta.get('transitions')}\n\n"
-                    "次: Works 月フォルダへ置いて Lumina Review へ。\n"
+                    "Lumina Review は別タブです（Works に画像があれば単独で可）。\n"
                     f"セッション:\n{session.name}",
                 )
 

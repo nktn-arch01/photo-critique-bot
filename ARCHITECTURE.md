@@ -98,7 +98,7 @@
 - `desktop_config.py`: **【共有設定】** `~/.photo_ai_config.json` の merge 読書き。`card_theme` / `force_overwrite` は講評／Lumina Reviewで共有。
 - `desktop_ui.py`: **【UI安全予約】** ウィンドウ破棄後の `after` を握りつぶす（スクリーニング／講評 GUI 共通）。
 - `prepare_mac_manual_fixtures.py`: Mac 手動確認用の最小フォルダ／JPEG を Desktop に生成。
-- `shortlist_gui.py` / `console_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI。講評 `app_gui` とは別。公式起動は `console_gui.py`。
+- `shortlist_gui.py` / `console_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI（タブ分離。Review は単独実行可）。講評 `app_gui` とは別。公式起動は `console_gui.py`。
 - `LuminaNotesConsole.command`: **Lumina Notes Console** のダブルクリック起動（公式ランチャー）。
 - `LuminaShortlist.command`: 旧名互換スタブ（`LuminaNotesConsole.command` を呼ぶ）。
 - `run_screening.py`: スクリーニング CLI（公式）。`run_shortlist.py` は互換ラッパ。

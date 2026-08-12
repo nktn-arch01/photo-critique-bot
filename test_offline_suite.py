@@ -1835,6 +1835,13 @@ def test_hotfix_desktop_config_merge_preserves_shortlist_keys():
         again = load_config(cfg_path)
         assert again["shortlist_last_dir"] == "/short"
         assert again["works_last_dir"] == "/works"
+
+        # Wave A6: Console タブ記憶キーも merge で消えない
+        merged2 = save_config_merge({"console_last_tab": "review"}, path=cfg_path)
+        assert merged2["console_last_tab"] == "review"
+        assert merged2["shortlist_last_dir"] == "/short"
+        again2 = load_config(cfg_path)
+        assert again2["console_last_tab"] == "review"
     finally:
         import shutil
 
