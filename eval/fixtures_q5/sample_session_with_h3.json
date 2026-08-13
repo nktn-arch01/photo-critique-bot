@@ -1,0 +1,44 @@
+{
+  "schema": "lumina.shortlist_session.v1",
+  "session_id": "fixture-q5-demo",
+  "library_unit_id": "202608",
+  "pre_h3": {
+    "files": [
+      {"file_name": "a.jpg", "rating": 2, "description_blocks": {"M2": "相対熱量:高"}},
+      {"file_name": "b.jpg", "rating": 0, "description_blocks": {}},
+      {"file_name": "c.jpg", "rating": 3, "description_blocks": {"M3": "余白"}}
+    ]
+  },
+  "post_h3": {
+    "files": [
+      {"file_name": "a.jpg", "rating": 4, "description_blocks": {"M2": "相対熱量:高"}},
+      {"file_name": "b.jpg", "rating": 2, "description_blocks": {}},
+      {"file_name": "c.jpg", "rating": 3, "description_blocks": {"M3": "余白"}}
+    ]
+  },
+  "h3_delta": {
+    "at": "2026-08-13T00:00:00+00:00",
+    "purpose": "judgment_improvement",
+    "changed_count": 2,
+    "unchanged_count": 1,
+    "transitions": {"0->2": 1, "2->4": 1},
+    "changes": [
+      {
+        "file_name": "a.jpg",
+        "before_rating": 2,
+        "after_rating": 4,
+        "before_blocks": {"M2": "相対熱量:高"},
+        "after_blocks": {"M2": "相対熱量:高"}
+      },
+      {
+        "file_name": "b.jpg",
+        "before_rating": 0,
+        "after_rating": 2,
+        "before_blocks": {},
+        "after_blocks": {}
+      }
+    ],
+    "only_in_pre": [],
+    "only_in_post": []
+  }
+}

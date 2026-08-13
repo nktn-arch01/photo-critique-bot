@@ -2255,6 +2255,7 @@ def test_works_review_selection_summarizes_sooc_skipped():
 def test_antenna_prompt_avoids_judge_vocabulary():
     """Wave A5: M2 プロンプトは採点語より熱量ラベル。"""
     from screening_antenna import build_antenna_prompt, build_antenna_system_prompt
+    from prompt_contracts import JUDGE_VOCAB_FORBIDDEN_IN_PROMPTS
 
     user = build_antenna_prompt()
     system = build_antenna_system_prompt()
@@ -2262,6 +2263,90 @@ def test_antenna_prompt_avoids_judge_vocabulary():
     assert "短く採点" not in user
     assert "採点ではなく" in user
     assert "審判" in system or "相対熱量" in system
+    blob = user + "\n" + system
+    for stem in JUDGE_VOCAB_FORBIDDEN_IN_PROMPTS:
+        assert stem not in blob, stem
+
+
+def test_prompt_contracts_judge_vocab_and_time_ban_alignment():
+    """Q2: 審判語契約＋時間帯禁止語が scanner / Phase1 指示と整合。"""
+    from prompt_contracts import (
+        assert_time_ban_aligned_with_scanner,
+        check_phase1_time_ban_in_prompt,
+        check_prompt_judge_vocab,
+    )
+
+    assert_time_ban_aligned_with_scanner()
+    ctx = CritiquePromptContext.from_metadata(
+        {"camera_model": "TestCam", "lens_model": "TestLens"},
+        {},
+    )
+    p1 = build_phase1_prompt(ctx)
+    p2 = build_phase2_prompt(ctx, "■TITLE: t\n■SCORES:\n・眼差の輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)")
+    errors = check_prompt_judge_vocab(p1, p2, get_system_role())
+    assert not errors, errors
+    time_errors = check_phase1_time_ban_in_prompt(p1)
+    assert not time_errors, time_errors
+
+
+def test_phase_d_offline_fixtures_person_and_time():
+    """Q3: 画像不要 fixture で人物分岐・時間帯禁止の再発を防ぐ。"""
+    from prompt_contracts import (
+        check_output_person_absent,
+        check_output_person_present,
+        check_output_time_ban,
+    )
+
+    root = Path(__file__).resolve().parent / "eval" / "phase_d" / "fixtures"
+    person = (root / "person_pass_phase1.txt").read_text(encoding="utf-8")
+    no_ok = (root / "no_person_pass_phase1.txt").read_text(encoding="utf-8")
+    no_fail = (root / "no_person_fail_anthropomorph.txt").read_text(encoding="utf-8")
+    time_fail = (root / "time_ban_fail_phase1.txt").read_text(encoding="utf-8")
+
+    assert check_output_person_present(person)["pass"]
+    assert check_output_person_absent(no_ok)["pass"]
+    assert not check_output_person_absent(no_fail)["pass"]
+    assert not check_output_time_ban(time_fail)["pass"]
+    assert check_output_time_ban(person)["pass"]
+    assert check_output_time_ban(no_ok)["pass"]
+
+
+def test_q5_summarize_h3_and_reactions_scripts():
+    """Q5: 集計スクリプトが fixture で動く（API 不要）。"""
+    import importlib.util
+    import json
+    import sys
+
+    root = Path(__file__).resolve().parent
+    scripts = root / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+
+    def _load(name: str):
+        path = scripts / f"{name}.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    h3_mod = _load("summarize_h3_deltas")
+    rx_mod = _load("summarize_user_reactions")
+
+    session = (root / "eval/fixtures_q5/sample_session_with_h3.json").resolve()
+    h3 = h3_mod.summarize([session])
+    assert h3["sessions_with_h3_delta"] == 1
+    assert h3["transitions"]["2->4"] == 1
+    assert h3["transitions"]["0->2"] == 1
+
+    rows = json.loads(
+        (root / "eval/fixtures_q5/sample_reactions.json").read_text(encoding="utf-8")
+    )
+    rx = rx_mod.summarize(rows)
+    assert rx["counts"]["good"] == 2
+    assert rx["counts"]["mixed"] == 1
+    assert rx["counts"]["weak"] == 2
+    assert len(rx["weak_samples"]) == 2
 
 
 def test_low_priority_works_subdir_hint():

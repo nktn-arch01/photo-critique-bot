@@ -24,6 +24,7 @@ from critique_engine import generate_critique_openai
 from critique_lens import DEFAULT_LENS, get_lens
 from critique_parser import parse_critique_text
 from generate_critique_card import create_critique_card
+from prompt_contracts import PHASE2_FORBID_FIX, PHASE_OUTPUT_TIME_BAN
 from scanner import SUPPORTED_IMAGE_SUFFIXES, extract_file_metadata
 
 EVAL_DIR = ROOT / "eval" / "phase_d"
@@ -31,8 +32,9 @@ MANIFEST_PATH = EVAL_DIR / "manifest.json"
 IMAGES_DIR = EVAL_DIR / "images"
 OUT_ROOT = EVAL_DIR / "out"
 
-TIME_BAN = ("朝日", "夕日", "夕焼け", "夕暮れ", "夕映え", "夕景", "夜景", "黄昏")
-FORBID_FIX = ("修正", "改善", "失敗", "直す", "直せば")
+# 正本は prompt_contracts（オフライン契約と共有）
+TIME_BAN = PHASE_OUTPUT_TIME_BAN
+FORBID_FIX = PHASE2_FORBID_FIX
 CANONICAL_LABELS = [a.label for a in get_lens(DEFAULT_LENS).score_axes]
 
 

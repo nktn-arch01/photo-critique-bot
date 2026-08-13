@@ -150,7 +150,7 @@ v1 / 本 Phase D ではスコア安定化をブロッカーにしない。
 | 応答品質の底上げ | 弱い時間帯ニュアンス、被写体名ラベル傾向、定型感など |
 | API / モデル | `gpt-4o` 等への変更・Vision パラメータ見直しを **V3 以降で API 変更とセット検討** |
 
-v1 / 本ブランチでは追加のプロンプト追い込みを行わない。
+**P2-1（2026-08-13）:** 画像不要の再発防止 fixture を [`eval/phase_d/fixtures/`](../eval/phase_d/fixtures/) に追加。契約正本は [`prompt_contracts.py`](../prompt_contracts.py)。実 API 再評価はモデル変更時のみ（下記 §9）。手順は [`P2_1_PROMPT_IMPROVEMENT_LOOP.md`](P2_1_PROMPT_IMPROVEMENT_LOOP.md)。
 
 ---
 

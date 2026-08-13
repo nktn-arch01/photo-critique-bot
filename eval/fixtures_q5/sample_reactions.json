@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1",
+    "user_reaction": "good",
+    "title": "窓辺の間合い",
+    "critique_summary": "その人の視線が外へ伸びる。"
+  },
+  {
+    "id": "2",
+    "user_reaction": "mixed",
+    "title": "ガラスの切れ目",
+    "critique_summary": "反射が作る第二の輪郭。"
+  },
+  {
+    "id": "3",
+    "user_reaction": "weak",
+    "title": "金属の沈黙",
+    "critique_summary": "光の段差だけが主題を支えている。"
+  },
+  {
+    "id": "4",
+    "user_reaction": "weak",
+    "title": "余白の速度",
+    "critique_summary": "線が途切れる手前で止まる。"
+  },
+  {
+    "id": "5",
+    "user_reaction": "good",
+    "title": "手の軌道",
+    "critique_summary": "しぐさが次の動作を予感させる。"
+  }
+]
