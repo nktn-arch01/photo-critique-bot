@@ -2268,6 +2268,24 @@ def test_antenna_prompt_avoids_judge_vocabulary():
         assert stem not in blob, stem
 
 
+def test_console_ui_copy_phase1_labels():
+    """P2-2 Phase 1: Console 表層ラベル（オーナー確定）。"""
+    import console_ui_copy as c
+
+    assert "選ぶ" in c.TAB_SELECT
+    assert "対話ノート作成" in c.TAB_NOTES
+    assert c.STAGE_M1.startswith("残す")
+    assert c.STAGE_M2.startswith("見返す")
+    assert c.STAGE_M3.startswith("言葉にする")
+    assert "試行" in c.DRY_RUN
+    assert c.CONFIRM_SELECT_Q.startswith("選ぶプロセスを始めますか")
+    assert c.DONE_SELECT == "星をつけ終わりました"
+    assert c.DONE_NOTES == "対話ノートを作成しました"
+    assert "画像を選ぶお手伝い" in c.help_select_text()
+    assert "対話ノートとして残します" in c.help_notes_text()
+    assert "星の数3または4" in c.help_cards_text()
+
+
 def test_prompt_contracts_judge_vocab_and_time_ban_alignment():
     """Q2: 審判語契約＋時間帯禁止語が scanner / Phase1 指示と整合。"""
     from prompt_contracts import (
