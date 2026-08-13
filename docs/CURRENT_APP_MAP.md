@@ -211,4 +211,4 @@ Works（ユーザー作成・月のみ）
 
 **まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)。
 
-**次の代表例:** P2-2（N1 洗練 UI・カード見た目・Q4 等）。
+**次の代表例:** P2-2（憲章合意済み → [`P2_2_PUBLIC_UX_CHARTER.md`](P2_2_PUBLIC_UX_CHARTER.md)。言葉→カード→Guided UI）。
