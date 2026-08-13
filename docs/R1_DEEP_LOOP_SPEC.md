@@ -375,13 +375,13 @@ M1 は「明らかな失敗」の足切りであり、表現意図の理解は�
 
 スクリーニングの実行口（T6）:
 
-- **必須・主経路:** GUI [`console_gui.py`](../console_gui.py)（実装本体 [`shortlist_gui.py`](../shortlist_gui.py)）/ ダブルクリック [`LuminaNotesConsole.command`](../LuminaNotesConsole.command)（旧 [`LuminaShortlist.command`](../LuminaShortlist.command) は互換スタブ）
-- 補助: CLI [`run_screening.py`](../run_screening.py)（旧 [`run_shortlist.py`](../run_shortlist.py) は互換ラッパ）（`--dir` / `--stages` / `--dry-run`）
+- **必須・主経路:** GUI [`console_gui.py`](../console_gui.py)（実装本体 [`shortlist_gui.py`](../shortlist_gui.py)）/ ダブルクリック [`LuminaNotesConsole.command`](../LuminaNotesConsole.command)
+- 補助: CLI [`run_screening.py`](../run_screening.py)（`--dir` / `--stages` / `--dry-run`）
 
 Lumina Review（T8）:
 
 - **主経路:** 同 GUI の「Works Lumina Review」セクション（フォルダ指定・モード・テーマ・中断）
-- 補助: CLI [`run_lumina_review.py`](../run_lumina_review.py)（旧 [`run_trace_works.py`](../run_trace_works.py) は互換ラッパ）（`--dir` / `--mode` / `--force`）
+- 補助: CLI [`run_lumina_review.py`](../run_lumina_review.py)（`--dir` / `--mode` / `--force`）
 - コア: [`lumina_review.py`](../lumina_review.py)（旧 [`trace_from_works.py`](../trace_from_works.py) は再エクスポート。`_dev` 優先・コピーなし・画優先プロンプト）
 
 講評バッチ GUI（`app_gui.py` / `PhotoAICritique.command`）とは**別アプリ**。既存キーを壊さない。

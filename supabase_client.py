@@ -1,16 +1,17 @@
 import os
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 try:
     from supabase import create_client, Client
 except ImportError:
     create_client = None
-    Client = Any
+    Client = Any  # type: ignore[misc,assignment]
 
 from critique_parser import parse_critique_text
 from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
+from line_reactions import REACTION_VALUES, parse_reaction_label
 from privacy_utils import (
     card_signed_url_seconds,
     redact_line_user_id,
@@ -140,14 +141,15 @@ class SupabaseManager:
         image_url: str,
         critique_text: str,
         card_image_url: str = "",
-    ) -> bool:
+    ) -> str | None:
+        """講評ログを保存。成功時は行 id（文字列）を返す。失敗・スキップ時は None。"""
         if not should_save_critique_db():
             print("[Supabase DB] CRITIQUE_SAVE_DB=false — skip insert", flush=True)
-            return True
+            return None
 
         if not self.client:
             print("[Supabase DB Error] Client not initialized", flush=True)
-            return False
+            return None
 
         parsed = parse_critique_text(critique_text)
         full_text = critique_text if should_save_full_critique_text() else ""
@@ -164,9 +166,60 @@ class SupabaseManager:
         }
 
         try:
-            self.client.table("critique_logs").insert(payload).execute()
-            print(f"[Supabase DB Success] user={redact_line_user_id(line_user_id)}", flush=True)
-            return True
+            res = self.client.table("critique_logs").insert(payload).execute()
+            row_id = None
+            if res.data and len(res.data) > 0:
+                row_id = str(res.data[0].get("id") or "") or None
+            print(
+                f"[Supabase DB Success] user={redact_line_user_id(line_user_id)} id={row_id}",
+                flush=True,
+            )
+            return row_id
         except Exception as e:
             print(f"[Supabase DB Error] {e}", flush=True)
+            return None
+
+    def save_user_reaction(self, line_user_id: str, reaction: str) -> bool:
+        """直近の未反応 critique_logs 行に user_reaction を書く。
+
+        列未作成時は失敗ログのみ（アプリは落ちない）。
+        """
+        value = parse_reaction_label(reaction) if reaction not in REACTION_VALUES else reaction
+        if value is None or value not in REACTION_VALUES:
+            return False
+        if not self.client:
+            return False
+
+        try:
+            # 最新ログを1件取得
+            res = (
+                self.client.table("critique_logs")
+                .select("id,user_reaction")
+                .eq("line_user_id", line_user_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if not res.data:
+                print(
+                    f"[Supabase reaction] no log for user={redact_line_user_id(line_user_id)}",
+                    flush=True,
+                )
+                return False
+            row = res.data[0]
+            row_id = row.get("id")
+            if row.get("user_reaction"):
+                # 上書き更新（同じ講評への再タップを許可）
+                pass
+            self.client.table("critique_logs").update({"user_reaction": value}).eq(
+                "id", row_id
+            ).execute()
+            print(
+                f"[Supabase reaction Success] user={redact_line_user_id(line_user_id)} "
+                f"id={row_id} reaction={value}",
+                flush=True,
+            )
+            return True
+        except Exception as e:
+            print(f"[Supabase reaction Error] {e}", flush=True)
             return False

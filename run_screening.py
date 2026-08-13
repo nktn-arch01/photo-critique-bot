@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """スクリーニング CLI（講評バッチ analyze_folder / app_gui とは別導線）.
 
-公式入口（Wave 3）。旧 ``run_shortlist.py`` は互換ラッパ。
+公式入口（Wave 3）。旧 ``run_shortlist.py`` 互換ラッパは削除済み。
 
 Usage:
   python3 run_screening.py --dir /path/to/202608

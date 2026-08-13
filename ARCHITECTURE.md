@@ -103,24 +103,24 @@
 - `desktop_ui.py`: **【UI安全予約】** ウィンドウ破棄後の `after` を握りつぶす（スクリーニング／講評 GUI 共通）。
 - `prepare_mac_manual_fixtures.py`: Mac 手動確認用の最小フォルダ／JPEG を Desktop に生成。
 - `shortlist_gui.py` / `console_gui.py`: **【Lumina Notes Console】** スクリーニング + Lumina Review の統合 GUI（タブ分離。Review は単独実行可）。講評 `app_gui` とは別。公式起動は `console_gui.py`。
-- `LuminaNotesConsole.command`: **Lumina Notes Console** のダブルクリック起動（公式ランチャー）。
-- `LuminaShortlist.command`: 旧名互換スタブ（`LuminaNotesConsole.command` を呼ぶ）。
-- `run_screening.py`: スクリーニング CLI（公式）。`run_shortlist.py` は互換ラッパ。
+- `LuminaNotesConsole.command`: **Lumina Notes Console** のダブルクリック起動（公式ランチャー・日常の本番）。
+- `run_screening.py`: スクリーニング CLI（公式）。
 - `lumina_review.py`: **【Works Lumina Review】** `{stem}_dev.jpg` 優先／撮って出しフォールバック。`LuminaReviewRunner` / `list_works_review_targets`。コピーなし。
 - `trace_from_works.py`: 旧モジュール名の互換再エクスポート。
-- `run_lumina_review.py`: Works Lumina Review CLI（公式）。`run_trace_works.py` は互換ラッパ。
+- `run_lumina_review.py`: Works Lumina Review CLI（公式）。
 - `scripts/iptc_sync_verify.py`: `iptc_rating_io` を使う Rating/Description ラウンドトリップ検証。
 
 #### ② デスクトップ版コンポーネント (Desktop Environment)
-- `app_gui.py`: Tkinter GUIコンソール。OpenAI APIによる爆速処理。選択フォルダ・カード背景テーマの自動記憶（`~/.photo_ai_config.json`＝ユーザーホーム直下）、実行前のライト/ダーク選択、独立例外処理、リアルタイムログ表示、中断制御対応。
+- `app_gui.py`: **レガシー**一括講評 GUI。OpenAI API。選択フォルダ・カード背景テーマの自動記憶（`~/.photo_ai_config.json`）。日常運用は Console。
 - `analyze_folder.py`: 月別フォルダを一括処理するCLIバッチスクリプト。
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。Wave 2 以降の公式名は `{ym}Luminaノート/カード/ログ`（旧「写真分析*」「評価カード」は読込フォールバック）。
-- `PhotoAICritique.command`: 講評バッチのダブルクリック起動（Gatekeeper属性の自動解除機能付き）。
+- `PhotoAICritique.command`: レガシー講評バッチのダブルクリック起動（起動時に Console へ誘導。Gatekeeper属性の自動解除機能付き）。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)
-- `main.py`: FastAPI Web サーバー。Gemini 2.0 Flash を呼び出し、LINE Webhook ハンドリング、BackgroundTasks、`/health` エンドポイントを制御。
-- `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`) 操作クライアント。`mode`（compact/full）と `card_theme`（dark/light）を永続化。環境変数 `SUPABASE_SERVICE_ROLE_KEY` を参照。列追加 SQL: `supabase/add_card_theme.sql`。
+- `main.py`: FastAPI Web サーバー。LINE Webhook ハンドリング、BackgroundTasks、`/health`。カード＋対話【1〜3】のあと反応 Quick Reply。
+- `line_reactions.py`: LINE 反応ラベル（いいね／もう少し／いまいち）↔ `good`/`mixed`/`weak`。
+- `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`)。`card_theme` と `critique_logs.user_reaction` を永続化。列追加 SQL: `supabase/add_card_theme.sql` / `supabase/add_user_reaction.sql`。
 - `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
 
 ---
@@ -131,7 +131,7 @@
 - **開発・テスト時**: ターミナルからのコピペ一発実行（CLIテストや単体テストスクリプト）で動作確認を行う。
 - **push 前（任意・推奨）**: API キー不要の `python3 test_offline_suite.py`（パーサー・処理済み判定・LINE 対話3分割・カード生成レイアウト）。GitHub Actions `Offline tests` ワークフローが同内容を main で自動実行。カード見た目を変える変更では、同スイートのカード自動チェック（サイズ 1080×1350・破損なし・主要文字/写真の描画）を必ず更新・通過させる（規則1レビュー3）。
 - **本番の手動確認**: デスクトップ GUI または LINE で代表1枚（簡易/詳細）— OpenAI 実呼び出しは CI では行わない。
-- **本番運用時**: `PhotoAICritique.command` をダブルクリックし、GUI（`app_gui.py`）から対象フォルダを選択して実行する。
+- **本番運用時（Desktop）**: `LuminaNotesConsole.command` をダブルクリックし、スクリーニング／Lumina Review を実行する。旧一括講評は `PhotoAICritique.command`（レガシー）。
 
 ---
 

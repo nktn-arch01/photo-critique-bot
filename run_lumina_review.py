@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Works Lumina Review CLI（スクリーニング run_screening / 講評 analyze_folder とは別導線）.
 
-公式入口（Wave 3）。旧 ``run_trace_works.py`` は互換ラッパ。
+公式入口（Wave 3）。旧 ``run_trace_works.py`` 互換ラッパは削除済み。
 
 Usage:
   python3 run_lumina_review.py --dir /path/to/Works/202608

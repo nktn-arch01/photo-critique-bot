@@ -27,7 +27,7 @@
 
 | 現状 | 問題 | 改修案（推奨） | リスク |
 |------|------|----------------|--------|
-| `LuminaShortlist.command` | ウィンドウは Console なのに Shortlist | **`LuminaNotesConsole.command`** に改名。旧ファイルは互換スタブで新を呼ぶ | Finder のお気に入りが切れる → スタブ残しで緩和 |
+| `LuminaShortlist.command` | ウィンドウは Console なのに Shortlist | **`LuminaNotesConsole.command`** に改名。薄いスタブは **削除済み（S5）** | Finder のお気に入りは新 `.command` へ |
 | `PhotoAICritique.command` | 「Photo AI」と Lumina Notes が並立 | 当面そのまま。中長期で `LuminaNotesCritique.command` か Console 一本化 | 運用習慣 |
 | `shortlist_gui.py` のクラス `ShortlistApp` | ファイル／クラスが shortlist | `console_gui.py` + `ConsoleApp`（段階リネーム） | import 多数 |
 
@@ -36,8 +36,8 @@
 | 現状 | 問題 | 改修案 | リスク |
 |------|------|--------|--------|
 | `shortlist_*.py` 一式 | 製品語はスクリーニング | **`screening_*.py` 再エクスポート追加**（実装は当面 shortlist_*。パッケージ化は任意） | 中 |
-| `run_shortlist.py` | CLI 名が旧 | ✅ `run_screening.py`（旧は薄いラッパ） | 低〜中 |
-| `trace_from_works.py` / `run_trace_works.py` | 「trace」＝旧痕跡 | ✅ `lumina_review.py` / `run_lumina_review.py` | 中 |
+| `run_shortlist.py` | CLI 名が旧 | ✅ `run_screening.py`（薄いラッパは **削除済み**） | 低〜中 |
+| `trace_from_works.py` / `run_trace_works.py` | 「trace」＝旧痕跡 | ✅ `lumina_review.py` / `run_lumina_review.py`（`run_trace_works` ラッパ削除済み） | 中 |
 | `WorksTraceRunner` / `list_works_trace_targets` | クラス・関数が trace | ✅ `LuminaReviewRunner` / `list_works_review_targets`（エイリアス残す） | 中 |
 | `iptc_rating_io.ShortlistMeta` / `write_shortlist_decision` / `read_shortlist_meta` | shortlist 語 | ✅ `ScreeningMeta` / `write_screening_decision` 等＋旧名 alias | 中（多用） |
 | `is_shortlist_jpeg` | 同上 | ✅ `is_screening_jpeg` | 低 |
@@ -86,7 +86,8 @@
 
 ### Wave 1 — 低リスク・見た目／入口（**完了 2026-08-11**）
 
-1. ✅ `LuminaNotesConsole.command` 追加 + `LuminaShortlist.command` を互換スタブ化  
+1. ✅ `LuminaNotesConsole.command` 追加 → 薄い `LuminaShortlist.command` / CLI ラッパは削除（S5）  
+
 2. ✅ GUI／CLI ログの `[trace/` → `[review/`  
 3. ✅ docs（SPEC §0・§7.2、ARCHITECTURE）の用語カス掃除  
 4. ✅ `app_gui` のユーザー向け「評価カード」文言を弱める（フォルダ名は Wave 2）
