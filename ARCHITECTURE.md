@@ -122,6 +122,7 @@
 - `line_reactions.py`: LINE 反応ラベル（いいね／もう少し／いまいち）↔ `good`/`mixed`/`weak`。
 - `prompt_contracts.py`: **【プロンプト契約】** 審判語禁止・時間帯禁止・人物分岐のオフライン回帰正本（P2-1 Q2/Q3）。
 - `scripts/summarize_h3_deltas.py` / `scripts/summarize_user_reactions.py`: H3 差分・LINE 反応の集計（Q5。自動書き換えなし）。手順は `docs/P2_1_PROMPT_IMPROVEMENT_LOOP.md`。
+- `docs/P2_2_PUBLIC_UX_CHARTER.md`: **【公開 UX 憲章】** ブランドブック準拠の体験合意（Guided／Console／LINE、ローカル Web）。`docs/brand/LuminaNotes_BrandBook_02.pdf`。
 - `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`)。`card_theme` と `critique_logs.user_reaction` を永続化。列追加 SQL: `supabase/add_card_theme.sql` / `supabase/add_user_reaction.sql`。
 - `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
 

@@ -8,6 +8,8 @@ archive/
 *.jpg
 *.jpeg
 *.pdf
+# Brand book (P2-2 UX charter source of truth)
+!docs/brand/LuminaNotes_BrandBook_02.pdf
 
 # Phase D evaluation artifacts (keep manifest / docs; ignore photos & outputs)
 eval/phase_d/images/*
