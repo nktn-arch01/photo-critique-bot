@@ -207,7 +207,8 @@ Works（ユーザー作成・月のみ）
 | B | 薄い流れ案内、イベント順実行オプション、Review 後 Finder |
 | C | H3 自動、JPEG Phase1 正、スクリーニングカード、LINE 統合、Review カード省略 |
 | P1+N2 | Works ガイド／失敗の次の一手／フォルダエラー親切化／役割案内／薄い alias 削除／LINE 反応 QR＋DB |
+| P2-1 | 審判語契約・Phase D fixture・H3/反応集計（[`P2_1_PROMPT_IMPROVEMENT_LOOP.md`](P2_1_PROMPT_IMPROVEMENT_LOOP.md)） |
 
 **まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)。
 
-**次の代表例:** P2-1（プロンプト／Q5 ループ）、P2-2（N1 洗練 UI・カード見た目）。
+**次の代表例:** P2-2（N1 洗練 UI・カード見た目・Q4 等）。

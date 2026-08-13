@@ -1,0 +1,197 @@
+"""プロンプト／講評出力の契約（審判語・時間帯・人物分岐）。
+
+オフライン回帰テストと Phase D 自動チェックの単一ソース。
+モデル変更・プロンプト編集時は、まずここを壊さないこと。
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Iterable
+
+from critique_parser import parse_critique_text
+from critique_lens import DEFAULT_LENS
+from scanner import TIME_ZONE_FACT_BANNED_STEMS
+
+# ---------------------------------------------------------------------------
+# Q2: 指示プロンプト側の審判語（復活禁止）
+# ---------------------------------------------------------------------------
+
+# 指示文に書いてはいけない語（Wave A5 / 伴走スタンス）
+JUDGE_VOCAB_FORBIDDEN_IN_PROMPTS: tuple[str, ...] = (
+    "基本評価",
+    "確定評価の維持",
+    "★評価",
+    "プロの写真評論家",
+    "短く採点",
+)
+
+# Phase2 に必須の伴走／観察フレーミング（いずれか＋確定観察）
+COMPANION_REQUIRED_ANY_OF_PHASE2: tuple[str, ...] = (
+    "観察スナップショット",
+    "事前確定の観察結果",
+)
+COMPANION_REQUIRED_ALL_OF_PHASE2: tuple[str, ...] = ("確定観察との整合",)
+
+# Phase1 SCORES 行は「採点」ではなくスナップショット
+PHASE1_REQUIRED_SCORE_FRAMING: tuple[str, ...] = ("★スナップショット",)
+PHASE1_FORBIDDEN_SCORE_FRAMING: tuple[str, ...] = ("★評価",)
+
+# ---------------------------------------------------------------------------
+# Q3: 時間帯ラベル（出力禁止）— scanner 禁止語と整合
+# ---------------------------------------------------------------------------
+
+# Phase D / プロンプト本文で明示している語（scanner と同一集合のコア）
+PHASE_OUTPUT_TIME_BAN: tuple[str, ...] = (
+    "朝日",
+    "夕日",
+    "夕焼け",
+    "夕暮れ",
+    "夕映え",
+    "夕景",
+    "夜景",
+    "黄昏",
+    "早朝",
+)
+
+# Phase1 プロンプト追加分（「夜の」など）
+PHASE1_EXTRA_TIME_BAN: tuple[str, ...] = ("夜の",)
+
+# Full 本文で欠陥示唆を禁ずる語（Phase D FORBID_FIX）
+PHASE2_FORBID_FIX: tuple[str, ...] = ("修正", "改善", "失敗", "直す", "直せば")
+
+# ---------------------------------------------------------------------------
+# Q3: 人物分岐（出力側）
+# ---------------------------------------------------------------------------
+
+PERSON_PRESENCE_STEMS: tuple[str, ...] = ("視線", "しぐさ", "佇まい", "佇む姿")
+
+# 人物なし写真への転用として明示禁止した例（プロンプト禁止例と一致）
+NO_PERSON_FORBIDDEN_PHRASES: tuple[str, ...] = (
+    "花の佇まい",
+    "建物のしぐさ",
+    "しぐさのように光を受け止める",
+)
+
+# 人物なしでも許す「視線」表現
+NO_PERSON_ALLOWED_GAZE_PHRASE = "観る者の視線"
+
+
+def assert_time_ban_aligned_with_scanner() -> None:
+    """PHASE_OUTPUT_TIME_BAN が scanner 禁止語の部分集合であること。"""
+    banned = set(TIME_ZONE_FACT_BANNED_STEMS)
+    missing = [w for w in PHASE_OUTPUT_TIME_BAN if w not in banned]
+    if missing:
+        raise AssertionError(
+            f"PHASE_OUTPUT_TIME_BAN not in TIME_ZONE_FACT_BANNED_STEMS: {missing}"
+        )
+
+
+def find_forbidden_stems(text: str, stems: Iterable[str]) -> list[str]:
+    return [s for s in stems if s and s in (text or "")]
+
+
+def check_prompt_judge_vocab(phase1: str, phase2: str, system_role: str = "") -> list[str]:
+    """指示プロンプトに審判語が混入していないか。問題があればメッセージ一覧。"""
+    errors: list[str] = []
+    blob = "\n".join([phase1 or "", phase2 or "", system_role or ""])
+    for stem in JUDGE_VOCAB_FORBIDDEN_IN_PROMPTS:
+        if stem in blob:
+            errors.append(f"forbidden judge vocab in prompts: {stem!r}")
+    for stem in PHASE1_FORBIDDEN_SCORE_FRAMING:
+        if stem in (phase1 or ""):
+            errors.append(f"forbidden Phase1 score framing: {stem!r}")
+    for stem in PHASE1_REQUIRED_SCORE_FRAMING:
+        if stem not in (phase1 or ""):
+            errors.append(f"missing Phase1 score framing: {stem!r}")
+    if not any(s in (phase2 or "") for s in COMPANION_REQUIRED_ANY_OF_PHASE2):
+        errors.append(
+            "Phase2 missing companion framing "
+            f"(need one of {COMPANION_REQUIRED_ANY_OF_PHASE2})"
+        )
+    for stem in COMPANION_REQUIRED_ALL_OF_PHASE2:
+        if stem not in (phase2 or ""):
+            errors.append(f"Phase2 missing required: {stem!r}")
+    return errors
+
+
+def check_phase1_time_ban_in_prompt(phase1: str) -> list[str]:
+    """Phase1 指示に時間帯禁止語リストが残っているか（契約の存在確認）。"""
+    errors: list[str] = []
+    for stem in PHASE_OUTPUT_TIME_BAN:
+        if stem not in (phase1 or ""):
+            errors.append(f"Phase1 prompt no longer lists time ban stem: {stem!r}")
+    return errors
+
+
+def _phase1_text_for_ban(critique: str) -> str:
+    parsed = parse_critique_text(critique, lens=DEFAULT_LENS)
+    return "\n".join(
+        [
+            parsed.get("title") or "",
+            parsed.get("summary") or "",
+            parsed.get("point_text") or "",
+            critique.split("\n---\n", 1)[0],
+        ]
+    )
+
+
+def check_output_time_ban(critique: str) -> dict:
+    """出力テキストの時間帯ラベル禁止。"""
+    text = _phase1_text_for_ban(critique)
+    # Phase1 追加「夜の」も見る（「夜の街」等）。「夜間」「深夜」は scanner 側。
+    ban = tuple(PHASE_OUTPUT_TIME_BAN) + tuple(PHASE1_EXTRA_TIME_BAN)
+    hits = find_forbidden_stems(text, ban)
+    return {"pass": not hits, "hits": hits}
+
+
+def check_output_person_present(critique: str) -> dict:
+    """人物あり: TITLE または CRITIQUE_SUMMARY に人物観察語があること。"""
+    p1 = parse_critique_text(critique.split("\n---\n", 1)[0], lens=DEFAULT_LENS)
+    focus = "\n".join([p1.get("title") or "", p1.get("point_text") or ""])
+    hits = find_forbidden_stems(focus, PERSON_PRESENCE_STEMS)
+    return {"pass": bool(hits), "hits": hits, "detail": focus[:120]}
+
+
+def check_output_person_absent(critique: str) -> dict:
+    """人物なし: 禁止転用例と、観る者以外への佇まい／しぐさ転用を弾く。"""
+    text = _phase1_text_for_ban(critique)
+    phrase_hits = find_forbidden_stems(text, NO_PERSON_FORBIDDEN_PHRASES)
+
+    # 「観る者の視線」を除いた残りに 佇まい／しぐさ があれば転用疑い
+    scrubbed = text.replace(NO_PERSON_ALLOWED_GAZE_PHRASE, "")
+    soft_hits = [s for s in ("佇まい", "しぐさ", "佇む姿") if s in scrubbed]
+    # 「人物」「人々」「彼女」「彼」の安易な登場（看板キャラ除く簡易）
+    person_word_hits = [
+        w for w in ("人物", "人々", "彼女", "彼の", "彼は") if w in scrubbed
+    ]
+
+    bad = phrase_hits or soft_hits or person_word_hits
+    return {
+        "pass": not bad,
+        "phrase_hits": phrase_hits,
+        "soft_hits": soft_hits,
+        "person_word_hits": person_word_hits,
+    }
+
+
+def check_output_forbid_fix_in_body(critique: str) -> dict:
+    """Full 本文の欠陥示唆語。"""
+    parsed = parse_critique_text(critique, lens=DEFAULT_LENS)
+    body = parsed.get("body") or ""
+    hits = find_forbidden_stems(body, PHASE2_FORBID_FIX)
+    return {"pass": not hits, "hits": hits}
+
+
+_TITLE_WS = re.compile(r"\s+")
+
+
+def check_output_title_len(critique: str, *, max_len: int = 15) -> dict:
+    p1 = parse_critique_text(critique.split("\n---\n", 1)[0], lens=DEFAULT_LENS)
+    title = p1.get("title") or ""
+    title_len = len(_TITLE_WS.sub("", title))
+    return {
+        "pass": 1 <= title_len <= max_len,
+        "title": title,
+        "len": title_len,
+    }

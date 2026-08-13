@@ -5,7 +5,8 @@
 根拠: [`R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`](R1A_DESKTOP_WALKTHROUGH_BACKLOG.md) / [`R1A_UX_IMPROVEMENT_PLAN.md`](R1A_UX_IMPROVEMENT_PLAN.md) / [`CURRENT_APP_MAP.md`](CURRENT_APP_MAP.md)
 
 **完了済み（参考）:** Wave A/B/C。ホットフィックス H1–H3 / M1–M5 / L1–L5。**S4** LINE 統合実機 PASS（2026-08-12）。  
-**P1 一式＋N2** 実装済み（2026-08-13）: S1 / S6 / S7 / U2 / S5（薄い入口 alias） / N2。
+**P1 一式＋N2** 実装済み（2026-08-13）: S1 / S6 / S7 / U2 / S5（薄い入口 alias） / N2。  
+**P2-1 基盤** 実装済み（2026-08-13）: Q2 / Q3 fixture / Q5 集計（[`P2_1_PROMPT_IMPROVEMENT_LOOP.md`](P2_1_PROMPT_IMPROVEMENT_LOOP.md)）。
 
 **実装順の約束（専門家確認）:**
 
@@ -33,13 +34,15 @@
 |----|------|------|
 | **N2** | LINE: 対話【1〜3】のあと Quick Reply 3段階（👍いいね／💭もう少し／😐いまいち）。`critique_logs.user_reaction`（good/mixed/weak） | **DONE** — 運用前に `supabase/add_user_reaction.sql` を1回実行。Q5 の材料 |
 
-### P2-1 — AI モデル変更を検討するタイミングで
+### P2-1 — AI モデル変更を検討するタイミングで（基盤 DONE 2026-08-13）
 
-| ID | 内容 | メモ |
+| ID | 内容 | 状態 |
 |----|------|------|
-| Q2 | プロンプト審判語の回帰テスト強化 | モデル依存 |
-| Q3 | Phase D 残課題の再評価 | モデル依存 |
-| Q5 | H3 差分＋LINE `user_reaction` をプロンプト改善材料にするループ | 記録は自動化済み。分析は未 |
+| Q2 | プロンプト審判語の回帰テスト強化 | **DONE（オフライン契約）** — `prompt_contracts.py` + suite |
+| Q3 | Phase D 残課題の再発防止 | **DONE（fixture）** — `eval/phase_d/fixtures/`。実 API 再評価はモデル変更時に任意 |
+| Q5 | H3 差分＋LINE `user_reaction` をプロンプト改善材料にするループ | **DONE（集計）** — `scripts/summarize_*.py`。手順は [`P2_1_PROMPT_IMPROVEMENT_LOOP.md`](P2_1_PROMPT_IMPROVEMENT_LOOP.md)。自動書き換えはしない |
+
+モデルを上げるときの作業: 上記契約を通したうえで任意で `phase_d_eval.py` を再実行。
 
 ### P2-2 — 公開向けの洗練 UI とまとめて
 
@@ -85,7 +88,7 @@
 |--------|----------------|
 | ストレス低減 | S8（S1/S5/S6/S7 完了。S2 不要／S4 完了） |
 | Lumina Notes UX | U1, U4, N1（U2 完了。U3/U5/U6/U7 不要） |
-| AI フィードバック質 | Q1, Q2, Q3, Q4, Q5, Q6, Q7（N2 で反応記録は開始） |
+| AI フィードバック質 | Q1, Q4, Q6, Q7（Q2/Q3/Q5 のオフライン基盤は完了） |
 
 ---
 
@@ -110,3 +113,4 @@
 | 2026-08-13 | オーナー再レビュー反映: P1／P2-1／P2-2／P3・不要を確定。N1（洗練 UI）追加。実装順の約束を追記 |
 | 2026-08-13 | N2 を LINE Quick Reply（対話後・3段階＋DB列）として追加 |
 | 2026-08-13 | P1（S1/S6/S7/U2/S5）＋N2 実装完了を反映 |
+| 2026-08-13 | P2-1: Q2/Q3/Q5 オフライン基盤（契約・fixture・集計）を完了 |
