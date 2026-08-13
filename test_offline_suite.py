@@ -308,6 +308,51 @@ def test_line_dialogue_split_sections_1_to_3():
     assert split_full_critique_for_line(body) == parts
 
 
+def test_line_reactions_labels_and_keys():
+    """N2: 3段階ラベル ↔ good/mixed/weak。"""
+    from line_reactions import (
+        REACTION_GOOD,
+        REACTION_MIXED,
+        REACTION_WEAK,
+        parse_reaction_label,
+        reaction_ack_message,
+        reaction_quick_reply_items,
+    )
+
+    assert parse_reaction_label("👍 いいね") == REACTION_GOOD
+    assert parse_reaction_label("💭 もう少し") == REACTION_MIXED
+    assert parse_reaction_label("😐 いまいち") == REACTION_WEAK
+    assert parse_reaction_label("いいね") == REACTION_GOOD
+    assert parse_reaction_label("こんにちは") is None
+    items = reaction_quick_reply_items()
+    assert len(items) == 3
+    assert all(label == text for label, text in items)
+    assert "いいね" in reaction_ack_message(REACTION_GOOD)
+
+
+def test_works_placement_and_folder_error_messages():
+    """S1/S7: 置き方ガイドと具体例つきフォルダエラー。"""
+    from library_unit import (
+        format_screening_folder_error,
+        format_works_folder_error,
+        works_placement_guide_text,
+    )
+
+    guide = works_placement_guide_text()
+    assert "_dev.jpg" in guide
+    assert "YYYYMM" in guide or "202606" in guide
+    assert "RAW" in guide
+
+    s_err = format_screening_folder_error("/tmp/旅行2026")
+    assert "旅行2026" in s_err
+    assert "OM202606" in s_err
+    assert "OK 例" in s_err
+
+    w_err = format_works_folder_error("/tmp/OM202606")
+    assert "OM202606" in w_err
+    assert "YYYYMM" in w_err
+
+
 def test_line_full_split_four_parts():
     """旧サンプル（【1】【4】【6】）では Phase1 通を除いた本文側を返す。"""
     combined = PHASE1_SAMPLE + "\n---\n" + PHASE2_SAMPLE

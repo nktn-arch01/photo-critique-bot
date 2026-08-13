@@ -1,6 +1,6 @@
 # いまのアプリ全体図（Wave A/B/C 後）
 
-更新日: 2026-08-12  
+更新日: 2026-08-13  
 位置づけ: 公開前βの **現在形**。詳細仕様の正本は [`ARCHITECTURE.md`](../ARCHITECTURE.md)。運用は [`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md)。
 
 ---
@@ -22,11 +22,11 @@ Wave C で決まった核:
 | 入口 | 役割 | 状態 |
 |------|------|------|
 | `LuminaNotesConsole.command` | **日常の本番 UI**（スクリーニング＋Lumina Review） | 正式 |
-| `PhotoAICritique.command` | 旧・一括講評 GUI | レガシー（思想確定後に整理予定） |
-| LINE Bot（Render / `main.py`） | 写真1枚 → カード＋対話【1〜3】 | 本番チャネル |
-| `LuminaShortlist.command` | 旧名スタブ → Console へ | 互換のみ |
+| `PhotoAICritique.command` | 旧・一括講評 GUI（起動時に Console へ誘導） | レガシー |
+| LINE Bot（Render / `main.py`） | 写真1枚 → カード＋対話【1〜3】→ 反応 QR | 本番チャネル |
 
-Console を `.command` から起動して閉じると、Terminal ウィンドウも閉じます。
+Console を `.command` から起動して閉じると、Terminal ウィンドウも閉じます。  
+旧 `LuminaShortlist.command` / `run_shortlist.py` / `run_trace_works.py` は削除済み（公式名のみ）。
 
 ---
 
@@ -129,12 +129,15 @@ flowchart LR
   Compact --> Mem[短命キャッシュ]
   Mem --> Full13[Full で【1-3】]
   Full13 --> Push3[3通テキスト]
-  Push3 --> Clear[キャッシュ消去]
+  Push3 --> QR[Quick Reply 3段階]
+  QR --> Clear[キャッシュ消去]
+  QR --> DB["critique_logs.user_reaction"]
 ```
 
 - モード「簡易／詳細」切替は案内上 **カード＋対話に統一**
 - CRITIQUE_SUMMARY のテキスト通は送らない
 - Desktop の Full ログ（【1〜7】）とは **別契約**
+- **N2:** 対話【1〜3】の最後に Quick Reply（👍いいね／💭もう少し／😐いまいち）→ DB `user_reaction`（good/mixed/weak）。Q5 の材料
 
 ---
 
@@ -163,7 +166,7 @@ flowchart LR
 | Works Review | `lumina_review.py` |
 | Phase1↔JPEG | `phase1_jpeg.py` / `iptc_rating_io.py` |
 | 講評生成 | `critique_engine.py`（`phase1_override` 可） |
-| LINE | `main.py` / `line_messaging.py` |
+| LINE | `main.py` / `line_messaging.py` / `line_reactions.py` |
 
 ---
 
@@ -191,8 +194,8 @@ Works（ユーザー作成・月のみ）
 2. **DxO で Rating を直す** → 閉じれば差分は自動記録（作業不要）
 3. **（任意）カード** → 同じタブの「カード生成」（Rating 3/4）
 4. **Works に置いて深く対話** → Console「Lumina Review」
-5. **LINE** → カード＋【1〜3】（別チャネル・同じコア）
-6. **PhotoAICritique** → 旧一括講評（任意・整理は後で）
+5. **LINE** → カード＋【1〜3】＋反応ボタン（別チャネル・同じコア）
+6. **PhotoAICritique** → 旧一括講評（普段は使わない・起動時に案内）
 
 ---
 
@@ -203,7 +206,8 @@ Works（ユーザー作成・月のみ）
 | A | API 事前確認、タブ分離、語彙・見える化 |
 | B | 薄い流れ案内、イベント順実行オプション、Review 後 Finder |
 | C | H3 自動、JPEG Phase1 正、スクリーニングカード、LINE 統合、Review カード省略 |
+| P1+N2 | Works ガイド／失敗の次の一手／フォルダエラー親切化／役割案内／薄い alias 削除／LINE 反応 QR＋DB |
 
-**まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)（ストレス／Lumina Notes UX／AI 質の3分類）。
+**まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)。
 
-**延期の代表例:** カード見た目の ★ 降格、Photo AI と Console の一本化、旧 alias 削除。同意/不同意 UI は不做（DxO Rating＝反応）。
+**次の代表例:** P2-1（プロンプト／Q5 ループ）、P2-2（N1 洗練 UI・カード見た目）。

@@ -184,6 +184,6 @@ R1′-A 第一波（T0–T10）は実装完了。次は **Mac 手動確認**（[
 
 ```bash
 python3 prepare_mac_manual_fixtures.py   # ~/Desktop/LuminaManualCheck を生成
-open LuminaNotesConsole.command             # またはダブルクリック（旧 LuminaShortlist.command も可）
+open LuminaNotesConsole.command             # またはダブルクリック
 # チェックリストに PASS/FAIL を記入
 ```

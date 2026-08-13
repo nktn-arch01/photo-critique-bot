@@ -15,10 +15,23 @@ from critique_engine import generate_critique_for_line
 from generate_critique_card import create_critique_card
 from card_theme import CARD_THEME_DARK, CARD_THEME_LIGHT, card_theme_label
 from line_messaging import push_messages_in_batches, split_full_critique_for_line
+from line_reactions import (
+    parse_reaction_label,
+    reaction_ack_message,
+    reaction_quick_reply_items,
+)
 from supabase_client import SupabaseManager
 from ai_vision import sniff_image_mime
 from privacy_utils import redact_line_user_id, storage_folder_for_user
 from scanner import extract_file_metadata
+
+
+def _reaction_quick_reply() -> QuickReply:
+    items = [
+        QuickReplyButton(action=MessageAction(label=label[:20], text=text))
+        for label, text in reaction_quick_reply_items()
+    ]
+    return QuickReply(items=items)
 
 app = FastAPI(title="Photo AI Critique LINE Bot")
 
@@ -135,7 +148,22 @@ def process_image_and_reply(line_user_id: str, message_id: str):
         dialogue_parts = split_full_critique_for_line(full_text)
         text_messages = [TextSendMessage(text=part) for part in dialogue_parts]
         if text_messages:
+            # N2: 対話の最後に反応 Quick Reply（いいね / もう少し / いまいち）
+            last = text_messages[-1]
+            text_messages[-1] = TextSendMessage(text=last.text, quick_reply=_reaction_quick_reply())
             push_messages_in_batches(line_bot_api, line_user_id, text_messages)
+        else:
+            # 対話分割が空でも反応を取れるように案内＋QR
+            push_messages_in_batches(
+                line_bot_api,
+                line_user_id,
+                [
+                    TextSendMessage(
+                        text="講評が届きました。いまの印象を選んでください。",
+                        quick_reply=_reaction_quick_reply(),
+                    )
+                ],
+            )
 
     except Exception as e:
         print(f"[Processing Error] {e}", flush=True)
@@ -153,11 +181,21 @@ def process_image_and_reply(line_user_id: str, message_id: str):
 
 
 def handle_text_message(reply_token: str, line_user_id: str, text: str):
+    reaction = parse_reaction_label(text)
+    if reaction is not None:
+        ok = supabase_mgr.save_user_reaction(line_user_id, reaction)
+        ack = reaction_ack_message(reaction)
+        if not ok:
+            ack += "\n（記録に失敗した可能性があります。列追加 SQL を確認してください）"
+        line_bot_api.reply_message(reply_token, TextSendMessage(text=ack))
+        return
+
     if text in ["設定", "せってい", "モード設定"]:
         msg_text = (
             "⚙️【講評の送り方】\n\n"
             "現在は【カード＋対話】に統一しています。\n"
-            "写真1枚ごとにカードを先に送り、続けて対話【1】〜【3】を送ります。\n\n"
+            "写真1枚ごとにカードを先に送り、続けて対話【1】〜【3】を送ります。\n"
+            "最後に「いいね／もう少し／いまいち」で印象を送れます。\n\n"
             "カードの見た目は「背景」で変更できます。"
         )
         line_bot_api.reply_message(

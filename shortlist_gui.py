@@ -24,12 +24,15 @@ from delta_log import (
 from desktop_config import load_config as load_shared_config, save_config_merge
 from desktop_ui import open_in_file_manager, schedule_on_ui
 from library_unit import (
+    format_screening_folder_error,
+    format_works_folder_error,
     is_works_month_folder_name,
     list_event_units,
     list_source_jpegs,
     plan_screening_units,
     resolve_session_for_unit,
     unit_from_dir,
+    works_placement_guide_text,
 )
 from ai_vision import get_openai_client
 from screening_pipeline import (
@@ -188,12 +191,13 @@ class ShortlistApp:
         ttk.Label(
             info,
             text=(
-                "流れ（このタブだけ）: 候補付け →（任意）DxO記録\n"
+                "流れ（このタブだけ）: 候補付け →（任意）カード → 閉じると DxO 差分を自動記録\n"
                 "Lumina Review は隣のタブ（独立・必須ではありません）\n\n"
                 "オリジナルの月／イベントを選び、候補の Rating を付けます。\n"
                 "月の配下イベントは既定で対象外。必要なときだけ下のチェックをON。\n\n"
-                "Rating（DxO の「出来の星」とは別）:\n"
-                "  0=除外 / 1=M1 / 2=M2 / 3=余白 / 4=上位"
+                "Rating（パイプライン状態。DxO の「出来の星」とは別）:\n"
+                "  0=除外 / 1=M1 / 2=M2 / 3=余白 / 4=上位\n\n"
+                + works_placement_guide_text()
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
@@ -288,7 +292,8 @@ class ShortlistApp:
                 "スクリーニング無しでも、ここに画像があれば単独で実行できます。\n"
                 "ファイルのコピーはしません。\n\n"
                 "Works は YYYYMM のみ（例: ~/2026/202606）。\n"
-                "同一コマは {stem}_dev.jpg を優先（撮って出し除外は確認時に表示）。"
+                "同一コマは {stem}_dev.jpg を優先（撮って出し除外は確認時に表示）。\n\n"
+                + works_placement_guide_text()
             ),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
@@ -435,9 +440,7 @@ class ShortlistApp:
             self.save_config(works_dir=selected)
             name = Path(selected).name
             if not is_works_month_folder_name(name):
-                self.log(
-                    f"Works フォルダ: {selected}（注意: 名前が YYYYMM ではありません: {name}）"
-                )
+                self.log(f"Works フォルダ注意:\n{format_works_folder_error(selected)}")
             try:
                 works_path = Path(selected)
                 summary = summarize_works_review_selection(works_path)
@@ -574,12 +577,7 @@ class ShortlistApp:
             return
         unit = unit_from_dir(target)
         if unit is None:
-            messagebox.showerror(
-                "フォルダ名エラー",
-                "月（YYYYMM または OM202606 等の XXYYYYMM）か、\n"
-                "イベント（YYYYMMDD_名前 または OM20260615_旅行 等）を選んでください。\n"
-                f"現在: {target.name}",
-            )
+            messagebox.showerror("フォルダ名エラー", format_screening_folder_error(target))
             return
         if not (self.var_m1.get() or self.var_m2.get() or self.var_m3.get()):
             messagebox.showwarning("警告", "M1 / M2 / M3 のいずれかを選んでください。")
@@ -762,7 +760,9 @@ class ShortlistApp:
                         f"スクリーニングを中止しました。\n\n"
                         f"処理した単位: {units_done}/{planned}\n"
                         f"JPEG: {jpeg_sum} 枚\n"
-                        f"最後に処理したセッション: {session_name}"
+                        f"最後に処理したセッション: {session_name}\n\n"
+                        "次の一手: 途中まで書いた Rating はそのまま残っています。"
+                        "続きは同じフォルダで再実行できます。"
                     )
                 else:
                     title = "未完了"
@@ -770,7 +770,9 @@ class ShortlistApp:
                         f"スクリーニングは完了しませんでした（{overall}）。\n\n"
                         f"単位: {units_done}/{planned} / JPEG: {jpeg_sum} 枚\n"
                         f"最後に処理したセッション: {session_name}\n"
-                        f"エラー: {fail_err or '（詳細はログを確認）'}"
+                        f"エラー: {fail_err or '（詳細はログを確認）'}\n\n"
+                        "次の一手: ログのエラーを確認し、同じ設定で再実行してください。"
+                        "切り分けはドライラン（JPEGへ書かない）が便利です。"
                     )
                 messagebox.showinfo(title, msg)
 
@@ -810,11 +812,7 @@ class ShortlistApp:
             messagebox.showerror("エラー", f"Works フォルダがありません:\n{works}")
             return
         if not is_works_month_folder_name(works.name):
-            messagebox.showerror(
-                "フォルダ名エラー",
-                "Works Lumina Review の対象は月フォルダ YYYYMM のみです。\n"
-                f"例: ~/2026/202606\n現在: {works.name}",
-            )
+            messagebox.showerror("フォルダ名エラー", format_works_folder_error(works))
             return
         try:
             selection = summarize_works_review_selection(works)
@@ -959,11 +957,7 @@ class ShortlistApp:
             return
         unit = unit_from_dir(target)
         if unit is None:
-            messagebox.showerror(
-                "フォルダ名エラー",
-                "月またはイベントフォルダを選んでください。\n"
-                f"現在: {target.name}",
-            )
+            messagebox.showerror("フォルダ名エラー", format_screening_folder_error(target))
             return
         if not self._ensure_openai_ready():
             return

@@ -25,7 +25,7 @@ from scanner import extract_file_metadata, SUPPORTED_IMAGE_SUFFIXES
 class PhotoAICritiqueApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Photo AI 写真講評バッチ処理システム")
+        self.root.title("Photo AI 講評バッチ（レガシー）")
         self.root.geometry("700x660")
         self.root.minsize(620, 540)
 
@@ -72,6 +72,19 @@ class PhotoAICritiqueApp:
     def setup_ui(self):
         main_frame = ttk.Frame(self.root, padding="15")
         main_frame.pack(fill=tk.BOTH, expand=True)
+
+        legacy = ttk.LabelFrame(main_frame, text=" 役割 ", padding="8")
+        legacy.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(
+            legacy,
+            text=(
+                "これは旧・一括講評バッチです。\n"
+                "日常の本番は「Lumina Notes Console」（LuminaNotesConsole.command）を使ってください。\n"
+                "スクリーニング／Works 対話／カードは Console 側です。"
+            ),
+            justify=tk.LEFT,
+            wraplength=640,
+        ).pack(anchor=tk.W)
 
         # ---------------------------------------------------------
         # AIモデル情報表示フレーム

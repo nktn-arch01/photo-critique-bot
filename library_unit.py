@@ -301,14 +301,50 @@ def list_source_jpegs(unit: LibraryUnit) -> list[Path]:
 
 
 def resolve_unit(path: Path | str) -> LibraryUnit:
-    """パスを単位として解決。規則外なら ValueError。"""
+    """パスを単位として解決。規則外なら ValueError（具体例つき）。"""
     unit = unit_from_dir(path)
     if unit is None:
-        raise ValueError(
-            f"ライブラリ単位として解釈できません"
-            f"（月 YYYYMM|XXYYYYMM または イベント YYYYMMDD_名前|XXYYYYMMDD_名前）: {path}"
-        )
+        raise ValueError(format_screening_folder_error(path))
     return unit
+
+
+def format_screening_folder_error(path: Path | str) -> str:
+    """スクリーニング対象フォルダ名が不正なときのユーザー向けメッセージ。"""
+    p = Path(path)
+    name = p.name if str(p) else "(空)"
+    return (
+        f"フォルダ名がスクリーニングの規則と合いません。\n"
+        f"現在: {name}\n\n"
+        "OK 例:\n"
+        "  月 … OM202606 ／ 202606\n"
+        "  イベント … OM20260615_旅行 ／ 20260615_京都\n\n"
+        "NG 例:\n"
+        "  旅行2026 ／ OM26-06 ／ スペース入りの名前\n\n"
+        f"パス: {p}"
+    )
+
+
+def format_works_folder_error(path: Path | str) -> str:
+    """Works（Lumina Review）フォルダ名が不正なときのユーザー向けメッセージ。"""
+    p = Path(path)
+    name = p.name if str(p) else "(空)"
+    return (
+        f"Works は月フォルダ名 YYYYMM のみです（機種接頭辞なし）。\n"
+        f"現在: {name}\n\n"
+        "OK 例: ~/2026/202606\n"
+        "NG 例: OM202606（オリジナル用）／2026年6月\n\n"
+        f"パス: {p}"
+    )
+
+
+def works_placement_guide_text() -> str:
+    """Console 常時表示用: オリジナル → Works の置き方（短文）。"""
+    return (
+        "Works への置き方（アプリはコピーしません）:\n"
+        "  オリジナルで選ぶ → DxO で直す／現像 → "
+        "{stem}_dev.jpg を Works 月フォルダ（例: ~/2026/202606）直下へ\n"
+        "  RAW は置かない。撮って出し .jpg だけでも可（_dev があれば優先）"
+    )
 
 
 def session_belongs_to_unit(session_path: Path | str, unit_dir: Path | str) -> bool:
