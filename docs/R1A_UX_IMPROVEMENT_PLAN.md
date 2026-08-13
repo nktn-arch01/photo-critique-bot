@@ -138,3 +138,4 @@
 | 2026-08-12 | Wave C 方針確定・実装: H3 自動、スクリーニングカード＋IPTC Phase1、LINE 案2、Review Phase1 再利用 |
 | 2026-08-12 | Mac Wave C: C0/C0b/C3/C3′ PASS。追記: Review カード省略・深さUI削除・.command で Terminal 終了。**C2 LINE 実機 PASS（後追い）** |
 | 2026-08-12 | やり残し ToDo を [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md) に3分類で切り出し |
+| 2026-08-13 | ToDo 再レビュー確定（P1→P2-1→P2-2→P3、不要項目、N1 洗練 UI）を同ファイルへ反映 |

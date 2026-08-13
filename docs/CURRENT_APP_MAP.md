@@ -204,6 +204,6 @@ Works（ユーザー作成・月のみ）
 | B | 薄い流れ案内、イベント順実行オプション、Review 後 Finder |
 | C | H3 自動、JPEG Phase1 正、スクリーニングカード、LINE 統合、Review カード省略 |
 
-**まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)（ストレス／Lumina Notes UX／AI 質の3分類）。
+**まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)（2026-08-13 再レビュー確定: 実装順 P1→P2-1→P2-2→P3）。
 
-**延期の代表例:** カード見た目の ★ 降格、Photo AI と Console の一本化、旧 alias 削除。同意/不同意 UI は不做（DxO Rating＝反応）。
+**次の P1:** S1 → S6 → S7 → U2（案内一本化）→ S5（alias 削除）。
