@@ -1,6 +1,6 @@
 # いまのアプリ全体図（Wave A/B/C 後）
 
-更新日: 2026-08-13  
+更新日: 2026-08-14  
 位置づけ: 公開前βの **現在形**。詳細仕様の正本は [`ARCHITECTURE.md`](../ARCHITECTURE.md)。運用は [`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md)。
 
 ---
@@ -11,7 +11,7 @@
 
 Wave C で決まった核:
 
-- **カード** ＝ Phase1（TITLE / SUMMARY / SCORES / CRITIQUE_SUMMARY）
+- **カード** ＝ Phase1（TITLE / SUMMARY / SCORES / CRITIQUE_SUMMARY）。P2-2 Phase 2 以降、カード上の読み順は **写真 → 言葉 → ★（二次）**
 - **対話** ＝ 長文の節（Desktop は【1〜7】、LINE は【1〜3】）
 - Phase1 の正本は **JPEG の説明欄（Description）**（DxO と同期）
 
@@ -208,7 +208,9 @@ Works（ユーザー作成・月のみ）
 | C | H3 自動、JPEG Phase1 正、スクリーニングカード、LINE 統合、Review カード省略 |
 | P1+N2 | Works ガイド／失敗の次の一手／フォルダエラー親切化／役割案内／薄い alias 削除／LINE 反応 QR＋DB |
 | P2-1 | 審判語契約・Phase D fixture・H3/反応集計（[`P2_1_PROMPT_IMPROVEMENT_LOOP.md`](P2_1_PROMPT_IMPROVEMENT_LOOP.md)） |
+| P2-2 Phase 1 | Console 言葉（選ぶ／対話ノート作成、残す・見返す・言葉にする） |
+| P2-2 Phase 2 | カードは写真→言葉→★二次。CRITIQUE_SUMMARY は見所＋次へ（[`P2_2_PHASE2_CARD.md`](P2_2_PHASE2_CARD.md)） |
 
 **まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)。
 
-**次の代表例:** P2-2（憲章合意済み → [`P2_2_PUBLIC_UX_CHARTER.md`](P2_2_PUBLIC_UX_CHARTER.md)。言葉→カード→Guided UI）。
+**次の代表例:** P2-2 Phase 3（Guided UI の情報設計・5画面以内）。憲章: [`P2_2_PUBLIC_UX_CHARTER.md`](P2_2_PUBLIC_UX_CHARTER.md)。

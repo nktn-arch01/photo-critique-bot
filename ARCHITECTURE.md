@@ -74,7 +74,7 @@
 - `ai_vision.py`: Vision API アダプタ層。`openai` / `gemini` を環境変数・モデル名で差し替え可能。`system_prompt` で伴走者ロールを渡す。
 - `critique_engine.py`: 2段階分離生成のオーケストレーション。デスクトップは `generate_critique_openai`、LINE は `generate_critique_for_line`（本番は compact/full とも OpenAI）。`lens` 引数（既定 `self`）。`phase1_override` で JPEG 埋め込み Phase1 を注入可。
 - `card_theme.py`: カード背景テーマ（`dark` / `light`）の識別子・パレット・正規化の**単一ソース**。
-- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。Desktop / LINE 共通。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 最大3行・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。SCORES フォントは SUMMARY と同サイズ。カード上のスコアは★のみ（`(n/5)` は出さない。ログは星＋数字）。免責文は出さない。
+- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。Desktop / LINE 共通。全周 50px 余白。読み順は写真 → TITLE → SUMMARY → CRITIQUE_SUMMARY（全幅・主役の言葉）→ SCORES（小さく二次、右下ロゴ帯）。写真領域は文字帯を除いて最大化（縦横比維持）。カード上のスコアは★のみ（`(n/5)` は出さない。ログは星＋数字）。免責文は出さない。
 - `scanner.py`: **【中央メタデータ解析エンジン】** 撮影 EXIF（exiftool→PIL）と講評用メタの単一入口。**Rating / user_intent は JPEG 正**（`iptc_rating_io`）。`.dop` は空欄時フォールバックのみ（正規表現＋Lua）。
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
 - `docs/PHASE_A_CHECKLIST.md`: Lumina Notes 感性対話刷新の Phase A ゲート（v1 / v1.1 / 将来）。
@@ -123,6 +123,7 @@
 - `prompt_contracts.py`: **【プロンプト契約】** 審判語禁止・時間帯禁止・人物分岐のオフライン回帰正本（P2-1 Q2/Q3）。
 - `scripts/summarize_h3_deltas.py` / `scripts/summarize_user_reactions.py`: H3 差分・LINE 反応の集計（Q5。自動書き換えなし）。手順は `docs/P2_1_PROMPT_IMPROVEMENT_LOOP.md`。
 - `docs/P2_2_PUBLIC_UX_CHARTER.md`: **【公開 UX 憲章】** ブランドブック準拠の体験合意（Guided／Console／LINE、ローカル Web）。`docs/brand/LuminaNotes_BrandBook_02.pdf`。
+- `docs/P2_2_PHASE2_CARD.md`: **【P2-2 Phase 2】** カード読み順（言葉が先・★二次）と CRITIQUE_SUMMARY の2拍。
 - `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`)。`card_theme` と `critique_logs.user_reaction` を永続化。列追加 SQL: `supabase/add_card_theme.sql` / `supabase/add_user_reaction.sql`。
 - `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
 
