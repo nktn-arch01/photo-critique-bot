@@ -8,5 +8,7 @@ API／JPEG なしで、人物分岐・時間帯禁止の**再発防止**を固�
 | `no_person_pass_phase1.txt` | 人物なし → PASS（観る者の視線は可） |
 | `no_person_fail_anthropomorph.txt` | 人物なしへの擬人化 → FAIL |
 | `time_ban_fail_phase1.txt` | 時間帯ラベル → FAIL |
+| `critique_summary_q4_pass.txt` | 見所＋次の開き（定型語尾なし） → PASS |
+| `critique_summary_template_fail.txt` | 「たのではないでしょうか」定型 → FAIL |
 
 実 API 再評価は従来どおり `scripts/phase_d_eval.py`（画像を `eval/phase_d/images/` に配置）。

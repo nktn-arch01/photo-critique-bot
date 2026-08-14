@@ -519,3 +519,29 @@ C2: PASS（2026-08-12・オーナー・LINE 実機）
 ・LuminaNotesConsole.command 終了時に Terminal ウィンドウを閉じる
 ```
 
+---
+
+## 14. P2-2 Phase 2（カード主役化・2026-08-14）
+
+詳細: [`P2_2_PHASE2_CARD.md`](P2_2_PHASE2_CARD.md)
+
+```bash
+cd ~/photo-critique-bot
+git fetch origin
+git checkout cursor/p2-2-phase2-card-f193
+git pull origin cursor/p2-2-phase2-card-f193
+python3 test_offline_suite.py
+```
+
+見本カード（API 不要）は `docs/P2_2_PHASE2_CARD.md` のコピペで `~/Desktop/LuminaPhase2Cards/` に出ます。
+
+| # | 確認 | 結果 |
+|---|------|------|
+| P2a | `python3 test_offline_suite.py` が OK | |
+| P2b | 写真がカードの大半を占める | |
+| P2c | タイトルとキャッチの**下**に長めの言葉がある | |
+| P2d | ★5行は一番下で、タイトルより小さい | |
+| P2e | ダーク／ライトとも文字が読める | |
+
+マージ後は `git checkout main && git pull origin main --ff-only` でも同じ確認でよい。
+

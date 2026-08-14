@@ -55,8 +55,9 @@ def get_card_palette(theme: str | None) -> dict:
             "bg": (255, 255, 255),
             "title": (20, 20, 24),
             "summary": (70, 75, 85),
-            "score_label": (40, 45, 55),
-            "stars": (210, 150, 0),
+            "score_label": (90, 95, 105),
+            # ★ は二次（Q1）。Gold は残すが彩度を落とす
+            "stars": (168, 130, 40),
             "score_val": (90, 95, 105),
             "body": (30, 35, 45),
             "line": (200, 205, 215),
@@ -67,10 +68,11 @@ def get_card_palette(theme: str | None) -> dict:
         "bg": (24, 25, 28),
         "title": (255, 255, 255),
         "summary": (180, 185, 195),
-        "score_label": (200, 205, 215),
-        "stars": (255, 190, 0),
+        "score_label": (140, 145, 155),
+        "stars": (168, 148, 88),
         "score_val": (160, 165, 175),
-        "body": (220, 225, 235),
+        # Ivory 寄りの本文＝言葉を残った光として読む
+        "body": (236, 230, 214),
         "line": (60, 64, 72),
         "logo_outline": (70, 74, 82),
     }

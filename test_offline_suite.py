@@ -29,10 +29,14 @@ from generate_critique_card import (
     CARD_HEIGHT,
     CARD_MARGIN,
     CARD_WIDTH,
+    CRITIQUE_FONT_SIZE,
     LOGO_SIZE,
     LOGO_TEXT_GAP,
+    SCORE_FONT_SIZE,
     SCORE_ROW_HEIGHT,
+    SUMMARY_FONT_SIZE,
     create_critique_card,
+    plan_card_layout,
     _fixed_text_block_height,
 )
 from line_messaging import split_full_critique_for_line
@@ -48,7 +52,7 @@ CARD_SAMPLE = """
 ・物語の気配 (Signs of the Story)      : ★★★☆☆ (3/5)
 ・表現の意図 (Intent of Expression) : ★★★★★ (5/5)
 ・感性の兆し (Signs of Sensibility)   : ★★★★☆ (4/5)
-■CRITIQUE_SUMMARY: 境界のきらめきと線の陰影が、見所として立ち上がる。好奇心を誘う一枚です。
+■CRITIQUE_SUMMARY: 境界のきらめきと線の陰影が、見所として立ち上がる。次に同じ反射に出会ったら、割れ目のどちらを残すかだけ決めてみる。
 """
 
 PHASE1_SAMPLE = """
@@ -137,9 +141,13 @@ def test_self_lens_prompts():
     assert "花の佇まい" in p1  # 禁止例がプロンプトに残っていること
     assert "一文目" in p1
     assert "撮影日時" not in p1  # Phase1 に時計を渡さない（規則5）
-    # N-03: CRITIQUE_SUMMARY プロンプトを 20260808 版へ戻す
-    assert "効果的な見所を主体に、読者の好奇心を煽る文章" in p1
-    assert "あなたは〇〇に惹かれたのでは" not in p1
+    # Q4: 見所＋もう一度見る／次のシャッター。N-03 定型は禁止として残す
+    assert "見所" in p1
+    assert "もう一度見る" in p1
+    assert "次のシャッター" in p1
+    assert "たのではないでしょうか" in p1  # 禁止例として残っていること
+    assert "あなたは〇〇に惹かれたのでは" in p1  # 禁止例として残っていること
+    assert "効果的な見所を主体に、読者の好奇心を煽る文章" not in p1
     p2 = build_phase2_prompt(
         ctx, "■TITLE: t\n■SCORES:\n・眼差の輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)"
     )
@@ -514,23 +522,26 @@ def test_critique_summary_short_keeps_fixed_image_area():
 def test_n01_no_disclaimer_on_card_and_lens():
     """N-01: 免責文はレンズ空・カードに「目盛り」文言を描かない。"""
     assert get_lens().score_disclaimer == ""
-    # 免責を描かなくなったぶん、文字ブロックはロゴ＋スコアだけで免責行分短い
-    # （以前は +28。厳密値より「免責行を含まない」ことだけ保証）
-    h = _fixed_text_block_height()
-    assert h == (
-        1
-        + 18  # title line
-        + 50
-        + 38
-        + 4
-        + 1
-        + 18  # score line
-        + 5 * SCORE_ROW_HEIGHT
-        + 12
-        + 1
-        + 18  # critique line
-        + LOGO_SIZE
-    )
+    layout = plan_card_layout()
+    assert layout.text_height == _fixed_text_block_height()
+    assert layout.text_height > LOGO_SIZE
+    # 免責行を高さに足していない（空なら DISCLAIMER 分が無い）
+    from generate_critique_card import DISCLAIMER_LINE_HEIGHT
+
+    with_disclaimer_extra = layout.text_height + DISCLAIMER_LINE_HEIGHT
+    assert _fixed_text_block_height() < with_disclaimer_extra
+
+
+def test_p2_2_card_words_before_stars():
+    """U1/Q1: 言葉が★より上・大きく、写真が文字帯より広い。"""
+    assert SCORE_FONT_SIZE < SUMMARY_FONT_SIZE
+    assert CRITIQUE_FONT_SIZE >= SUMMARY_FONT_SIZE
+    assert SCORE_FONT_SIZE < CRITIQUE_FONT_SIZE
+    layout = plan_card_layout()
+    assert layout.summary_y < layout.critique_y < layout.scores_y
+    assert layout.critique_max_w > layout.score_text_max_w
+    assert layout.img_max_h > layout.text_height
+    assert SCORE_ROW_HEIGHT < 36
 
 
 def test_n04_score_label_fits_before_stars():
@@ -2305,6 +2316,10 @@ def test_prompt_contracts_judge_vocab_and_time_ban_alignment():
     assert not errors, errors
     time_errors = check_phase1_time_ban_in_prompt(p1)
     assert not time_errors, time_errors
+    from prompt_contracts import check_phase1_critique_summary_contract
+
+    q4_errors = check_phase1_critique_summary_contract(p1)
+    assert not q4_errors, q4_errors
 
 
 def test_phase_d_offline_fixtures_person_and_time():
@@ -2327,6 +2342,13 @@ def test_phase_d_offline_fixtures_person_and_time():
     assert not check_output_time_ban(time_fail)["pass"]
     assert check_output_time_ban(person)["pass"]
     assert check_output_time_ban(no_ok)["pass"]
+
+    from prompt_contracts import check_output_critique_summary_beats
+
+    q4_ok = (root / "critique_summary_q4_pass.txt").read_text(encoding="utf-8")
+    q4_fail = (root / "critique_summary_template_fail.txt").read_text(encoding="utf-8")
+    assert check_output_critique_summary_beats(q4_ok)["pass"]
+    assert not check_output_critique_summary_beats(q4_fail)["pass"]
 
 
 def test_q5_summarize_h3_and_reactions_scripts():
@@ -2520,6 +2542,11 @@ def run_all():
     test_low_priority_works_subdir_hint()
     test_works_review_selection_summarizes_sooc_skipped()
     test_antenna_prompt_avoids_judge_vocabulary()
+    test_console_ui_copy_phase1_labels()
+    test_prompt_contracts_judge_vocab_and_time_ban_alignment()
+    test_phase_d_offline_fixtures_person_and_time()
+    test_q5_summarize_h3_and_reactions_scripts()
+    test_p2_2_card_words_before_stars()
     test_low_priority_prompt_pick_skips_sentinel_nashi()
     test_dry_run_session_rejects_record_post_h3()
     print("test_offline_suite: OK")
