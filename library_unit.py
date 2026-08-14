@@ -341,7 +341,7 @@ def works_placement_guide_text() -> str:
     """Console 常時表示用: オリジナル → Works の置き方（短文）。"""
     return (
         "Works への置き方（アプリはコピーしません）:\n"
-        "  オリジナルで選ぶ → DxO で直す／現像 → "
+        "  オリジナルで残す候補に星を付ける → DxO で直す／現像 → "
         "{stem}_dev.jpg を Works 月フォルダ（例: ~/2026/202606）直下へ\n"
         "  RAW は置かない。撮って出し .jpg だけでも可（_dev があれば優先）"
     )

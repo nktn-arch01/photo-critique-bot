@@ -1,9 +1,8 @@
-"""Lumina Notes Console（スクリーニング + Lumina Review の統合 GUI）.
+"""Lumina Notes Console（開発確認用: 選ぶ + 対話ノート作成）.
 
 講評バッチ ``app_gui.py`` とは別ウィンドウ・別導線。
-- タブ「スクリーニング」: 月／イベントで M1→M2→M3、任意で「カード」生成。H3 は終了時自動
-- タブ「Lumina Review」: Works 月フォルダへカード／ノート／ログ（コピーなし・単独実行可）
-- 進捗・中断・監査ログ。両タブは必須の前後関係ではない
+公開向け Guided UI とは別に、段チェックや詳細説明を残す。
+表層コピーは ``console_ui_copy``（P2-2 Phase 1）。
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
+import console_ui_copy as copy
 from delta_log import (
     DryRunSessionError,
     list_pending_h3_sessions,
@@ -32,7 +32,6 @@ from library_unit import (
     plan_screening_units,
     resolve_session_for_unit,
     unit_from_dir,
-    works_placement_guide_text,
 )
 from ai_vision import get_openai_client
 from screening_pipeline import (
@@ -110,7 +109,7 @@ def _set_action_button_enabled(btn: ttk.Button, enabled: bool) -> None:
 class ShortlistApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Lumina Notes Console")
+        self.root.title(copy.WINDOW_TITLE)
         self.root.geometry("720x820")
         self.root.minsize(640, 700)
         try:
@@ -174,8 +173,8 @@ class ShortlistApp:
 
         self.tab_screening = ttk.Frame(self.notebook, padding="8")
         self.tab_review = ttk.Frame(self.notebook, padding="8")
-        self.notebook.add(self.tab_screening, text=" スクリーニング ")
-        self.notebook.add(self.tab_review, text=" Lumina Review ")
+        self.notebook.add(self.tab_screening, text=copy.TAB_SELECT)
+        self.notebook.add(self.tab_review, text=copy.TAB_NOTES)
 
         self._build_screening_tab(self.tab_screening)
         self._build_review_tab(self.tab_review)
@@ -186,23 +185,15 @@ class ShortlistApp:
             self.notebook.select(self.tab_review)
 
     def _build_screening_tab(self, parent: ttk.Frame) -> None:
-        info = ttk.LabelFrame(parent, text=" このタブでできること ", padding="8")
+        info = ttk.LabelFrame(parent, text=copy.FRAME_HELP, padding="8")
         info.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(
             info,
-            text=(
-                "流れ（このタブだけ）: 候補付け →（任意）カード → 閉じると DxO 差分を自動記録\n"
-                "Lumina Review は隣のタブ（独立・必須ではありません）\n\n"
-                "オリジナルの月／イベントを選び、候補の Rating を付けます。\n"
-                "月の配下イベントは既定で対象外。必要なときだけ下のチェックをON。\n\n"
-                "Rating（パイプライン状態。DxO の「出来の星」とは別）:\n"
-                "  0=除外 / 1=M1 / 2=M2 / 3=余白 / 4=上位\n\n"
-                + works_placement_guide_text()
-            ),
+            text=copy.help_select_text(),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
 
-        folder = ttk.LabelFrame(parent, text=" 対象フォルダ ", padding="10")
+        folder = ttk.LabelFrame(parent, text=copy.FRAME_FOLDER, padding="10")
         folder.pack(fill=tk.X, pady=(0, 10))
         self.dir_var = tk.StringVar(value=self.config.get("shortlist_last_dir", ""))
         self.dir_entry = ttk.Entry(folder, textvariable=self.dir_var, font=("Helvetica", 11))
@@ -210,7 +201,7 @@ class ShortlistApp:
         self.btn_browse = ttk.Button(folder, text=" 参照... ", command=self.browse_folder)
         self.btn_browse.pack(side=tk.RIGHT)
 
-        opts = ttk.LabelFrame(parent, text=" 実行オプション ", padding="8")
+        opts = ttk.LabelFrame(parent, text=copy.FRAME_PROCESS, padding="8")
         opts.pack(fill=tk.X, pady=(0, 10))
         stage_row = ttk.Frame(opts)
         stage_row.pack(fill=tk.X)
@@ -219,15 +210,21 @@ class ShortlistApp:
         self.var_m3 = tk.BooleanVar(value=True)
         self.var_dry = tk.BooleanVar(value=False)
         self.var_include_events = tk.BooleanVar(value=False)
-        ttk.Checkbutton(stage_row, text="M1 機械", variable=self.var_m1).pack(side=tk.LEFT, padx=(0, 12))
-        ttk.Checkbutton(stage_row, text="M2 アンテナ", variable=self.var_m2).pack(side=tk.LEFT, padx=(0, 12))
-        ttk.Checkbutton(stage_row, text="M3 多様性", variable=self.var_m3).pack(side=tk.LEFT, padx=(0, 12))
-        ttk.Checkbutton(opts, text="ドライラン（JPEGへ書かない／監査は残す）", variable=self.var_dry).pack(
+        ttk.Checkbutton(stage_row, text=copy.STAGE_M1, variable=self.var_m1).pack(
+            side=tk.LEFT, padx=(0, 12)
+        )
+        ttk.Checkbutton(stage_row, text=copy.STAGE_M2, variable=self.var_m2).pack(
+            side=tk.LEFT, padx=(0, 12)
+        )
+        ttk.Checkbutton(stage_row, text=copy.STAGE_M3, variable=self.var_m3).pack(
+            side=tk.LEFT, padx=(0, 12)
+        )
+        ttk.Checkbutton(opts, text=copy.DRY_RUN, variable=self.var_dry).pack(
             anchor=tk.W, pady=(6, 0)
         )
         self.chk_include_events = ttk.Checkbutton(
             opts,
-            text="配下イベントも順に実行（月フォルダのとき）",
+            text="配下イベントも順に実行（月フォルダのとき・開発確認）",
             variable=self.var_include_events,
         )
         self.chk_include_events.pack(anchor=tk.W, pady=(4, 0))
@@ -238,27 +235,23 @@ class ShortlistApp:
         actions.pack(fill=tk.X, pady=(0, 10))
         self.btn_start = _action_button(
             actions,
-            text="スクリーニングを開始",
+            text=copy.BTN_START_SELECT,
             command=self.start_batch_thread,
         )
         self.btn_start.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        h3 = ttk.LabelFrame(parent, text=" 監査・カード ", padding="8")
+        h3 = ttk.LabelFrame(parent, text=copy.FRAME_CARDS, padding="8")
         h3.pack(fill=tk.X)
         ttk.Label(
             h3,
-            text=(
-                "DxO で Rating を直したあとの差分は、ウィンドウを閉じるときに自動で残します"
-                "（手動操作は不要）。\n"
-                "「カード」は Rating 3/4 の JPEG に Phase1 カードを付け、説明欄へ TITLE 等を書き込みます。"
-            ),
+            text=copy.help_cards_text(),
             wraplength=640,
             justify=tk.LEFT,
         ).pack(anchor=tk.W, pady=(0, 6))
         h3_btns = ttk.Frame(h3)
         h3_btns.pack(fill=tk.X)
         self.btn_screening_card = _action_button(
-            h3_btns, text="カード生成", command=self.start_screening_card_thread, small=True
+            h3_btns, text=copy.BTN_MAKE_CARD, command=self.start_screening_card_thread, small=True
         )
         self.btn_screening_card.pack(side=tk.LEFT)
         self.card_force_var = tk.BooleanVar(value=False)
@@ -281,24 +274,15 @@ class ShortlistApp:
             self._refresh_event_option(None)
 
     def _build_review_tab(self, parent: ttk.Frame) -> None:
-        info = ttk.LabelFrame(parent, text=" このタブでできること ", padding="8")
+        info = ttk.LabelFrame(parent, text=copy.FRAME_HELP, padding="8")
         info.pack(fill=tk.X, pady=(0, 10))
         ttk.Label(
             info,
-            text=(
-                "Works 月フォルダの JPEG に対話ノート／カードを付けます。\n"
-                "常にカード＋詳細ノート（【1】〜【7】）。\n"
-                "説明に TITLE 等があるコマはカードを作り直しません（ノートは作成）。\n"
-                "スクリーニング無しでも、ここに画像があれば単独で実行できます。\n"
-                "ファイルのコピーはしません。\n\n"
-                "Works は YYYYMM のみ（例: ~/2026/202606）。\n"
-                "同一コマは {stem}_dev.jpg を優先（撮って出し除外は確認時に表示）。\n\n"
-                + works_placement_guide_text()
-            ),
+            text=copy.help_notes_text(),
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
 
-        works = ttk.LabelFrame(parent, text=" Works 月フォルダ ", padding="8")
+        works = ttk.LabelFrame(parent, text=copy.FRAME_FOLDER, padding="8")
         works.pack(fill=tk.X, pady=(0, 10))
         works_row = ttk.Frame(works)
         works_row.pack(fill=tk.X)
@@ -322,7 +306,7 @@ class ShortlistApp:
 
         theme_row = ttk.Frame(works)
         theme_row.pack(fill=tk.X, pady=(6, 0))
-        ttk.Label(theme_row, text="カード背景:").pack(side=tk.LEFT)
+        ttk.Label(theme_row, text="対話カード背景:").pack(side=tk.LEFT)
         self.trace_theme_var = tk.StringVar(
             value=normalize_card_theme(self.config.get("card_theme", DEFAULT_CARD_THEME))
         )
@@ -337,7 +321,7 @@ class ShortlistApp:
         works_btns.pack(fill=tk.X, pady=(0, 4))
         self.btn_trace = _action_button(
             works_btns,
-            text="Lumina Review を開始",
+            text=copy.BTN_START_NOTES,
             command=self.start_trace_thread,
         )
         self.btn_trace.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -360,7 +344,7 @@ class ShortlistApp:
         self.progress = ttk.Progressbar(prog, mode="indeterminate")
         self.progress.pack(fill=tk.X, pady=(5, 0))
 
-        log_frame = ttk.LabelFrame(parent, text=" 実行ログ（両タブ共通） ", padding="10")
+        log_frame = ttk.LabelFrame(parent, text=copy.FRAME_LOG, padding="10")
         log_frame.pack(fill=tk.BOTH, expand=True)
         self.log_text = tk.Text(
             log_frame, wrap=tk.WORD, font=("Menlo", 10), state=tk.DISABLED, bg="#1e1e1e", fg="#d4d4d4"
@@ -580,7 +564,9 @@ class ShortlistApp:
             messagebox.showerror("フォルダ名エラー", format_screening_folder_error(target))
             return
         if not (self.var_m1.get() or self.var_m2.get() or self.var_m3.get()):
-            messagebox.showwarning("警告", "M1 / M2 / M3 のいずれかを選んでください。")
+            messagebox.showwarning(
+                "警告", "残す / 見返す / 言葉にする のいずれかを選んでください。"
+            )
             return
 
         needs_api = bool(self.var_m2.get() or self.var_m3.get())
@@ -631,14 +617,14 @@ class ShortlistApp:
             scope_note = ""
 
         if not messagebox.askyesno(
-            "実行確認",
+            copy.CONFIRM_SELECT_TITLE,
             f"対象: {unit.kind} / {unit.unit_id}"
             + (f"（機種 {unit.camera_code}）" if unit.camera_code else "")
             + f"\nJPEG: {jpeg_total} 枚"
             + scope_note
-            + f"\n段: {', '.join(stages)}\n"
-            f"書き込み: {'しない（ドライラン）' if opts['dry'] else 'する'}\n\n"
-            "スクリーニングを開始しますか？",
+            + f"\n選ぶプロセス: {copy.format_stage_list(stages)}\n"
+            f"書き込み: {'しない（試行）' if opts['dry'] else 'する'}\n\n"
+            f"{copy.CONFIRM_SELECT_Q}",
         ):
             return
 
@@ -733,46 +719,47 @@ class ShortlistApp:
                 planned = len(unit_paths)
                 if overall == "completed":
                     if opts["dry"]:
+                        title = copy.DONE_DRY
                         next_steps = (
-                            "今回はドライランのため JPEG には書いていません。\n"
-                            "書き込みありで再実行してください。"
-                            "（ドライラン分は終了時の自動記録対象外です）"
+                            "JPEG には書いていません。\n"
+                            "本番で残すときは試行をOFFでもう一度。"
+                            "（試行分は終了時の自動記録対象外です）"
                         )
                     else:
+                        title = copy.DONE_SELECT
                         next_steps = (
-                            "DxO で Rating を直したら、このままコンソールを閉じてください"
-                            "（修正後の差分は自動記録されます）。"
+                            "DxO で星を直したら、このままコンソールを閉じてください"
+                            "（差分は自動記録されます）。"
                             f"{event_h3_note}\n"
-                            "任意: 同じタブの「カード生成」で Rating 3/4 にカードを付けられます。\n"
-                            "Lumina Review は別タブです（Works に画像があれば単独で可）。"
+                            "任意: 「対話カード作成」で星 3／4 にカードを付けられます。\n"
+                            "「対話ノート作成」は隣のタブです（Works に画像があれば単独で可）。"
                         )
-                    title = "完了"
                     msg = (
-                        f"スクリーニングが完了しました。\n\n"
+                        f"{title}\n\n"
                         f"単位: {units_done}/{planned} / JPEG: {jpeg_sum} 枚\n"
                         f"対象フォルダのセッション表示: 月側を優先\n"
                         f"最後に処理したセッション: {session_name}\n\n"
                         f"{next_steps}"
                     )
                 elif overall == "cancelled":
-                    title = "中止"
+                    title = copy.DONE_CANCEL
                     msg = (
-                        f"スクリーニングを中止しました。\n\n"
+                        f"{title}\n\n"
                         f"処理した単位: {units_done}/{planned}\n"
                         f"JPEG: {jpeg_sum} 枚\n"
                         f"最後に処理したセッション: {session_name}\n\n"
-                        "次の一手: 途中まで書いた Rating はそのまま残っています。"
+                        "途中まで付けた星はそのまま残っています。"
                         "続きは同じフォルダで再実行できます。"
                     )
                 else:
-                    title = "未完了"
+                    title = copy.DONE_INCOMPLETE
                     msg = (
-                        f"スクリーニングは完了しませんでした（{overall}）。\n\n"
+                        f"{title}（{overall}）\n\n"
                         f"単位: {units_done}/{planned} / JPEG: {jpeg_sum} 枚\n"
                         f"最後に処理したセッション: {session_name}\n"
                         f"エラー: {fail_err or '（詳細はログを確認）'}\n\n"
-                        "次の一手: ログのエラーを確認し、同じ設定で再実行してください。"
-                        "切り分けはドライラン（JPEGへ書かない）が便利です。"
+                        "実行ログのエラーを確認し、同じ設定で再実行してください。"
+                        "切り分けは試行（JPEGには記録しない）が便利です。"
                     )
                 messagebox.showinfo(title, msg)
 
@@ -847,15 +834,16 @@ class ShortlistApp:
                 f"（{names}{more}）"
             )
         if not messagebox.askyesno(
-            "Lumina Review の確認",
+            copy.CONFIRM_NOTES_TITLE,
             f"Works: {works}\n"
             f"対象: {len(targets)} 枚"
             f"（_dev {selection['dev_count']}／撮って出し {selection['sooc_count']}）"
             f"{skip_note}\n"
-            f"出力: カード＋詳細ノート（【1】〜【7】）\n"
+            f"出力: 対話カード＋詳細ノート（【1】〜【7】）\n"
             f"テーマ: {opts['theme']} / 上書き: {'する' if opts['force'] else 'しない'}\n\n"
             "説明に TITLE 等があるコマはカードを作り直しません。\n"
-            "コピーはしません。対話ノートを付けますか？",
+            "コピーはしません。\n\n"
+            f"{copy.CONFIRM_NOTES_Q}",
         ):
             return
 
@@ -899,22 +887,22 @@ class ShortlistApp:
             self.log("=" * 48)
 
             def _done() -> None:
-                self.status_label.config(text=f"Lumina Review {result.status}")
+                self.status_label.config(text=f"対話ノート {result.status}")
                 status = result.status or "unknown"
                 err_block = summarize_review_errors(result)
                 err_note = f"\n\nエラー詳細:\n{err_block}" if err_block else ""
                 if status == "completed":
                     msg = (
-                        "対話痕跡ができました。\n\n"
+                        f"{copy.DONE_NOTES}\n\n"
                         f"対象: {result.targets_found} 枚\n"
                         f"新規: {result.processed}\n"
                         f"スキップ: {result.skipped}\n"
                         f"エラー: {result.errors}"
                         f"{err_note}\n\n"
                         f"出力先:\n{works}\n\n"
-                        "Works フォルダを開きますか？"
+                        "もう一度写真を見に、Works フォルダを開きますか？"
                     )
-                    if messagebox.askyesno("Lumina Review", msg):
+                    if messagebox.askyesno(copy.DONE_NOTES, msg):
                         try:
                             open_in_file_manager(works)
                         except Exception as e:
@@ -922,22 +910,22 @@ class ShortlistApp:
                             messagebox.showwarning("注意", f"フォルダを開けませんでした:\n{e}")
                 elif status == "cancelled":
                     msg = (
-                        "Lumina Review を中止しました。\n\n"
+                        f"{copy.DONE_CANCEL}\n\n"
                         f"新規: {result.processed} / スキップ: {result.skipped}\n"
                         f"エラー: {result.errors}"
                         f"{err_note}\n\n"
                         f"出力先:\n{works}"
                     )
-                    messagebox.showinfo("Lumina Review", msg)
+                    messagebox.showinfo(copy.DONE_CANCEL, msg)
                 else:
                     msg = (
-                        f"Lumina Review は完了しませんでした（{status}）。\n\n"
+                        f"{copy.DONE_INCOMPLETE}（{status}）\n\n"
                         f"新規: {result.processed}\n"
                         f"エラー: {result.errors}"
                         f"{err_note}\n\n"
                         f"出力先:\n{works}"
                     )
-                    messagebox.showinfo("Lumina Review", msg)
+                    messagebox.showinfo(copy.DONE_INCOMPLETE, msg)
 
             self._ui(_done)
         except Exception as e:
@@ -965,13 +953,13 @@ class ShortlistApp:
         force = bool(self.card_force_var.get())
         theme = normalize_card_theme(self.config.get("card_theme", DEFAULT_CARD_THEME))
         if not messagebox.askyesno(
-            "カード生成",
+            copy.CONFIRM_CARDS_TITLE,
             f"対象フォルダ:\n{target}\n\n"
-            "Rating 3 または 4 の JPEG にカード（Phase1）を付け、\n"
+            "星の数 3 または 4 の画像について、タイトルと印象を記した対話カードを付け、\n"
             "説明欄へ TITLE / SUMMARY / SCORES / CRITIQUE_SUMMARY を書き込みます。\n"
             f"処理済み上書き: {'する' if force else 'しない'}\n"
             f"カード背景: {theme}\n\n"
-            "開始しますか？",
+            f"{copy.CONFIRM_CARDS_Q}",
         ):
             return
 
@@ -985,7 +973,7 @@ class ShortlistApp:
         self.dir_entry.config(state=tk.DISABLED)
         self.works_entry.config(state=tk.DISABLED)
         self.progress.start(12)
-        self._set_status("カード生成中…")
+        self._set_status("対話カード作成中…")
         threading.Thread(
             target=self._run_screening_cards,
             args=(target, force, theme),
@@ -1003,7 +991,7 @@ class ShortlistApp:
                 on_progress=on_progress,
             )
             self.log("=" * 48)
-            self.log(f"スクリーニング カード生成開始: {target}")
+            self.log(f"対話カード作成開始: {target}")
             result = self.card_runner.run_on_dir(target)
             self.log(
                 f"status={result.status} processed={result.processed} "
@@ -1012,15 +1000,16 @@ class ShortlistApp:
             self.log("=" * 48)
 
             def _done() -> None:
-                self.status_label.config(text=f"カード生成 {result.status}")
+                self.status_label.config(text=f"対話カード {result.status}")
                 messagebox.showinfo(
-                    "カード生成",
+                    copy.DONE_CARDS,
+                    f"{copy.DONE_CARDS}\n\n"
                     f"ステータス: {result.status}\n"
                     f"新規: {result.processed}\n"
                     f"スキップ: {result.skipped}\n"
                     f"エラー: {result.errors}\n\n"
                     f"カード出力: {target.name}Luminaカード/\n"
-                    "JPEG 説明欄にも TITLE 等が書き込まれます（DxO で一覧可）。",
+                    "JPEG 説明欄にも書いてあります（DxO で見返せます）。",
                 )
 
             self._ui(_done)
@@ -1043,8 +1032,8 @@ class ShortlistApp:
         if not sess.is_dir():
             messagebox.showinfo(
                 "監査フォルダなし",
-                "まだスクリーニングセッションがありません。\n"
-                "先にスクリーニングを実行すると、次の場所に作られます。\n\n"
+                "まだ選ぶプロセスのセッションがありません。\n"
+                "先に選ぶプロセスを実行すると、次の場所に作られます。\n\n"
                 f"{sess}",
             )
             return
