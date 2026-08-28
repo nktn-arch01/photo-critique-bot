@@ -18,7 +18,8 @@
 
   <main id="screen-choose" class="screen active">
     <section class="drop-zone" id="drop-zone">
-      <p>写真をドラッグ＆ドロップ</p>
+      <img id="photo-preview" class="photo-preview" alt="選んだ写真" hidden />
+      <p class="drop-hint">写真をドラッグ＆ドロップ</p>
       <button type="button" id="pick-file">写真を選ぶ</button>
       <input type="file" id="file-input" accept="image/*" hidden />
     </section>
@@ -38,6 +39,7 @@
   </main>
 
   <main id="screen-read" class="screen" hidden>
+    <img id="read-photo-preview" class="photo-preview read-photo" alt="選んだ写真" hidden />
     <div id="read-skeleton" class="skeleton">いま写真を読んでいます…</div>
     <article id="read-content" hidden></article>
     <div class="actions">
@@ -66,6 +68,6 @@
     </div>
   </main>
 
-  <script src="/static/guided.js"></script>
+  <script src="/static/guided.js?v=2"></script>
 </body>
 </html>

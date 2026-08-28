@@ -32,9 +32,33 @@ body {
 .drop-zone {
   border: 2px dashed var(--muted);
   border-radius: 8px;
-  padding: 2rem 1rem;
+  padding: 1rem;
   text-align: center;
   background: #fff;
+  margin-bottom: 1rem;
+}
+
+.drop-zone.dragover {
+  border-color: var(--gold);
+  background: #fffef8;
+}
+
+.drop-zone.has-photo .drop-hint {
+  display: none;
+}
+
+.photo-preview {
+  display: block;
+  max-width: 100%;
+  max-height: min(60vh, 480px);
+  width: auto;
+  height: auto;
+  margin: 0 auto 0.75rem;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.read-photo {
   margin-bottom: 1rem;
 }
 

@@ -7,10 +7,11 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from ai_vision import prepare_vision_image_bytes
 from guided_metadata import build_guided_api_parameters
 
 APP_ROOT = Path(__file__).resolve().parent
@@ -38,10 +39,18 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
     dest.write_bytes(data)
 
     api_params, metadata, dop_info, meta_block = build_guided_api_parameters(
-        dest, image_id=session_id, geocode=False
+        dest, image_id=session_id, geocode=True
     )
+    preview_path = tmp_dir / "preview.jpg"
+    try:
+        preview_bytes, _ = prepare_vision_image_bytes(dest)
+        preview_path.write_bytes(preview_bytes)
+    except Exception:
+        preview_path = dest
+
     _sessions[session_id] = {
         "path": str(dest),
+        "preview_path": str(preview_path),
         "metadata": metadata,
         "dop_info": dop_info,
         "meta_block": meta_block,
@@ -50,6 +59,7 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
     return JSONResponse(
         {
             "session_id": session_id,
+            "preview_url": f"/api/session/{session_id}/preview",
             "api_parameters": api_params.to_dict(),
             "local_meta_preview": {
                 "file_name": file.filename,
@@ -57,6 +67,17 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
             },
         }
     )
+
+
+@app.get("/api/session/{session_id}/preview")
+def session_preview(session_id: str) -> FileResponse:
+    sess = _sessions.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="session not found")
+    path = Path(sess["preview_path"])
+    if not path.is_file():
+        path = Path(sess["path"])
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @app.get("/")
