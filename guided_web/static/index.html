@@ -59,7 +59,14 @@
   </main>
 
   <main id="screen-reflect" class="screen" hidden>
-    <div id="card-preview" class="card-preview">カードプレビュー（準備中）</div>
+    <div class="card-preview-wrap">
+      <img id="card-preview-img" class="card-preview-img" alt="カードプレビュー" hidden />
+      <p id="card-preview-loading" class="card-preview-loading">カードを準備しています…</p>
+    </div>
+    <p id="reflect-user-note" class="reflect-note" hidden></p>
+    <label class="field">一言（再編集・任意）
+      <textarea id="reflect-note-edit" rows="2"></textarea>
+    </label>
     <fieldset class="field">
       <legend>この写真に対する思い <span class="required">必須</span></legend>
       <div id="user-stars" class="user-stars" role="radiogroup" aria-label="思いの星">
@@ -71,13 +78,21 @@
       </div>
     </fieldset>
     <label class="field">カードの色
-      <select id="card-theme"><option value="default">Ivory</option></select>
+      <select id="card-theme">
+        <option value="dark">ダーク</option>
+        <option value="light">ライト</option>
+      </select>
     </label>
+    <div class="field save-folder-field">
+      <span>保存先</span>
+      <p id="save-folder-path" class="save-folder-path">未選択</p>
+      <button type="button" id="btn-pick-folder" class="secondary">フォルダを選ぶ</button>
+    </div>
     <div class="actions">
       <button type="button" id="btn-export" disabled>Noteに書き出す</button>
     </div>
   </main>
 
-  <script src="/static/guided.js?v=3"></script>
+  <script src="/static/guided.js?v=4"></script>
 </body>
 </html>

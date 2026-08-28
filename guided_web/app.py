@@ -18,6 +18,13 @@ from pydantic import BaseModel, Field
 from ai_vision import prepare_vision_image_bytes
 from guided_metadata import build_guided_api_parameters
 from guided_web.critique_runner import run_phase1, run_phase2
+from guided_web.folder_picker import pick_folder
+from guided_web.settings import (
+    default_suggested_folder,
+    get_save_folder,
+    set_save_folder,
+)
+from guided_web.stock_export import export_guided_session, render_card_preview, critique_text_for_session
 
 APP_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = APP_ROOT / "static"
@@ -31,6 +38,20 @@ _executor = ThreadPoolExecutor(max_workers=2)
 class CritiqueStartBody(BaseModel):
     lens: str = "self"
     user_note: str = Field(default="", max_length=4000)
+
+
+class CardPreviewBody(BaseModel):
+    card_theme: str = "dark"
+
+
+class ExportBody(BaseModel):
+    user_stars: int = Field(ge=1, le=5)
+    card_theme: str = "dark"
+    user_note: str = Field(default="", max_length=4000)
+
+
+class SaveFolderBody(BaseModel):
+    save_folder: str
 
 
 def _critique_public(sess: dict) -> dict[str, Any]:
@@ -110,11 +131,14 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
     _sessions[session_id] = {
         "path": str(dest),
         "preview_path": str(preview_path),
+        "original_filename": file.filename or dest.name,
         "metadata": metadata,
         "dop_info": dop_info,
         "meta_block": meta_block,
         "api_params": api_params.to_dict(),
         "critique": {"status": "idle"},
+        "card_preview_path": None,
+        "card_preview_theme": None,
     }
     return JSONResponse(
         {
@@ -200,6 +224,118 @@ def session_preview(session_id: str) -> FileResponse:
     if not path.is_file():
         path = Path(sess["path"])
     return FileResponse(path, media_type="image/jpeg")
+
+
+@app.get("/api/settings")
+def get_settings() -> JSONResponse:
+    folder = get_save_folder()
+    suggested = default_suggested_folder()
+    return JSONResponse(
+        {
+            "save_folder": str(folder) if folder else None,
+            "suggested_folder": str(suggested),
+        }
+    )
+
+
+@app.post("/api/settings/save-folder")
+def save_folder_setting(body: SaveFolderBody) -> JSONResponse:
+    path = Path(body.save_folder).expanduser()
+    if not path.is_dir():
+        raise HTTPException(status_code=400, detail="folder not found")
+    resolved = set_save_folder(path)
+    return JSONResponse({"save_folder": str(resolved)})
+
+
+@app.post("/api/settings/pick-folder")
+async def pick_save_folder() -> JSONResponse:
+    loop = asyncio.get_running_loop()
+    initial = get_save_folder() or default_suggested_folder()
+    picked = await loop.run_in_executor(_executor, lambda: pick_folder(initial))
+    if picked is None:
+        raise HTTPException(status_code=400, detail="folder not selected")
+    resolved = set_save_folder(picked)
+    return JSONResponse({"save_folder": str(resolved)})
+
+
+@app.post("/api/session/{session_id}/card")
+async def generate_card_preview(session_id: str, body: CardPreviewBody) -> JSONResponse:
+    sess = _sessions.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="session not found")
+    crit = sess.get("critique") or {}
+    if crit.get("status") not in {"complete", "phase2_running"} and not crit.get("phase1_raw"):
+        raise HTTPException(status_code=400, detail="critique not ready")
+
+    tmp_dir = Path(sess["path"]).parent
+    card_path = tmp_dir / "card_preview.png"
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(
+            _executor,
+            lambda: render_card_preview(sess, card_path, card_theme=body.card_theme),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    sess["card_preview_path"] = str(card_path)
+    sess["card_preview_theme"] = body.card_theme
+    return JSONResponse({"card_url": f"/api/session/{session_id}/card/image"})
+
+
+@app.get("/api/session/{session_id}/card/image")
+def session_card_image(session_id: str) -> FileResponse:
+    sess = _sessions.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="session not found")
+    path = sess.get("card_preview_path")
+    if not path or not Path(path).is_file():
+        raise HTTPException(status_code=404, detail="card preview not found")
+    return FileResponse(path, media_type="image/png")
+
+
+@app.post("/api/session/{session_id}/export")
+async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
+    sess = _sessions.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    save_root = get_save_folder()
+    if save_root is None:
+        raise HTTPException(status_code=400, detail="save folder not set")
+
+    crit = sess.get("critique") or {}
+    try:
+        critique_text_for_session(sess)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    loop = asyncio.get_running_loop()
+    try:
+        export_dir = await loop.run_in_executor(
+            _executor,
+            lambda: export_guided_session(
+                sess,
+                save_root=save_root,
+                user_stars=body.user_stars,
+                card_theme=body.card_theme,
+                user_note=body.user_note,
+            ),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return JSONResponse(
+        {
+            "export_path": str(export_dir),
+            "files": {
+                "photo": str(export_dir / "photo.jpg"),
+                "card": str(export_dir / "card.png"),
+                "note": str(export_dir / "note.md"),
+                "session": str(export_dir / "session.json"),
+            },
+        }
+    )
 
 
 @app.get("/")

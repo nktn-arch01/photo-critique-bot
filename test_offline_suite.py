@@ -2581,6 +2581,80 @@ def test_guided_body_sections_split():
     assert secs[1]["id"] == "2"
 
 
+def test_guided_stock_export_writes_files():
+    import json
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+
+    from guided_web.stock_export import export_guided_session
+
+    td = Path(tempfile.mkdtemp(prefix="guided_export_"))
+    try:
+        jpeg = td / "sample.jpg"
+        Image.new("RGB", (200, 150), (80, 90, 100)).save(jpeg, "JPEG", quality=90)
+        session = {
+            "path": str(jpeg),
+            "preview_path": str(jpeg),
+            "original_filename": "sample.jpg",
+            "meta_block": "=== メタデータ ===\nテスト",
+            "api_params": {"image": {"image_id": "test123"}},
+            "critique": {
+                "lens": "self",
+                "phase1_raw": PHASE1_SAMPLE,
+            },
+        }
+        save_root = td / "stock"
+        out = export_guided_session(
+            session,
+            save_root=save_root,
+            user_stars=4,
+            card_theme="light",
+            user_note="テスト一言",
+        )
+        assert out.is_dir()
+        assert (out / "photo.jpg").is_file()
+        assert (out / "card.png").is_file()
+        assert (out / "note.md").is_file()
+        assert (out / "session.json").is_file()
+        sess = json.loads((out / "session.json").read_text(encoding="utf-8"))
+        assert sess["user_stars"] == 4
+        assert sess["card_theme"] == "light"
+        assert sess["user_note"] == "テスト一言"
+        note_text = (out / "note.md").read_text(encoding="utf-8")
+        assert "★ 思い: 4/5" in note_text
+        assert "ユーザー一言: テスト一言" in note_text
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_settings_save_folder_roundtrip():
+    import json
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import guided_web.settings as gs
+
+    td = Path(tempfile.mkdtemp(prefix="guided_settings_"))
+    old_path = gs._SETTINGS_PATH
+    try:
+        gs._SETTINGS_PATH = td / "guided_settings.json"
+        folder = td / "chosen"
+        folder.mkdir()
+        resolved = gs.set_save_folder(folder)
+        assert resolved == folder.resolve()
+        loaded = gs.get_save_folder()
+        assert loaded == folder.resolve()
+        data = json.loads(gs._SETTINGS_PATH.read_text(encoding="utf-8"))
+        assert data["save_folder"] == str(folder.resolve())
+    finally:
+        gs._SETTINGS_PATH = old_path
+        shutil.rmtree(td, ignore_errors=True)
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -2648,6 +2722,8 @@ def run_all():
     test_guided_futei_band_night()
     test_guided_api_parameters_shape()
     test_guided_body_sections_split()
+    test_guided_stock_export_writes_files()
+    test_guided_settings_save_folder_roundtrip()
     print("test_offline_suite: OK")
 
 

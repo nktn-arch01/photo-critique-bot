@@ -111,6 +111,48 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
 .read-details { margin-bottom: 0.5rem; background: #fff; padding: 0.5rem 0.75rem; border-radius: 6px; }
 .read-section { margin-bottom: 0.5rem; }
 
+.card-preview-wrap {
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.card-preview-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 6px;
+}
+
+.card-preview-loading {
+  margin: 1.5rem 0;
+  color: var(--muted);
+}
+
+.reflect-note {
+  background: #fff;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.save-folder-field span {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.save-folder-path {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
 @media (min-width: 768px) {
   .screen { max-width: 900px; }
 }

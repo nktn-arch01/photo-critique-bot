@@ -6,6 +6,7 @@ const screens = {
 
 let sessionId = null;
 let userStars = 0;
+let saveFolder = null;
 let localPreviewUrl = null;
 let serverPreviewUrl = null;
 
@@ -89,8 +90,12 @@ function resetSession() {
   document.getElementById("btn-speak").disabled = true;
   document.getElementById("file-input").value = "";
   document.getElementById("user-note").value = "";
-  document.getElementById("btn-export").disabled = true;
+  document.getElementById("reflect-note-edit").value = "";
+  document.getElementById("reflect-user-note").hidden = true;
+  document.getElementById("reflect-user-note").textContent = "";
+  clearCardPreview();
   updateStarButtons();
+  updateExportButton();
   showScreen("choose");
 }
 
@@ -253,14 +258,136 @@ document.getElementById("btn-again").addEventListener("click", () => {
 });
 
 document.getElementById("btn-keep").addEventListener("click", () => {
+  prepareReflectScreen();
   showScreen("reflect");
+});
+
+async function loadSettings() {
+  try {
+    const res = await fetch("/api/settings");
+    if (!res.ok) return;
+    const data = await res.json();
+    saveFolder = data.save_folder || null;
+    updateSaveFolderDisplay();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function updateSaveFolderDisplay() {
+  const el = document.getElementById("save-folder-path");
+  el.textContent = saveFolder || "未選択（フォルダを選んでください）";
+  updateExportButton();
+}
+
+function updateExportButton() {
+  const btn = document.getElementById("btn-export");
+  btn.disabled = !(userStars >= 1 && saveFolder && sessionId);
+}
+
+function clearCardPreview() {
+  const img = document.getElementById("card-preview-img");
+  const loading = document.getElementById("card-preview-loading");
+  img.hidden = true;
+  img.removeAttribute("src");
+  loading.hidden = false;
+  loading.textContent = "カードを準備しています…";
+}
+
+async function refreshCardPreview() {
+  if (!sessionId) return;
+  clearCardPreview();
+  const theme = document.getElementById("card-theme").value || "dark";
+  try {
+    const res = await fetch(`/api/session/${sessionId}/card`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card_theme: theme }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "カードの生成に失敗しました");
+    }
+    const img = document.getElementById("card-preview-img");
+    const loading = document.getElementById("card-preview-loading");
+    img.src = `${data.card_url}?t=${Date.now()}`;
+    img.hidden = false;
+    loading.hidden = true;
+  } catch (err) {
+    console.error(err);
+    document.getElementById("card-preview-loading").textContent =
+      "カードを表示できませんでした。講評が完了してからお試しください。";
+  }
+}
+
+function prepareReflectScreen() {
+  const note = document.getElementById("user-note").value.trim();
+  const reflectNote = document.getElementById("reflect-note-edit");
+  const reflectDisplay = document.getElementById("reflect-user-note");
+  reflectNote.value = note;
+  if (note) {
+    reflectDisplay.textContent = `選ぶで添えた一言: ${note}`;
+    reflectDisplay.hidden = false;
+  } else {
+    reflectDisplay.hidden = true;
+    reflectDisplay.textContent = "";
+  }
+  refreshCardPreview();
+}
+
+document.getElementById("card-theme").addEventListener("change", () => {
+  refreshCardPreview();
+});
+
+document.getElementById("btn-pick-folder").addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/settings/pick-folder", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "フォルダの選択に失敗しました");
+    }
+    saveFolder = data.save_folder;
+    updateSaveFolderDisplay();
+  } catch (err) {
+    console.error(err);
+    alert("フォルダを選べませんでした。もう一度お試しください。");
+  }
+});
+
+document.getElementById("btn-export").addEventListener("click", async () => {
+  if (!sessionId || userStars < 1 || !saveFolder) return;
+  const btn = document.getElementById("btn-export");
+  btn.disabled = true;
+  btn.textContent = "書き出し中…";
+  try {
+    const res = await fetch(`/api/session/${sessionId}/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_stars: userStars,
+        card_theme: document.getElementById("card-theme").value || "dark",
+        user_note: document.getElementById("reflect-note-edit").value || "",
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "書き出しに失敗しました");
+    }
+    alert(`書き出しました:\n${data.export_path}`);
+    resetSession();
+  } catch (err) {
+    console.error(err);
+    alert(err.message || "書き出しに失敗しました。");
+    updateExportButton();
+    btn.textContent = "Noteに書き出す";
+  }
 });
 
 document.querySelectorAll("#user-stars button").forEach((btn) => {
   btn.addEventListener("click", () => {
     userStars = Number(btn.dataset.value);
     updateStarButtons();
-    document.getElementById("btn-export").disabled = userStars < 1;
+    updateExportButton();
   });
 });
 
@@ -274,3 +401,4 @@ function updateStarButtons() {
 }
 
 updateStarButtons();
+loadSettings();
