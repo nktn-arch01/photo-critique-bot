@@ -213,4 +213,4 @@ Works（ユーザー作成・月のみ）
 
 **まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)。
 
-**次の代表例:** P2-2 Phase 3（Guided Web 4画面構想）。正本: [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md)。憲章: [`P2_2_PUBLIC_UX_CHARTER.md`](P2_2_PUBLIC_UX_CHARTER.md)。
+**次の代表例:** P2-2 Phase 3（Guided Web）— 合意ベースライン [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md)。検討条件到着後に構想を書く。憲章: [`P2_2_PUBLIC_UX_CHARTER.md`](P2_2_PUBLIC_UX_CHARTER.md)。
