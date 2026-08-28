@@ -31,9 +31,9 @@
         <option value="self">自分の写真と対話</option>
       </select>
     </label>
-    <div class="actions choose-actions">
-      <button type="button" id="btn-speak" disabled>言葉にする</button>
+    <div class="actions choose-actions split-actions">
       <button type="button" id="btn-reset" class="secondary">リセット</button>
+      <button type="button" id="btn-speak" disabled>言葉にする</button>
     </div>
     <section id="params-preview" class="params-preview" hidden aria-labelledby="params-heading">
       <h2 id="params-heading" class="params-heading">抽出パラメータ</h2>
@@ -44,21 +44,23 @@
   <main id="screen-read" class="screen" hidden>
     <img id="read-photo-preview" class="photo-preview read-photo" alt="選んだ写真" hidden />
     <div id="read-skeleton" class="skeleton">いま写真を読んでいます…</div>
-    <article id="read-content" hidden>
+    <div id="read-compact-wrap" class="read-compact" hidden>
       <h2 id="read-title" class="read-title"></h2>
       <p id="read-summary" class="read-summary"></p>
       <p id="read-point" class="read-point"></p>
+      <p id="read-phase2-hint" class="read-hint" hidden>詳しい言葉を読み込んでいます…</p>
+    </div>
+    <div id="read-actions" class="actions split-actions read-actions" hidden>
+      <button type="button" id="btn-again" class="secondary">もう一度</button>
+      <button type="button" id="btn-keep">この言葉を残す</button>
+    </div>
+    <article id="read-detail" class="read-detail" hidden>
       <details id="detail-scores" class="read-details">
         <summary>観察の輪郭</summary>
         <div id="read-scores"></div>
       </details>
       <div id="read-sections"></div>
-      <p id="read-phase2-hint" class="read-hint" hidden>詳しい言葉を読み込んでいます…</p>
     </article>
-    <div class="actions">
-      <button type="button" id="btn-keep">この言葉を残す</button>
-      <button type="button" id="btn-again" class="secondary">もう一度</button>
-    </div>
   </main>
 
   <main id="screen-reflect" class="screen" hidden>
@@ -66,10 +68,6 @@
       <img id="card-preview-img" class="card-preview-img" alt="カードプレビュー" hidden />
       <p id="card-preview-loading" class="card-preview-loading">カードを準備しています…</p>
     </div>
-    <p id="reflect-user-note" class="reflect-note" hidden></p>
-    <label class="field">一言（再編集・任意）
-      <textarea id="reflect-note-edit" rows="2"></textarea>
-    </label>
     <fieldset class="field">
       <legend>この写真に対する思い <span class="required">必須</span></legend>
       <div id="user-stars" class="user-stars" role="radiogroup" aria-label="思いの星">
@@ -86,16 +84,27 @@
         <option value="light">ライト</option>
       </select>
     </label>
-    <div class="field save-folder-field">
-      <span>保存先</span>
-      <p id="save-folder-path" class="save-folder-path">未選択</p>
-      <button type="button" id="btn-pick-folder" class="secondary">フォルダを選ぶ</button>
-    </div>
-    <div class="actions">
+    <fieldset class="field reflect-checklist">
+      <legend>振り返りメモ</legend>
+      <div class="reflect-item">
+        <label class="reflect-check"><input type="checkbox" id="reflect-noticed-check" /> 気づいたこと</label>
+        <textarea id="reflect-noticed-text" rows="2" placeholder="…"></textarea>
+      </div>
+      <div class="reflect-item">
+        <label class="reflect-check"><input type="checkbox" id="reflect-thought-check" /> ふと思ったこと</label>
+        <textarea id="reflect-thought-text" rows="2" placeholder="…"></textarea>
+      </div>
+      <div class="reflect-item">
+        <label class="reflect-check"><input type="checkbox" id="reflect-photo-check" /> この写真を</label>
+        <textarea id="reflect-photo-text" rows="2" placeholder="…"></textarea>
+      </div>
+    </fieldset>
+    <div class="actions reflect-actions split-actions">
+      <span></span>
       <button type="button" id="btn-export" disabled>Noteに書き出す</button>
     </div>
   </main>
 
-  <script src="/static/guided.js?v=6"></script>
+  <script src="/static/guided.js?v=7"></script>
 </body>
 </html>

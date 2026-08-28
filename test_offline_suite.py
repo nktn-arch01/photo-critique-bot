@@ -2626,6 +2626,32 @@ def test_guided_upload_returns_parameter_display():
     assert data["parameter_display"][0]["rows"][0]["value"] == "params.jpg"
 
 
+def test_guided_card_footer_metadata():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+
+    from guided_web.guided_card import create_guided_card
+
+    td = Path(tempfile.mkdtemp(prefix="guided_card_"))
+    jpeg = td / "sample.jpg"
+    out = td / "card.png"
+    Image.new("RGB", (240, 180), (70, 80, 90)).save(jpeg, "JPEG")
+    create_guided_card(
+        jpeg,
+        PHASE1_SAMPLE,
+        out,
+        theme="dark",
+        user_note="静かな午後",
+        user_stars=3,
+        file_name="sample.jpg",
+    )
+    assert out.is_file()
+    with Image.open(out) as card:
+        assert card.size == (1080, 1350)
+
+
 def test_guided_body_sections_split():
     from guided_web.body_sections import split_critique_sections
 
@@ -2679,7 +2705,7 @@ def test_guided_stock_export_writes_files():
         assert sess["user_note"] == "テスト一言"
         note_text = (out / "note.md").read_text(encoding="utf-8")
         assert "★ 思い: 4/5" in note_text
-        assert "ユーザー一言: テスト一言" in note_text
+        assert "一言: テスト一言" in note_text
     finally:
         shutil.rmtree(td, ignore_errors=True)
 
@@ -2777,6 +2803,7 @@ def run_all():
     test_guided_api_parameters_shape()
     test_guided_parameter_display_rows()
     test_guided_upload_returns_parameter_display()
+    test_guided_card_footer_metadata()
     test_guided_body_sections_split()
     test_guided_stock_export_writes_files()
     test_guided_settings_save_folder_roundtrip()

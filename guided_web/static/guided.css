@@ -67,8 +67,36 @@ body {
 
 .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
 
+.split-actions {
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.split-actions > :only-child,
+.split-actions > button:only-of-type {
+  margin-left: auto;
+}
+
 .choose-actions {
   margin-bottom: 0.5rem;
+}
+
+.read-actions {
+  margin-top: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.reflect-actions {
+  margin-top: 1rem;
+}
+
+.read-compact {
+  margin-bottom: 0.25rem;
+}
+
+.read-detail {
+  margin-top: 0.5rem;
 }
 
 button {
@@ -183,25 +211,28 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
   color: var(--muted);
 }
 
-.reflect-note {
-  background: #fff;
-  padding: 0.75rem;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-  font-size: 0.95rem;
-}
-
-.save-folder-field span {
-  display: block;
+.reflect-checklist legend {
   font-weight: 600;
-  margin-bottom: 0.35rem;
 }
 
-.save-folder-path {
-  margin: 0 0 0.5rem;
-  font-size: 0.9rem;
-  color: var(--muted);
-  word-break: break-all;
+.reflect-item {
+  margin-bottom: 0.75rem;
+}
+
+.reflect-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  font-weight: 500;
+}
+
+.reflect-item textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #e8e4dc;
+  border-radius: 6px;
+  font-family: inherit;
 }
 
 @media (min-width: 768px) {

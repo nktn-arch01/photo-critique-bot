@@ -4,9 +4,15 @@ const screens = {
   reflect: document.getElementById("screen-reflect"),
 };
 
+const REFLECT_ITEMS = [
+  { id: "noticed", label: "気づいたこと" },
+  { id: "thought", label: "ふと思ったこと" },
+  { id: "photo", label: "この写真を" },
+];
+
 let sessionId = null;
 let userStars = 0;
-let saveFolder = null;
+let currentFileName = null;
 let localPreviewUrl = null;
 let serverPreviewUrl = null;
 
@@ -140,6 +146,7 @@ async function handleSelectedFile(file) {
 
   const data = await uploadPhoto(file);
   sessionId = data.session_id;
+  currentFileName = data.file_name || file.name;
   serverPreviewUrl = data.preview_url || null;
   if (serverPreviewUrl) {
     setPhotoPreview(serverPreviewUrl);
@@ -147,9 +154,35 @@ async function handleSelectedFile(file) {
   renderParams(data);
 }
 
+function resetReflectionFields() {
+  REFLECT_ITEMS.forEach(({ id }) => {
+    const check = document.getElementById(`reflect-${id}-check`);
+    const text = document.getElementById(`reflect-${id}-text`);
+    if (check) check.checked = false;
+    if (text) text.value = "";
+  });
+}
+
+function setReadLoading(loading) {
+  document.getElementById("read-skeleton").hidden = !loading;
+  if (loading) {
+    document.getElementById("read-compact-wrap").hidden = true;
+    document.getElementById("read-actions").hidden = true;
+    document.getElementById("read-detail").hidden = true;
+  }
+}
+
+function showReadPanels() {
+  document.getElementById("read-skeleton").hidden = true;
+  document.getElementById("read-compact-wrap").hidden = false;
+  document.getElementById("read-actions").hidden = false;
+  document.getElementById("read-detail").hidden = false;
+}
+
 function resetSession() {
   sessionId = null;
   userStars = 0;
+  currentFileName = null;
   serverPreviewUrl = null;
   revokeLocalPreview();
   setPhotoPreview(null);
@@ -158,10 +191,13 @@ function resetSession() {
   document.getElementById("btn-speak").disabled = true;
   document.getElementById("file-input").value = "";
   document.getElementById("user-note").value = "";
-  document.getElementById("reflect-note-edit").value = "";
-  document.getElementById("reflect-user-note").hidden = true;
-  document.getElementById("reflect-user-note").textContent = "";
+  resetReflectionFields();
   clearCardPreview();
+  setReadLoading(false);
+  document.getElementById("read-compact-wrap").hidden = true;
+  document.getElementById("read-actions").hidden = true;
+  document.getElementById("read-detail").hidden = true;
+  document.getElementById("read-skeleton").textContent = "いま写真を読んでいます…";
   updateStarButtons();
   updateExportButton();
   showScreen("choose");
@@ -213,11 +249,8 @@ document.getElementById("btn-speak").addEventListener("click", () => {
 });
 
 async function startCritique() {
-  const skeleton = document.getElementById("read-skeleton");
-  const content = document.getElementById("read-content");
   const hint = document.getElementById("read-phase2-hint");
-  skeleton.hidden = false;
-  content.hidden = true;
+  setReadLoading(true);
   hint.hidden = true;
 
   const lens = document.getElementById("lens-select").value || "self";
@@ -234,8 +267,7 @@ async function startCritique() {
       throw new Error(data.error || data.detail || "講評の開始に失敗しました");
     }
     renderCritique(data);
-    skeleton.hidden = true;
-    content.hidden = false;
+    showReadPanels();
 
     if (data.status === "phase2_running") {
       hint.hidden = false;
@@ -243,9 +275,9 @@ async function startCritique() {
     }
   } catch (err) {
     console.error(err);
+    const skeleton = document.getElementById("read-skeleton");
     skeleton.textContent = "言葉を読み取れませんでした。APIキーとネットワークを確認してください。";
-    skeleton.hidden = false;
-    content.hidden = true;
+    setReadLoading(true);
   }
 }
 
@@ -286,30 +318,19 @@ function renderCritique(data) {
   const sectionsEl = document.getElementById("read-sections");
   sectionsEl.innerHTML = "";
   (data.sections || []).forEach((sec) => {
+    if (!["1", "2", "3", "4", "5", "6", "7"].includes(sec.id)) return;
+    const details = document.createElement("details");
+    details.className = "read-details read-section";
     if (sec.id === "2") {
-      const details = document.createElement("details");
-      details.className = "read-details read-section";
       details.open = false;
-      const summary = document.createElement("summary");
-      summary.textContent = "情景描写";
-      const body = document.createElement("div");
-      body.textContent = sec.text;
-      details.appendChild(summary);
-      details.appendChild(body);
-      sectionsEl.appendChild(details);
-      return;
     }
-    if (["1", "3", "4", "5", "6", "7"].includes(sec.id)) {
-      const details = document.createElement("details");
-      details.className = "read-details read-section";
-      const summary = document.createElement("summary");
-      summary.textContent = sec.heading || `【${sec.id}】`;
-      const body = document.createElement("div");
-      body.textContent = sec.text;
-      details.appendChild(summary);
-      details.appendChild(body);
-      sectionsEl.appendChild(details);
-    }
+    const summary = document.createElement("summary");
+    summary.textContent = sec.heading || `【${sec.id}】`;
+    const body = document.createElement("div");
+    body.textContent = sec.text;
+    details.appendChild(summary);
+    details.appendChild(body);
+    sectionsEl.appendChild(details);
   });
 }
 
@@ -318,7 +339,6 @@ document.getElementById("btn-reset").addEventListener("click", () => {
 });
 
 document.getElementById("btn-again").addEventListener("click", () => {
-  // リセットではなく選ぶへ戻るだけ（写真・パラメータは保持）
   if (activePreviewUrl()) {
     setPhotoPreview(activePreviewUrl());
   }
@@ -330,27 +350,9 @@ document.getElementById("btn-keep").addEventListener("click", () => {
   showScreen("reflect");
 });
 
-async function loadSettings() {
-  try {
-    const res = await fetch("/api/settings");
-    if (!res.ok) return;
-    const data = await res.json();
-    saveFolder = data.save_folder || null;
-    updateSaveFolderDisplay();
-  } catch (err) {
-    console.error(err);
-  }
-}
-
-function updateSaveFolderDisplay() {
-  const el = document.getElementById("save-folder-path");
-  el.textContent = saveFolder || "未選択（フォルダを選んでください）";
-  updateExportButton();
-}
-
 function updateExportButton() {
   const btn = document.getElementById("btn-export");
-  btn.disabled = !(userStars >= 1 && saveFolder && sessionId);
+  btn.disabled = !(userStars >= 1 && sessionId);
 }
 
 function clearCardPreview() {
@@ -370,7 +372,11 @@ async function refreshCardPreview() {
     const res = await fetch(`/api/session/${sessionId}/card`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ card_theme: theme }),
+      body: JSON.stringify({
+        card_theme: theme,
+        user_stars: userStars,
+        user_note: document.getElementById("user-note").value || "",
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -389,41 +395,27 @@ async function refreshCardPreview() {
 }
 
 function prepareReflectScreen() {
-  const note = document.getElementById("user-note").value.trim();
-  const reflectNote = document.getElementById("reflect-note-edit");
-  const reflectDisplay = document.getElementById("reflect-user-note");
-  reflectNote.value = note;
-  if (note) {
-    reflectDisplay.textContent = `選ぶで添えた一言: ${note}`;
-    reflectDisplay.hidden = false;
-  } else {
-    reflectDisplay.hidden = true;
-    reflectDisplay.textContent = "";
-  }
   refreshCardPreview();
 }
 
-document.getElementById("card-theme").addEventListener("change", () => {
-  refreshCardPreview();
-});
+function collectReflections() {
+  const out = {};
+  REFLECT_ITEMS.forEach(({ id, label }) => {
+    out[id] = {
+      checked: Boolean(document.getElementById(`reflect-${id}-check`)?.checked),
+      text: document.getElementById(`reflect-${id}-text`)?.value || "",
+      label,
+    };
+  });
+  return out;
+}
 
-document.getElementById("btn-pick-folder").addEventListener("click", async () => {
-  try {
-    const res = await fetch("/api/settings/pick-folder", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || "フォルダの選択に失敗しました");
-    }
-    saveFolder = data.save_folder;
-    updateSaveFolderDisplay();
-  } catch (err) {
-    console.error(err);
-    alert("フォルダを選べませんでした。もう一度お試しください。");
-  }
+document.getElementById("card-theme").addEventListener("change", () => {
+  if (!screens.reflect.hidden) refreshCardPreview();
 });
 
 document.getElementById("btn-export").addEventListener("click", async () => {
-  if (!sessionId || userStars < 1 || !saveFolder) return;
+  if (!sessionId || userStars < 1) return;
   const btn = document.getElementById("btn-export");
   btn.disabled = true;
   btn.textContent = "書き出し中…";
@@ -434,7 +426,8 @@ document.getElementById("btn-export").addEventListener("click", async () => {
       body: JSON.stringify({
         user_stars: userStars,
         card_theme: document.getElementById("card-theme").value || "dark",
-        user_note: document.getElementById("reflect-note-edit").value || "",
+        user_note: document.getElementById("user-note").value || "",
+        reflections: collectReflections(),
       }),
     });
     const data = await res.json();
@@ -456,6 +449,7 @@ document.querySelectorAll("#user-stars button").forEach((btn) => {
     userStars = Number(btn.dataset.value);
     updateStarButtons();
     updateExportButton();
+    if (!screens.reflect.hidden) refreshCardPreview();
   });
 });
 
@@ -469,4 +463,3 @@ function updateStarButtons() {
 }
 
 updateStarButtons();
-loadSettings();

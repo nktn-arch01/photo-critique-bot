@@ -43,12 +43,21 @@ class CritiqueStartBody(BaseModel):
 
 class CardPreviewBody(BaseModel):
     card_theme: str = "dark"
+    user_stars: int = Field(ge=0, le=5, default=0)
+    user_note: str = Field(default="", max_length=4000)
+
+
+class ReflectionItemBody(BaseModel):
+    checked: bool = False
+    text: str = Field(default="", max_length=4000)
+    label: str = Field(default="", max_length=200)
 
 
 class ExportBody(BaseModel):
     user_stars: int = Field(ge=1, le=5)
     card_theme: str = "dark"
     user_note: str = Field(default="", max_length=4000)
+    reflections: dict[str, ReflectionItemBody] = Field(default_factory=dict)
 
 
 class SaveFolderBody(BaseModel):
@@ -280,7 +289,13 @@ async def generate_card_preview(session_id: str, body: CardPreviewBody) -> JSONR
     try:
         await loop.run_in_executor(
             _executor,
-            lambda: render_card_preview(sess, card_path, card_theme=body.card_theme),
+            lambda: render_card_preview(
+                sess,
+                card_path,
+                card_theme=body.card_theme,
+                user_stars=body.user_stars,
+                user_note=body.user_note,
+            ),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -307,17 +322,20 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
     if not sess:
         raise HTTPException(status_code=404, detail="session not found")
 
-    save_root = get_save_folder()
-    if save_root is None:
-        raise HTTPException(status_code=400, detail="save folder not set")
-
-    crit = sess.get("critique") or {}
     try:
         critique_text_for_session(sess)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     loop = asyncio.get_running_loop()
+    save_root = await loop.run_in_executor(_executor, lambda: pick_folder(None))
+    if save_root is None:
+        raise HTTPException(status_code=400, detail="保存先が選ばれませんでした")
+
+    reflections = {
+        key: item.model_dump() for key, item in body.reflections.items()
+    }
+
     try:
         export_dir = await loop.run_in_executor(
             _executor,
@@ -327,6 +345,7 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
                 user_stars=body.user_stars,
                 card_theme=body.card_theme,
                 user_note=body.user_note,
+                reflections=reflections,
             ),
         )
     except ValueError as e:

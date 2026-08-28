@@ -6,10 +6,11 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from ai_vision import prepare_vision_image_bytes
 from card_theme import normalize_card_theme
-from generate_critique_card import create_critique_card
+from guided_web.guided_card import create_guided_card
 from log_manager import DesktopLogManager
 
 
@@ -36,8 +37,9 @@ def export_guided_session(
     user_stars: int,
     card_theme: str,
     user_note: str = "",
+    reflections: dict[str, Any] | None = None,
 ) -> Path:
-    """ユーザー選択フォルダ配下に 1 セッション分を書き出す。"""
+    """ユーザーが書き出し時に選んだフォルダ配下へ 1 セッション分を保存。"""
     if user_stars < 1 or user_stars > 5:
         raise ValueError("user_stars は 1〜5 で指定してください")
 
@@ -46,6 +48,7 @@ def export_guided_session(
     theme = normalize_card_theme(card_theme)
     lens = (session.get("critique") or {}).get("lens") or "self"
     note = (user_note or "").strip()
+    reflect = reflections or {}
 
     now = datetime.now()
     ym = now.strftime("%Y%m")
@@ -61,11 +64,14 @@ def export_guided_session(
         shutil.copy2(image_src, photo_path)
 
     card_path = session_dir / "card.png"
-    create_critique_card(
+    create_guided_card(
         photo_path,
         critique_text,
         card_path,
         theme=theme,
+        user_note=note,
+        user_stars=user_stars,
+        file_name=file_name,
         lens=lens,
     )
 
@@ -78,6 +84,7 @@ def export_guided_session(
             critique_text=critique_text,
             user_stars=user_stars,
             user_note=note,
+            reflections=reflect,
         ),
         encoding="utf-8",
     )
@@ -89,6 +96,7 @@ def export_guided_session(
         "user_stars": user_stars,
         "card_theme": theme,
         "user_note": note,
+        "reflections": reflect,
         "exported_at": now.isoformat(timespec="seconds"),
         "api_parameters": session.get("api_params"),
         "original_filename": file_name,
@@ -108,8 +116,9 @@ def _format_note_markdown(
     critique_text: str,
     user_stars: int,
     user_note: str,
+    reflections: dict[str, Any],
 ) -> str:
-    """DesktopLogManager 互換の本文 + Guided 固有の思い・一言。"""
+    """DesktopLogManager 互換の本文 + Guided 固有の思い・一言・振り返り。"""
     manager = DesktopLogManager(Path("/tmp"))
     body = manager._format_structured_content(file_name, metadata_block, critique_text)
     stars_line = f"★ 思い: {user_stars}/5"
@@ -119,8 +128,20 @@ def _format_note_markdown(
         f"{stars_line}\n"
         "=================================================="
     )
+    extra_parts: list[str] = []
     if user_note:
-        return f"{header}\n{body}\n\n---\n\nユーザー一言: {user_note}\n"
+        extra_parts.append(f"一言: {user_note}")
+    for key, item in reflections.items():
+        if not isinstance(item, dict):
+            continue
+        if not item.get("checked") and not (item.get("text") or "").strip():
+            continue
+        label = item.get("label") or key
+        text = (item.get("text") or "").strip() or "—"
+        mark = "☑" if item.get("checked") else "☐"
+        extra_parts.append(f"{mark} {label}: {text}")
+    if extra_parts:
+        return f"{header}\n{body}\n\n---\n\n" + "\n\n".join(extra_parts) + "\n"
     return f"{header}\n{body}\n"
 
 
@@ -129,16 +150,22 @@ def render_card_preview(
     output_path: Path,
     *,
     card_theme: str,
+    user_stars: int = 0,
+    user_note: str = "",
 ) -> Path:
-    """カード PNG を生成して output_path に保存する。"""
+    """Guided カード PNG を生成して output_path に保存する。"""
     critique_text = critique_text_for_session(session)
     lens = (session.get("critique") or {}).get("lens") or "self"
     image_path = Path(session.get("preview_path") or session["path"])
-    create_critique_card(
+    file_name = session.get("original_filename") or "photo.jpg"
+    create_guided_card(
         image_path,
         critique_text,
         output_path,
         theme=normalize_card_theme(card_theme),
+        user_note=user_note,
+        user_stars=user_stars,
+        file_name=file_name,
         lens=lens,
     )
     return output_path
