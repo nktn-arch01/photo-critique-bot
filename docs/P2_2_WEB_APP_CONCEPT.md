@@ -151,12 +151,17 @@ flowchart TB
 
 アプリ一式は **PC 内の1フォルダ**に置く（例: `~/Applications/LuminaNotesGuided/`）。
 
+**起動（コピペ一発）:** 詳細は [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md)
+
+```bash
+cd "YOUR_REPO_PATH" && bash scripts/run_guided_web.sh
+```
+
 | ファイル | 役割 |
 |----------|------|
-| **`Guided.html`** | ユーザーがダブルクリックする入口 |
-| **`LuminaNotesGuided.command`** | Python ローカルサービス起動 ＋ ブラウザで HTML を開く |
-| `guided/` | HTML / CSS / JS（UI） |
-| Python コア | 既存 `critique_engine` 等を import |
+| **`scripts/run_guided_web.sh`** | 依存確認・サーバ起動・ブラウザを開く（**ターミナル用本体**） |
+| **`LuminaNotesGuided.command`** | 上記を呼ぶ（ダブルクリック用） |
+| **`Guided.html`** | ブラウザ入口の案内 |
 
 **起動の流れ（確定）:**
 
