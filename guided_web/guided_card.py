@@ -131,19 +131,19 @@ def create_guided_card(
     note = (user_note or "").strip()
     fname = (file_name or "").strip() or "—"
 
-    footer_rows: list[str] = [
-        f"この写真に対する思い: {stars}",
-        note,
-        "",
-        fname,
+    footer_rows: list[tuple[str, object]] = [
+        (stars, font_meta),
+        (note, font_text),
+        ("", None),
+        (fname, font_meta),
     ]
-    for i, line in enumerate(footer_rows):
-        if not line:
+    for i, (line, font) in enumerate(footer_rows):
+        if not line or font is None:
             continue
         draw.text(
             (content_left, footer_y + i * footer_line_h),
             line,
-            font=font_meta,
+            font=font,
             fill=palette["summary"],
         )
 

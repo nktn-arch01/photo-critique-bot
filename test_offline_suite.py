@@ -2701,9 +2701,18 @@ def test_guided_stock_export_writes_files():
         assert (save_root / "sample_LN.md").is_file()
         assert not (save_root / "photo.jpg").exists()
         note_text = (save_root / "sample_LN.md").read_text(encoding="utf-8")
-        assert "オリジナルファイル: /Users/me/Pictures/sample.jpg" in note_text
+        assert "=== 振り返り ===" in note_text
+        assert "オリジナルファイルのパス: /Users/me/Pictures/sample.jpg" in note_text
+        assert "★ 思い: 4/5" in note_text
         assert "一言: テスト一言" in note_text
         assert "振り返りメモ: 光・空気" in note_text
+        reflect_pos = note_text.index("=== 振り返り ===")
+        path_pos = note_text.index("オリジナルファイルのパス:")
+        stars_pos = note_text.index("★ 思い:")
+        note_pos = note_text.index("一言:")
+        memo_pos = note_text.index("振り返りメモ:")
+        exported_pos = note_text.index("書き出し日時:")
+        assert reflect_pos < path_pos < stars_pos < note_pos < memo_pos < exported_pos
         assert files["card"].endswith("sample_LN.png")
     finally:
         shutil.rmtree(td, ignore_errors=True)

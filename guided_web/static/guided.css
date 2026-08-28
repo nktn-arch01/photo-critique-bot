@@ -65,6 +65,14 @@ body {
 .field { display: block; margin-bottom: 1rem; }
 .field textarea, .field select { width: 100%; margin-top: 0.35rem; padding: 0.5rem; }
 
+/* 選ぶ・振り返るの入力欄はパラメータ表と同じ文字サイズ */
+#user-note,
+#lens-select,
+#reflect-user-note,
+#card-theme {
+  font-size: 0.9rem;
+}
+
 .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
 
 .split-actions {

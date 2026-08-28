@@ -101,11 +101,11 @@ def _format_note_markdown(
     reflection_csv = ", ".join(selected_reflection_labels(reflections))
 
     header = (
-        "=== メタデータ ===\n"
-        f"オリジナルファイル: {original_path}\n"
+        "=== 振り返り ===\n"
+        f"オリジナルファイルのパス: {original_path}\n"
+        f"★ 思い: {user_stars}/5\n"
         f"一言: {user_note or '—'}\n"
         f"振り返りメモ: {reflection_csv or '—'}\n"
-        f"★ 思い: {user_stars}/5\n"
         f"書き出し日時: {datetime.now().isoformat(timespec='seconds')}\n"
     )
 
