@@ -36,6 +36,37 @@ FuteiBandLabel = Literal[
     "不明",
 ]
 
+# IANA タイムゾーン → 代表座標（緯度, 経度）と都市レベル地域名。
+# GPS が無い場合の日出・日没・region 推定に使う（生 GPS は API に送らない）。
+TZ_ANCHORS: dict[str, tuple[float, float, str]] = {
+    "Asia/Tokyo": (35.6812, 139.7671, "東京"),
+    "Asia/Seoul": (37.5665, 126.9780, "ソウル"),
+    "Asia/Shanghai": (31.2304, 121.4737, "上海"),
+    "Asia/Hong_Kong": (22.3193, 114.1694, "香港"),
+    "Asia/Taipei": (25.0330, 121.5654, "台北"),
+    "Asia/Singapore": (1.3521, 103.8198, "シンガポール"),
+    "Asia/Bangkok": (13.7563, 100.5018, "バンコク"),
+    "Asia/Kolkata": (28.6139, 77.2090, "デリー"),
+    "Asia/Dubai": (25.2048, 55.2708, "ドバイ"),
+    "Asia/Jerusalem": (31.7683, 35.2137, "エルサレム"),
+    "Europe/London": (51.5074, -0.1278, "ロンドン"),
+    "Europe/Paris": (48.8566, 2.3522, "パリ"),
+    "Europe/Berlin": (52.5200, 13.4050, "ベルリン"),
+    "Europe/Rome": (41.9028, 12.4964, "ローマ"),
+    "Europe/Moscow": (55.7558, 37.6173, "モスクワ"),
+    "America/New_York": (40.7128, -74.0060, "ニューヨーク"),
+    "America/Chicago": (41.8781, -87.6298, "シカゴ"),
+    "America/Denver": (39.7392, -104.9903, "デンバー"),
+    "America/Los_Angeles": (34.0522, -118.2437, "ロサンゼルス"),
+    "America/Toronto": (43.6532, -79.3832, "トロント"),
+    "America/Vancouver": (49.2827, -123.1207, "バンクーバー"),
+    "America/Mexico_City": (19.4326, -99.1332, "メキシコシティ"),
+    "America/Sao_Paulo": (-23.5505, -46.6333, "サンパウロ"),
+    "Australia/Sydney": (-33.8688, 151.2093, "シドニー"),
+    "Pacific/Auckland": (-36.8485, 174.7633, "オークランド"),
+    "Pacific/Honolulu": (21.3069, -157.8583, "ホノルル"),
+}
+
 
 @dataclass(frozen=True)
 class SunTimes:
@@ -118,6 +149,57 @@ def _solar_time_transit(
 
     local_time = h + ra - (0.06571 * t) - 6.622
     return (local_time + 24.0) % 24.0
+
+
+def timezone_anchor(tz: ZoneInfo) -> tuple[float, float, str]:
+    """GPS 無し時にタイムゾーンから代表座標と都市レベル地域名を推定する。"""
+    key = tz.key if hasattr(tz, "key") else str(tz)
+    if key in TZ_ANCHORS:
+        return TZ_ANCHORS[key]
+
+    lon = _approx_longitude_from_tz(tz)
+    lat = _approx_latitude_from_zone_key(key)
+    region = _region_label_from_zone_key(key)
+    return lat, lon, region
+
+
+def _approx_longitude_from_tz(tz: ZoneInfo) -> float:
+    """UTC オフセットからタイムゾーン帯の代表経度を概算（15°/h）。"""
+    ref = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
+    local = ref.astimezone(tz)
+    offset = local.utcoffset()
+    if offset is None:
+        return 139.7671
+    hours = offset.total_seconds() / 3600.0
+    return max(-180.0, min(180.0, hours * 15.0))
+
+
+def _approx_latitude_from_zone_key(key: str) -> float:
+    """IANA ゾーン名のプレフィックスから代表緯度を概算。"""
+    if key.startswith("Australia/") or key.startswith("Pacific/Auckland"):
+        return -33.0
+    if key.startswith("Pacific/Honolulu") or key.startswith("Pacific/Guam"):
+        return 21.0
+    if key.startswith("America/"):
+        south_markers = ("Sao_Paulo", "Buenos_Aires", "Santiago", "Lima", "Bogota")
+        if any(m in key for m in south_markers):
+            return -23.0
+        return 40.0
+    if key.startswith("Europe/"):
+        return 50.0
+    if key.startswith("Africa/"):
+        return 5.0
+    if key.startswith("Asia/"):
+        return 35.0
+    return 35.0
+
+
+def _region_label_from_zone_key(key: str) -> str:
+    """IANA ゾーン名から都市レベルの地域ラベルを生成。"""
+    if "/" not in key:
+        return key
+    city = key.split("/")[-1].replace("_", " ")
+    return city
 
 
 def classify_futei_band(

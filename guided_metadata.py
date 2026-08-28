@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from guided_futei_time import FuteiBandLabel, classify_futei_band
+from guided_futei_time import FuteiBandLabel, classify_futei_band, timezone_anchor
 from scanner import ensure_heif_support, extract_file_metadata
 
 DEFAULT_TZ = ZoneInfo("Asia/Tokyo")
@@ -85,8 +85,12 @@ def build_guided_api_parameters(
     size = f"{width}x{height}" if width and height else _size_from_path(image_path)
 
     iid = image_id or _image_id_from_path(image_path)
-    region = resolve_city_region(lat, lon, merged, geocode=geocode)
-    band = classify_futei_band(shot_dt, lat, lon, tz) if shot_dt else "不明"
+    eff_lat, eff_lon = lat, lon
+    if eff_lat is None or eff_lon is None:
+        eff_lat, eff_lon, _ = timezone_anchor(tz)
+
+    region = resolve_city_region(lat, lon, merged, geocode=geocode, tz=tz)
+    band = classify_futei_band(shot_dt, eff_lat, eff_lon, tz) if shot_dt else "不明"
 
     shot_at_iso = shot_dt.isoformat() if shot_dt else "不明"
 
@@ -180,6 +184,7 @@ def resolve_city_region(
     exif_tags: dict | None = None,
     *,
     geocode: bool = True,
+    tz: ZoneInfo | None = None,
 ) -> str:
     """撮影地域を都市レベルで返す。GPS は API に送らない。"""
     tags = exif_tags or {}
@@ -195,6 +200,9 @@ def resolve_city_region(
         return city
 
     if lat is None or lon is None:
+        if tz is not None:
+            _, _, region = timezone_anchor(tz)
+            return region
         return "不明"
 
     if geocode:

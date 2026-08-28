@@ -2512,6 +2512,39 @@ def test_guided_futei_band_night():
     assert classify_futei_band(night, lat, lon, tz) == "夜"
 
 
+def test_guided_timezone_anchor_tokyo():
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import timezone_anchor
+
+    lat, lon, region = timezone_anchor(ZoneInfo("Asia/Tokyo"))
+    assert region == "東京"
+    assert 35.0 < lat < 36.0
+    assert 139.0 < lon < 140.0
+
+
+def test_guided_futei_band_without_gps_uses_timezone_anchor():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band, timezone_anchor
+
+    tz = ZoneInfo("Asia/Tokyo")
+    lat, lon, _ = timezone_anchor(tz)
+    noon = datetime(2026, 6, 21, 12, 0, 0, tzinfo=tz)
+    band = classify_futei_band(noon, lat, lon, tz)
+    assert band in {"正午（九）", "午後（八）", "午前（四）"}
+
+
+def test_guided_resolve_region_without_gps():
+    from zoneinfo import ZoneInfo
+
+    from guided_metadata import resolve_city_region
+
+    region = resolve_city_region(None, None, {}, geocode=False, tz=ZoneInfo("Asia/Tokyo"))
+    assert region == "東京"
+
+
 def test_guided_api_parameters_shape():
     from guided_metadata import GuidedApiParameters, GuidedCameraSettings, GuidedImageInfo
 
