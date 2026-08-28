@@ -2539,6 +2539,15 @@ def test_guided_api_parameters_shape():
     assert "time_band" in d["image"]
 
 
+def test_guided_body_sections_split():
+    from guided_web.body_sections import split_critique_sections
+
+    body = "【1. 第一印象】\n一行目\n【2. 情景描写】\n二行目"
+    secs = split_critique_sections(body)
+    assert len(secs) == 2
+    assert secs[1]["id"] == "2"
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -2605,6 +2614,7 @@ def run_all():
     test_guided_futei_band_tokyo_summer_day()
     test_guided_futei_band_night()
     test_guided_api_parameters_shape()
+    test_guided_body_sections_split()
     print("test_offline_suite: OK")
 
 

@@ -41,7 +41,17 @@
   <main id="screen-read" class="screen" hidden>
     <img id="read-photo-preview" class="photo-preview read-photo" alt="選んだ写真" hidden />
     <div id="read-skeleton" class="skeleton">いま写真を読んでいます…</div>
-    <article id="read-content" hidden></article>
+    <article id="read-content" hidden>
+      <h2 id="read-title" class="read-title"></h2>
+      <p id="read-summary" class="read-summary"></p>
+      <p id="read-point" class="read-point"></p>
+      <details id="detail-scores" class="read-details">
+        <summary>観察の輪郭</summary>
+        <div id="read-scores"></div>
+      </details>
+      <div id="read-sections"></div>
+      <p id="read-phase2-hint" class="read-hint" hidden>詳しい言葉を読み込んでいます…</p>
+    </article>
     <div class="actions">
       <button type="button" id="btn-keep">この言葉を残す</button>
       <button type="button" id="btn-again" class="secondary">もう一度</button>
@@ -68,6 +78,6 @@
     </div>
   </main>
 
-  <script src="/static/guided.js?v=2"></script>
+  <script src="/static/guided.js?v=3"></script>
 </body>
 </html>

@@ -131,13 +131,114 @@ dropZone.addEventListener("drop", async (e) => {
 });
 
 document.getElementById("btn-speak").addEventListener("click", () => {
+  if (!sessionId) return;
   if (activePreviewUrl()) {
     setPhotoPreview(activePreviewUrl());
   }
   showScreen("read");
-  document.getElementById("read-skeleton").hidden = false;
-  document.getElementById("read-content").hidden = true;
+  startCritique();
 });
+
+async function startCritique() {
+  const skeleton = document.getElementById("read-skeleton");
+  const content = document.getElementById("read-content");
+  const hint = document.getElementById("read-phase2-hint");
+  skeleton.hidden = false;
+  content.hidden = true;
+  hint.hidden = true;
+
+  const lens = document.getElementById("lens-select").value || "self";
+  const userNote = document.getElementById("user-note").value || "";
+
+  try {
+    const res = await fetch(`/api/session/${sessionId}/critique`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lens, user_note: userNote }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || data.detail || "講評の開始に失敗しました");
+    }
+    renderCritique(data);
+    skeleton.hidden = true;
+    content.hidden = false;
+
+    if (data.status === "phase2_running") {
+      hint.hidden = false;
+      await pollCritiqueComplete();
+    }
+  } catch (err) {
+    console.error(err);
+    skeleton.textContent = "言葉を読み取れませんでした。APIキーとネットワークを確認してください。";
+    skeleton.hidden = false;
+    content.hidden = true;
+  }
+}
+
+async function pollCritiqueComplete() {
+  const hint = document.getElementById("read-phase2-hint");
+  for (let i = 0; i < 120; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const res = await fetch(`/api/session/${sessionId}/critique`);
+    const data = await res.json();
+    if (data.status === "complete") {
+      renderCritique(data);
+      hint.hidden = true;
+      return;
+    }
+    if (data.status === "error") {
+      hint.textContent = data.error || "詳細の取得に失敗しました";
+      return;
+    }
+  }
+  hint.textContent = "詳細の取得がタイムアウトしました。もう一度お試しください。";
+}
+
+function renderCritique(data) {
+  const p1 = data.phase1 || {};
+  document.getElementById("read-title").textContent = p1.title || "";
+  document.getElementById("read-summary").textContent = p1.summary || "";
+  document.getElementById("read-point").textContent = p1.critique_summary || "";
+
+  const scoresEl = document.getElementById("read-scores");
+  scoresEl.innerHTML = "";
+  const scores = p1.scores || {};
+  Object.entries(scores).forEach(([label, info]) => {
+    const line = document.createElement("p");
+    line.textContent = `${label}: ${info.stars || ""} (${info.val || ""}/5)`;
+    scoresEl.appendChild(line);
+  });
+
+  const sectionsEl = document.getElementById("read-sections");
+  sectionsEl.innerHTML = "";
+  (data.sections || []).forEach((sec) => {
+    if (sec.id === "2") {
+      const details = document.createElement("details");
+      details.className = "read-details read-section";
+      details.open = false;
+      const summary = document.createElement("summary");
+      summary.textContent = "情景描写";
+      const body = document.createElement("div");
+      body.textContent = sec.text;
+      details.appendChild(summary);
+      details.appendChild(body);
+      sectionsEl.appendChild(details);
+      return;
+    }
+    if (["1", "3", "4", "5", "6", "7"].includes(sec.id)) {
+      const details = document.createElement("details");
+      details.className = "read-details read-section";
+      const summary = document.createElement("summary");
+      summary.textContent = sec.heading || `【${sec.id}】`;
+      const body = document.createElement("div");
+      body.textContent = sec.text;
+      details.appendChild(summary);
+      details.appendChild(body);
+      sectionsEl.appendChild(details);
+    }
+  });
+}
 
 document.getElementById("btn-reset").addEventListener("click", () => {
   resetSession();
