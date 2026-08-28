@@ -165,7 +165,7 @@ flowchart TB
 | 0 | 本憲章（本ドキュメント） | — |
 | 1 | 言葉と操作作法（U4 / S3 / Q7）を用語＋Console 先行 | **DONE** |
 | 2 | カード主役化（U1 / Q1）＋ CRITIQUE_SUMMARY の問い寄せ（Q4） | **DONE** — [`P2_2_PHASE2_CARD.md`](P2_2_PHASE2_CARD.md) |
-| 3 | Guided UI 情報設計（5画面以内・導きすぎない） | ia-wire |
+| 3 | Guided UI 情報設計（4画面・導きすぎない） | [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) — オーナー確認中 |
 | 4 | ローカル FastAPI＋ブラウザの技術スパイク | tech-spike |
 | 5 | Guided MVP＋Mac チェックリスト | guided-mvp |
 
