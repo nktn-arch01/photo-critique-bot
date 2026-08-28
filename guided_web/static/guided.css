@@ -82,11 +82,58 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.secondary { background: transparent; color: var(--navy); border: 1px solid var(--muted); }
 
 .params-preview {
-  font-size: 0.85rem;
   background: #fff;
-  padding: 0.75rem;
-  border-radius: 6px;
-  white-space: pre-wrap;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.params-heading {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.params-preview-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.params-group-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.params-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.params-table th,
+.params-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid #e8e4dc;
+  text-align: left;
+  vertical-align: top;
+}
+
+.params-table th {
+  width: 38%;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.params-table td {
+  word-break: break-word;
+}
+
+.params-table tr:last-child th,
+.params-table tr:last-child td {
+  border-bottom: none;
 }
 
 .user-stars button {

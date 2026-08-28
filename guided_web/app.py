@@ -19,6 +19,7 @@ from ai_vision import prepare_vision_image_bytes
 from guided_metadata import build_guided_api_parameters
 from guided_web.critique_runner import run_phase1, run_phase2
 from guided_web.folder_picker import pick_folder
+from guided_web.parameter_display import build_parameter_display
 from guided_web.settings import (
     default_suggested_folder,
     get_save_folder,
@@ -145,6 +146,7 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
             "session_id": session_id,
             "preview_url": f"/api/session/{session_id}/preview",
             "api_parameters": api_params.to_dict(),
+            "parameter_display": build_parameter_display(api_params.to_dict()),
             "local_meta_preview": {
                 "file_name": file.filename,
                 "meta_block_lines": meta_block.splitlines()[:12],

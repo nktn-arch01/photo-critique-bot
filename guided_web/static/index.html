@@ -31,7 +31,10 @@
         <option value="self">自分の写真と対話</option>
       </select>
     </label>
-    <div id="params-preview" class="params-preview" hidden></div>
+    <section id="params-preview" class="params-preview" hidden aria-labelledby="params-heading">
+      <h2 id="params-heading" class="params-heading">抽出パラメータ</h2>
+      <div id="params-preview-body" class="params-preview-body"></div>
+    </section>
     <div class="actions">
       <button type="button" id="btn-speak" disabled>言葉にする</button>
       <button type="button" id="btn-reset" class="secondary">リセット</button>
@@ -93,6 +96,6 @@
     </div>
   </main>
 
-  <script src="/static/guided.js?v=4"></script>
+  <script src="/static/guided.js?v=5"></script>
 </body>
 </html>

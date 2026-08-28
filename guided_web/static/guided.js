@@ -59,10 +59,76 @@ async function uploadPhoto(file) {
 }
 
 function renderParams(data) {
-  const el = document.getElementById("params-preview");
-  el.hidden = false;
-  el.textContent = JSON.stringify(data.api_parameters, null, 2);
+  const wrap = document.getElementById("params-preview");
+  const body = document.getElementById("params-preview-body");
+  const groups = data.parameter_display || buildParameterDisplayFallback(data.api_parameters);
+  body.innerHTML = "";
+
+  groups.forEach((group) => {
+    const section = document.createElement("section");
+    section.className = "params-group";
+
+    const title = document.createElement("h3");
+    title.className = "params-group-title";
+    title.textContent = group.title;
+    section.appendChild(title);
+
+    const table = document.createElement("table");
+    table.className = "params-table";
+    const tbody = document.createElement("tbody");
+
+    (group.rows || []).forEach((row) => {
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      th.scope = "row";
+      th.textContent = row.label;
+      const td = document.createElement("td");
+      td.textContent = row.value;
+      tr.appendChild(th);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    section.appendChild(table);
+    body.appendChild(section);
+  });
+
+  wrap.hidden = false;
   document.getElementById("btn-speak").disabled = false;
+}
+
+function buildParameterDisplayFallback(apiParameters) {
+  const image = apiParameters?.image || {};
+  const camera = apiParameters?.camera || {};
+  const imageRows = [
+    ["image_id", "画像ID"],
+    ["size", "サイズ"],
+    ["shot_at", "撮影日時"],
+    ["timezone", "タイムゾーン"],
+    ["region", "地域"],
+    ["time_band", "時間帯"],
+  ].map(([key, label]) => ({
+    key,
+    label,
+    value: image[key] ?? "不明",
+  }));
+  const cameraRows = [
+    ["focal_length", "焦点距離"],
+    ["aperture", "絞り"],
+    ["shutter_speed", "シャッター速度"],
+    ["iso", "ISO"],
+    ["mode", "露出モード"],
+    ["exposure_compensation", "露出補正"],
+  ].map(([key, label]) => ({
+    key,
+    label,
+    value: camera[key] ?? "不明",
+  }));
+  return [
+    { title: "画像情報", rows: imageRows },
+    { title: "カメラ設定", rows: cameraRows },
+  ];
 }
 
 async function handleSelectedFile(file) {
@@ -86,7 +152,7 @@ function resetSession() {
   revokeLocalPreview();
   setPhotoPreview(null);
   document.getElementById("params-preview").hidden = true;
-  document.getElementById("params-preview").textContent = "";
+  document.getElementById("params-preview-body").innerHTML = "";
   document.getElementById("btn-speak").disabled = true;
   document.getElementById("file-input").value = "";
   document.getElementById("user-note").value = "";

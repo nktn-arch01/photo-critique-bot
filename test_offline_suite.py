@@ -2572,6 +2572,58 @@ def test_guided_api_parameters_shape():
     assert "time_band" in d["image"]
 
 
+def test_guided_parameter_display_rows():
+    from guided_web.parameter_display import build_parameter_display
+
+    display = build_parameter_display(
+        {
+            "image": {
+                "image_id": "abc123",
+                "size": "4032x3024",
+                "shot_at": "2026-06-21T12:00:00+09:00",
+                "timezone": "Asia/Tokyo",
+                "region": "東京",
+                "time_band": "正午（九）",
+            },
+            "camera": {
+                "focal_length": "50mm",
+                "aperture": "f/2.8",
+                "shutter_speed": "1/125s",
+                "iso": "ISO 400",
+                "mode": "マニュアル",
+                "exposure_compensation": "+0.0 EV",
+            },
+        }
+    )
+    assert display[0]["title"] == "画像情報"
+    assert display[1]["title"] == "カメラ設定"
+    assert display[0]["rows"][0] == {"key": "image_id", "label": "画像ID", "value": "abc123"}
+    assert display[0]["rows"][5]["label"] == "時間帯"
+    assert display[1]["rows"][0]["label"] == "焦点距離"
+
+
+def test_guided_upload_returns_parameter_display():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "params.jpg"
+    Image.new("RGB", (80, 60), (90, 100, 110)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("params.jpg", f, "image/jpeg")})
+    assert res.status_code == 200
+    data = res.json()
+    assert "parameter_display" in data
+    assert data["parameter_display"][0]["title"] == "画像情報"
+    assert any(row["label"] == "撮影日時" for row in data["parameter_display"][0]["rows"])
+
+
 def test_guided_body_sections_split():
     from guided_web.body_sections import split_critique_sections
 
@@ -2721,6 +2773,8 @@ def run_all():
     test_guided_futei_band_tokyo_summer_day()
     test_guided_futei_band_night()
     test_guided_api_parameters_shape()
+    test_guided_parameter_display_rows()
+    test_guided_upload_returns_parameter_display()
     test_guided_body_sections_split()
     test_guided_stock_export_writes_files()
     test_guided_settings_save_folder_roundtrip()
