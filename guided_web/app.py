@@ -141,14 +141,19 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
         "card_preview_path": None,
         "card_preview_theme": None,
     }
+    original_filename = file.filename or dest.name
     return JSONResponse(
         {
             "session_id": session_id,
             "preview_url": f"/api/session/{session_id}/preview",
+            "file_name": original_filename,
             "api_parameters": api_params.to_dict(),
-            "parameter_display": build_parameter_display(api_params.to_dict()),
+            "parameter_display": build_parameter_display(
+                api_params.to_dict(),
+                file_name=original_filename,
+            ),
             "local_meta_preview": {
-                "file_name": file.filename,
+                "file_name": original_filename,
                 "meta_block_lines": meta_block.splitlines()[:12],
             },
         }

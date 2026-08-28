@@ -61,7 +61,9 @@ async function uploadPhoto(file) {
 function renderParams(data) {
   const wrap = document.getElementById("params-preview");
   const body = document.getElementById("params-preview-body");
-  const groups = data.parameter_display || buildParameterDisplayFallback(data.api_parameters);
+  const groups =
+    data.parameter_display ||
+    buildParameterDisplayFallback(data.api_parameters, data.file_name);
   body.innerHTML = "";
 
   groups.forEach((group) => {
@@ -98,20 +100,20 @@ function renderParams(data) {
   document.getElementById("btn-speak").disabled = false;
 }
 
-function buildParameterDisplayFallback(apiParameters) {
+function buildParameterDisplayFallback(apiParameters, fileName) {
   const image = apiParameters?.image || {};
   const camera = apiParameters?.camera || {};
   const imageRows = [
-    ["image_id", "画像ID"],
-    ["size", "サイズ"],
-    ["shot_at", "撮影日時"],
-    ["timezone", "タイムゾーン"],
-    ["region", "地域"],
-    ["time_band", "時間帯"],
-  ].map(([key, label]) => ({
+    ["file_name", "ファイル名", fileName || image.file_name],
+    ["size", "サイズ", image.size],
+    ["shot_at", "撮影日時", image.shot_at],
+    ["timezone", "タイムゾーン", image.timezone],
+    ["region", "地域", image.region],
+    ["time_band", "時間帯", image.time_band],
+  ].map(([key, label, value]) => ({
     key,
     label,
-    value: image[key] ?? "不明",
+    value: value ?? "不明",
   }));
   const cameraRows = [
     ["focal_length", "焦点距離"],

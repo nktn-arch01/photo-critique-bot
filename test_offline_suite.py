@@ -2578,7 +2578,6 @@ def test_guided_parameter_display_rows():
     display = build_parameter_display(
         {
             "image": {
-                "image_id": "abc123",
                 "size": "4032x3024",
                 "shot_at": "2026-06-21T12:00:00+09:00",
                 "timezone": "Asia/Tokyo",
@@ -2593,11 +2592,12 @@ def test_guided_parameter_display_rows():
                 "mode": "マニュアル",
                 "exposure_compensation": "+0.0 EV",
             },
-        }
+        },
+        file_name="sample.jpg",
     )
     assert display[0]["title"] == "画像情報"
     assert display[1]["title"] == "カメラ設定"
-    assert display[0]["rows"][0] == {"key": "image_id", "label": "画像ID", "value": "abc123"}
+    assert display[0]["rows"][0] == {"key": "file_name", "label": "ファイル名", "value": "sample.jpg"}
     assert display[0]["rows"][5]["label"] == "時間帯"
     assert display[1]["rows"][0]["label"] == "焦点距離"
 
@@ -2622,6 +2622,8 @@ def test_guided_upload_returns_parameter_display():
     assert "parameter_display" in data
     assert data["parameter_display"][0]["title"] == "画像情報"
     assert any(row["label"] == "撮影日時" for row in data["parameter_display"][0]["rows"])
+    assert data["parameter_display"][0]["rows"][0]["label"] == "ファイル名"
+    assert data["parameter_display"][0]["rows"][0]["value"] == "params.jpg"
 
 
 def test_guided_body_sections_split():

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 IMAGE_PARAM_ROWS: tuple[tuple[str, str], ...] = (
-    ("image_id", "画像ID"),
+    ("file_name", "ファイル名"),
     ("size", "サイズ"),
     ("shot_at", "撮影日時"),
     ("timezone", "タイムゾーン"),
@@ -23,9 +23,15 @@ CAMERA_PARAM_ROWS: tuple[tuple[str, str], ...] = (
 )
 
 
-def build_parameter_display(api_parameters: dict[str, Any]) -> list[dict[str, Any]]:
+def build_parameter_display(
+    api_parameters: dict[str, Any],
+    *,
+    file_name: str | None = None,
+) -> list[dict[str, Any]]:
     """構想 PDF / §7.3 準拠のパラメータ一覧を返す。"""
-    image = api_parameters.get("image") or {}
+    image = dict(api_parameters.get("image") or {})
+    if file_name:
+        image["file_name"] = file_name
     camera = api_parameters.get("camera") or {}
     return [
         {
