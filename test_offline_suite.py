@@ -2486,6 +2486,59 @@ def test_dry_run_session_rejects_record_post_h3():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_guided_futei_band_tokyo_summer_day():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band
+
+    tz = ZoneInfo("Asia/Tokyo")
+    lat, lon = 35.68, 139.76
+    # 夏至付近の昼（ローカル正午付近）
+    noon = datetime(2026, 6, 21, 12, 0, 0, tzinfo=tz)
+    band = classify_futei_band(noon, lat, lon, tz)
+    assert band in {"正午（九）", "午後（八）", "午前（四）"}
+
+
+def test_guided_futei_band_night():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band
+
+    tz = ZoneInfo("Asia/Tokyo")
+    lat, lon = 35.68, 139.76
+    night = datetime(2026, 6, 21, 2, 0, 0, tzinfo=tz)
+    assert classify_futei_band(night, lat, lon, tz) == "夜"
+
+
+def test_guided_api_parameters_shape():
+    from guided_metadata import GuidedApiParameters, GuidedCameraSettings, GuidedImageInfo
+
+    p = GuidedApiParameters(
+        image=GuidedImageInfo(
+            image_id="abc",
+            size="100x100",
+            shot_at="2026-01-01T12:00:00+09:00",
+            timezone="Asia/Tokyo",
+            region="東京",
+            time_band="正午（九）",
+        ),
+        camera=GuidedCameraSettings(
+            focal_length="50mm",
+            aperture="f/2.8",
+            shutter_speed="1/125s",
+            iso="ISO 400",
+            mode="マニュアル",
+            exposure_compensation="+0.0 EV",
+        ),
+    )
+    d = p.to_dict()
+    assert d["image"]["image_id"] == "abc"
+    assert d["camera"]["shutter_speed"] == "1/125s"
+    assert "time_band" in d["image"]
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -2549,6 +2602,9 @@ def run_all():
     test_p2_2_card_words_before_stars()
     test_low_priority_prompt_pick_skips_sentinel_nashi()
     test_dry_run_session_rejects_record_post_h3()
+    test_guided_futei_band_tokyo_summer_day()
+    test_guided_futei_band_night()
+    test_guided_api_parameters_shape()
     print("test_offline_suite: OK")
 
 
