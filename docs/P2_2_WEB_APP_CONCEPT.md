@@ -151,10 +151,10 @@ flowchart TB
 
 アプリ一式は **PC 内の1フォルダ**に置く（例: `~/Applications/LuminaNotesGuided/`）。
 
-**起動（コピペ一発）:** 詳細は [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md)
+**起動手順（Mac）:** [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) — 全操作コピペ一発・PASS/FAIL 付き
 
 ```bash
-cd "YOUR_REPO_PATH" && bash scripts/run_guided_web.sh
+cd ~/photo-critique-bot && bash scripts/run_guided_web.sh
 ```
 
 | ファイル | 役割 |
