@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lumina Notes — Guided</title>
+  <link rel="stylesheet" href="/static/guided.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Lumina Notes</h1>
+    <nav class="screen-nav" aria-label="画面">
+      <span class="active" data-screen="choose">選ぶ</span>
+      <span data-screen="read">読む</span>
+      <span data-screen="reflect">振り返る</span>
+    </nav>
+  </header>
+
+  <main id="screen-choose" class="screen active">
+    <section class="drop-zone" id="drop-zone">
+      <p>写真をドラッグ＆ドロップ</p>
+      <button type="button" id="pick-file">写真を選ぶ</button>
+      <input type="file" id="file-input" accept="image/*" hidden />
+    </section>
+    <label class="field">一言添えるなら（任意）
+      <textarea id="user-note" rows="2"></textarea>
+    </label>
+    <label class="field">スタイルを選択
+      <select id="lens-select">
+        <option value="self">自分の写真と対話</option>
+      </select>
+    </label>
+    <div id="params-preview" class="params-preview" hidden></div>
+    <div class="actions">
+      <button type="button" id="btn-speak" disabled>言葉にする</button>
+      <button type="button" id="btn-reset" class="secondary">リセット</button>
+    </div>
+  </main>
+
+  <main id="screen-read" class="screen" hidden>
+    <div id="read-skeleton" class="skeleton">いま写真を読んでいます…</div>
+    <article id="read-content" hidden></article>
+    <div class="actions">
+      <button type="button" id="btn-keep">この言葉を残す</button>
+      <button type="button" id="btn-again" class="secondary">もう一度</button>
+    </div>
+  </main>
+
+  <main id="screen-reflect" class="screen" hidden>
+    <div id="card-preview" class="card-preview">カードプレビュー（準備中）</div>
+    <fieldset class="field">
+      <legend>この写真に対する思い <span class="required">必須</span></legend>
+      <div id="user-stars" class="user-stars" role="radiogroup" aria-label="思いの星">
+        <button type="button" data-value="1" aria-label="1">☆</button>
+        <button type="button" data-value="2" aria-label="2">☆</button>
+        <button type="button" data-value="3" aria-label="3">☆</button>
+        <button type="button" data-value="4" aria-label="4">☆</button>
+        <button type="button" data-value="5" aria-label="5">☆</button>
+      </div>
+    </fieldset>
+    <label class="field">カードの色
+      <select id="card-theme"><option value="default">Ivory</option></select>
+    </label>
+    <div class="actions">
+      <button type="button" id="btn-export" disabled>Noteに書き出す</button>
+    </div>
+  </main>
+
+  <script src="/static/guided.js"></script>
+</body>
+</html>
