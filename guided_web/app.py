@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 from ai_vision import prepare_vision_image_bytes
 from guided_metadata import build_guided_api_parameters
 from guided_web.critique_runner import run_phase1, run_phase2
+from guided_web.file_picker import pick_image_file
 from guided_web.folder_picker import pick_folder
 from guided_web.parameter_display import build_parameter_display
 from guided_web.settings import (
@@ -119,15 +121,22 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/api/session/photo")
-async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
-    suffix = Path(file.filename or "photo.jpg").suffix or ".jpg"
+def _build_photo_session(
+    source_path: Path,
+    *,
+    original_path: str,
+    original_filename: str,
+) -> tuple[str, dict[str, Any]]:
+    """画像ファイルからセッションを作成し登録する。"""
     session_id = uuid.uuid4().hex
     tmp_dir = Path(tempfile.gettempdir()) / "lumina_guided" / session_id
     tmp_dir.mkdir(parents=True, exist_ok=True)
+    suffix = source_path.suffix or ".jpg"
     dest = tmp_dir / f"upload{suffix}"
-    data = await file.read()
-    dest.write_bytes(data)
+    if source_path.resolve() != dest.resolve():
+        shutil.copy2(source_path, dest)
+    else:
+        dest = source_path
 
     api_params, metadata, dop_info, meta_block = build_guided_api_parameters(
         dest, image_id=session_id, geocode=True
@@ -139,11 +148,11 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
     except Exception:
         preview_path = dest
 
-    _sessions[session_id] = {
+    session = {
         "path": str(dest),
         "preview_path": str(preview_path),
-        "original_filename": file.filename or dest.name,
-        "original_path": file.filename or dest.name,
+        "original_filename": original_filename,
+        "original_path": original_path,
         "metadata": metadata,
         "dop_info": dop_info,
         "meta_block": meta_block,
@@ -152,23 +161,69 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
         "card_preview_path": None,
         "card_preview_theme": None,
     }
-    original_filename = file.filename or dest.name
-    return JSONResponse(
-        {
-            "session_id": session_id,
-            "preview_url": f"/api/session/{session_id}/preview",
+    _sessions[session_id] = session
+    return session_id, session
+
+
+def _photo_session_response(session_id: str, session: dict[str, Any]) -> dict[str, Any]:
+    original_filename = session["original_filename"]
+    return {
+        "session_id": session_id,
+        "preview_url": f"/api/session/{session_id}/preview",
+        "file_name": original_filename,
+        "original_path": session.get("original_path") or original_filename,
+        "api_parameters": session["api_params"],
+        "parameter_display": build_parameter_display(
+            session["api_params"],
+            file_name=original_filename,
+        ),
+        "local_meta_preview": {
             "file_name": original_filename,
-            "api_parameters": api_params.to_dict(),
-            "parameter_display": build_parameter_display(
-                api_params.to_dict(),
-                file_name=original_filename,
-            ),
-            "local_meta_preview": {
-                "file_name": original_filename,
-                "meta_block_lines": meta_block.splitlines()[:12],
-            },
-        }
+            "meta_block_lines": (session.get("meta_block") or "").splitlines()[:12],
+        },
+    }
+
+
+@app.post("/api/session/photo")
+async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
+    suffix = Path(file.filename or "photo.jpg").suffix or ".jpg"
+    tmp_dir = Path(tempfile.gettempdir()) / "lumina_guided" / f"upload_{uuid.uuid4().hex}"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    dest = tmp_dir / f"upload{suffix}"
+    data = await file.read()
+    dest.write_bytes(data)
+
+    original_filename = file.filename or dest.name
+    session_id, session = _build_photo_session(
+        dest,
+        original_path=original_filename,
+        original_filename=original_filename,
     )
+    return JSONResponse(_photo_session_response(session_id, session))
+
+
+@app.post("/api/session/photo-pick")
+async def pick_photo() -> JSONResponse:
+    """Mac 等のネイティブダイアログで写真を選び、オリジナルのフルパスを記録する。"""
+    loop = asyncio.get_running_loop()
+    initial = get_save_folder() or default_suggested_folder()
+    picked = await loop.run_in_executor(
+        _executor,
+        lambda: pick_image_file(initial.parent if initial and initial.is_file() else initial),
+    )
+    if picked is None:
+        raise HTTPException(status_code=400, detail="photo not selected")
+
+    source = picked.expanduser().resolve()
+    if not source.is_file():
+        raise HTTPException(status_code=400, detail="photo not found")
+
+    session_id, session = _build_photo_session(
+        source,
+        original_path=str(source),
+        original_filename=source.name,
+    )
+    return JSONResponse(_photo_session_response(session_id, session))
 
 
 @app.post("/api/session/{session_id}/critique")

@@ -2695,7 +2695,10 @@ def test_guided_stock_export_writes_files():
             user_stars=4,
             card_theme="light",
             user_note="テスト一言",
-            reflections={"noticed_light": {"checked": True, "text": "", "label": "光・空気"}},
+            reflections={
+                "noticed_see": {"checked": True, "text": "", "label": "写真を見て"},
+                "thought_scene": {"checked": True, "text": "", "label": "その時の情景"},
+            },
         )
         assert (save_root / "sample_LN.png").is_file()
         assert (save_root / "sample_LN.md").is_file()
@@ -2705,17 +2708,38 @@ def test_guided_stock_export_writes_files():
         assert "オリジナルファイルのパス: /Users/me/Pictures/sample.jpg" in note_text
         assert "★ 思い: 4/5" in note_text
         assert "一言: テスト一言" in note_text
-        assert "振り返りメモ: 光・空気" in note_text
+        assert "振り返りメモ:" not in note_text
+        assert "気づいたことがある" in note_text
+        assert "☑ 写真を見て" in note_text
+        assert "⬜ 言葉にして" in note_text
+        assert "☑ その時の情景" in note_text
         reflect_pos = note_text.index("=== 振り返り ===")
         path_pos = note_text.index("オリジナルファイルのパス:")
         stars_pos = note_text.index("★ 思い:")
         note_pos = note_text.index("一言:")
-        memo_pos = note_text.index("振り返りメモ:")
+        noticed_pos = note_text.index("気づいたことがある")
         exported_pos = note_text.index("書き出し日時:")
-        assert reflect_pos < path_pos < stars_pos < note_pos < memo_pos < exported_pos
+        assert reflect_pos < path_pos < stars_pos < note_pos < noticed_pos < exported_pos
         assert files["card"].endswith("sample_LN.png")
     finally:
         shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_format_reflections_block():
+    from guided_web.reflect_prompts import format_reflections_block
+
+    block = format_reflections_block(
+        {
+            "noticed_see": {"checked": True, "text": "", "label": "写真を見て"},
+            "noticed_words": {"checked": False, "text": "", "label": "言葉にして"},
+            "photo_book": {"checked": True, "text": "", "label": "フォトブックにしたい"},
+        }
+    )
+    assert "気づいたことがある" in block
+    assert "☑ 写真を見て" in block
+    assert "⬜ 言葉にして" in block
+    assert "☑ フォトブックにしたい" in block
+    assert "振り返りメモ" not in block
 
 
 def test_guided_selected_reflection_labels():
@@ -2723,11 +2747,11 @@ def test_guided_selected_reflection_labels():
 
     labels = selected_reflection_labels(
         {
-            "noticed_light": {"checked": True, "text": "", "label": "光・空気"},
-            "photo_keep": {"checked": True, "text": "アルバムに", "label": "残したい"},
+            "noticed_see": {"checked": True, "text": "", "label": "写真を見て"},
+            "photo_keep": {"checked": True, "text": "アルバムに", "label": "手元に置いておきたい"},
         }
     )
-    assert labels == ["光・空気", "アルバムに"]
+    assert labels == ["写真を見て", "アルバムに"]
 
 
 def test_guided_settings_save_folder_roundtrip():
@@ -2826,6 +2850,7 @@ def run_all():
     test_guided_card_footer_metadata()
     test_guided_body_sections_split()
     test_guided_stock_export_writes_files()
+    test_guided_format_reflections_block()
     test_guided_selected_reflection_labels()
     test_guided_settings_save_folder_roundtrip()
     print("test_offline_suite: OK")

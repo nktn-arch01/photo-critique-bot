@@ -6,32 +6,32 @@ from __future__ import annotations
 REFLECTION_GROUPS: tuple[dict, ...] = (
     {
         "id": "noticed",
-        "label": "気づいたこと",
+        "label": "気づいたことがある",
         "items": (
-            {"id": "light", "label": "光・空気"},
-            {"id": "color", "label": "色・トーン"},
-            {"id": "composition", "label": "構図・距離"},
-            {"id": "subject", "label": "主役と背景"},
+            {"id": "see", "label": "写真を見て"},
+            {"id": "words", "label": "言葉にして"},
         ),
     },
     {
         "id": "thought",
-        "label": "ふと思ったこと",
+        "label": "ふと思ったことは",
         "items": (
-            {"id": "first_impression", "label": "撮った直後の印象"},
-            {"id": "on_review", "label": "見返して気づいたこと"},
-            {"id": "memory", "label": "思い出した場面"},
-            {"id": "feeling", "label": "いまの気持ち"},
+            {"id": "scene", "label": "その時の情景"},
+            {"id": "memory", "label": "その時の記憶"},
+            {"id": "feeling", "label": "自分の気持ち"},
+            {"id": "sense", "label": "自分の感性"},
+            {"id": "someone", "label": "誰かのこと"},
         ),
     },
     {
         "id": "photo",
         "label": "この写真を",
         "items": (
-            {"id": "keep", "label": "残したい"},
-            {"id": "retry", "label": "もう一度撮りたい"},
-            {"id": "another", "label": "別の切り口で試したい"},
-            {"id": "next", "label": "次に活かしたい"},
+            {"id": "keep", "label": "手元に置いておきたい"},
+            {"id": "revisit", "label": "何度も見返したい"},
+            {"id": "share", "label": "人に見せたい"},
+            {"id": "book", "label": "フォトブックにしたい"},
+            {"id": "exhibit", "label": "作品展に出したい"},
         ),
     },
 )
@@ -62,3 +62,16 @@ def selected_reflection_labels(reflections: dict) -> list[str]:
         text = str(entry.get("text") or "").strip()
         selected.append(text if text else default_label)
     return selected
+
+
+def format_reflections_block(reflections: dict) -> str:
+    """ログ用: グループ見出し + ⬜/☑ 付き項目一覧（「振り返りメモ」ラベルなし）。"""
+    lines: list[str] = []
+    for group in REFLECTION_GROUPS:
+        lines.append(str(group["label"]))
+        for item in group["items"]:
+            key = reflection_item_key(group["id"], item["id"])
+            entry = reflections.get(key) or {}
+            mark = "☑" if entry.get("checked") else "⬜"
+            lines.append(f"{mark} {item['label']}")
+    return "\n".join(lines)

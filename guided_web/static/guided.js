@@ -182,19 +182,48 @@ function buildParameterDisplayFallback(apiParameters, fileName) {
   ];
 }
 
+async function pickPhotoNative() {
+  const res = await fetch("/api/session/photo-pick", { method: "POST" });
+  if (res.status === 400) {
+    const data = await res.json().catch(() => ({}));
+    if ((data.detail || "").includes("not selected")) {
+      return null;
+    }
+    throw new Error(data.detail || "photo pick failed");
+  }
+  if (!res.ok) throw new Error("photo pick failed");
+  return res.json();
+}
+
+async function applyPhotoSession(data, previewFile) {
+  sessionId = data.session_id;
+  currentFileName = data.file_name || previewFile?.name;
+  serverPreviewUrl = data.preview_url || null;
+  if (serverPreviewUrl) {
+    setPhotoPreview(serverPreviewUrl);
+  } else if (previewFile) {
+    revokeLocalPreview();
+    localPreviewUrl = URL.createObjectURL(previewFile);
+    setPhotoPreview(localPreviewUrl);
+  }
+  renderParams(data);
+}
+
 async function handleSelectedFile(file) {
   revokeLocalPreview();
   localPreviewUrl = URL.createObjectURL(file);
   setPhotoPreview(localPreviewUrl);
 
   const data = await uploadPhoto(file);
-  sessionId = data.session_id;
-  currentFileName = data.file_name || file.name;
-  serverPreviewUrl = data.preview_url || null;
-  if (serverPreviewUrl) {
-    setPhotoPreview(serverPreviewUrl);
-  }
-  renderParams(data);
+  await applyPhotoSession(data, file);
+}
+
+async function handleNativePhotoPick() {
+  const data = await pickPhotoNative();
+  if (!data) return;
+  revokeLocalPreview();
+  localPreviewUrl = null;
+  await applyPhotoSession(data, null);
 }
 
 function resetReflectionFields() {
@@ -244,8 +273,13 @@ function resetSession() {
   showScreen("choose");
 }
 
-document.getElementById("pick-file").addEventListener("click", () => {
-  document.getElementById("file-input").click();
+document.getElementById("pick-file").addEventListener("click", async () => {
+  try {
+    await handleNativePhotoPick();
+  } catch (err) {
+    console.warn("native photo pick unavailable, falling back to file input", err);
+    document.getElementById("file-input").click();
+  }
 });
 
 document.getElementById("file-input").addEventListener("change", async (e) => {
