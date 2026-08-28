@@ -36,8 +36,10 @@ def get_save_folder() -> Path | None:
 
 
 def set_save_folder(path: Path) -> Path:
+    """最後に使った保存先フォルダを記憶する（フォルダ自体は作らない）。"""
     resolved = path.expanduser().resolve()
-    resolved.mkdir(parents=True, exist_ok=True)
+    if not resolved.is_dir():
+        raise ValueError("保存先フォルダが存在しません")
     data = load_settings()
     data["save_folder"] = str(resolved)
     save_settings(data)

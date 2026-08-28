@@ -1,4 +1,4 @@
-"""Guided Web 専用カード（Compact + 一言・思い・ファイル名）。"""
+"""Guided Web 専用カード（Compact + 思い・一言・ファイル名）。"""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def create_guided_card(
     file_name: str = "",
     lens: str = DEFAULT_LENS,
 ) -> str:
-    """Guided 用カード PNG。Compact 文の下に一言・思い・ファイル名を描画。"""
+    """Guided 用カード PNG。Compact 線の下: 思い → 一言（ラベルなし）→ 空行 → ファイル名。"""
     palette = get_card_palette(theme)
     lens_def = get_lens(lens)
     parsed = parse_critique_text(critique_text, lens=lens_def.id)
@@ -55,9 +55,8 @@ def create_guided_card(
     content_bottom = CARD_HEIGHT - CARD_MARGIN
     content_width = content_right - content_left
 
-    footer_lines = 3
     footer_line_h = 30
-    footer_block_h = footer_lines * footer_line_h + LINE_THICKNESS + LINE_GAP_AFTER
+    footer_block_h = footer_line_h * 4 + LINE_THICKNESS + LINE_GAP_AFTER
 
     text_height = (
         LINE_THICKNESS
@@ -128,16 +127,19 @@ def create_guided_card(
         width=LINE_THICKNESS,
     )
 
-    note = (user_note or "").strip() or "—"
     stars = _stars_text(user_stars) if user_stars > 0 else "☆☆☆☆☆"
+    note = (user_note or "").strip()
     fname = (file_name or "").strip() or "—"
 
-    meta_rows = (
-        f"一言: {note}",
+    footer_rows: list[str] = [
         f"この写真に対する思い: {stars}",
+        note,
+        "",
         fname,
-    )
-    for i, line in enumerate(meta_rows):
+    ]
+    for i, line in enumerate(footer_rows):
+        if not line:
+            continue
         draw.text(
             (content_left, footer_y + i * footer_line_h),
             line,

@@ -84,20 +84,12 @@
         <option value="light">ライト</option>
       </select>
     </label>
+    <label class="field">一言添えるなら（任意）
+      <textarea id="reflect-user-note" rows="2"></textarea>
+    </label>
     <fieldset class="field reflect-checklist">
       <legend>振り返りメモ</legend>
-      <div class="reflect-item">
-        <label class="reflect-check"><input type="checkbox" id="reflect-noticed-check" /> 気づいたこと</label>
-        <textarea id="reflect-noticed-text" rows="2" placeholder="…"></textarea>
-      </div>
-      <div class="reflect-item">
-        <label class="reflect-check"><input type="checkbox" id="reflect-thought-check" /> ふと思ったこと</label>
-        <textarea id="reflect-thought-text" rows="2" placeholder="…"></textarea>
-      </div>
-      <div class="reflect-item">
-        <label class="reflect-check"><input type="checkbox" id="reflect-photo-check" /> この写真を</label>
-        <textarea id="reflect-photo-text" rows="2" placeholder="…"></textarea>
-      </div>
+      <div id="reflect-checklist" class="reflect-checklist-body"></div>
     </fieldset>
     <div class="actions reflect-actions split-actions">
       <span></span>
@@ -105,6 +97,6 @@
     </div>
   </main>
 
-  <script src="/static/guided.js?v=7"></script>
+  <script src="/static/guided.js?v=8"></script>
 </body>
 </html>

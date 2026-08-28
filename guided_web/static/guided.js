@@ -4,11 +4,54 @@ const screens = {
   reflect: document.getElementById("screen-reflect"),
 };
 
-const REFLECT_ITEMS = [
-  { id: "noticed", label: "気づいたこと" },
-  { id: "thought", label: "ふと思ったこと" },
-  { id: "photo", label: "この写真を" },
-];
+let reflectGroups = [];
+
+async function loadReflectItems() {
+  try {
+    const res = await fetch("/api/reflect-items");
+    if (!res.ok) return;
+    const data = await res.json();
+    reflectGroups = data.groups || [];
+    renderReflectChecklist();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderReflectChecklist() {
+  const root = document.getElementById("reflect-checklist");
+  if (!root) return;
+  root.innerHTML = "";
+  reflectGroups.forEach((group) => {
+    const section = document.createElement("section");
+    section.className = "reflect-group";
+
+    const title = document.createElement("h3");
+    title.className = "reflect-group-title";
+    title.textContent = group.label;
+    section.appendChild(title);
+
+    const grid = document.createElement("div");
+    grid.className = "reflect-group-items";
+    (group.items || []).forEach((item) => {
+      const key = `${group.id}_${item.id}`;
+      const label = document.createElement("label");
+      label.className = "reflect-check";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.dataset.reflectKey = key;
+      input.dataset.reflectLabel = item.label;
+      input.id = `reflect-${key}`;
+      const text = document.createElement("span");
+      text.textContent = item.label;
+      label.appendChild(input);
+      label.appendChild(text);
+      grid.appendChild(label);
+    });
+    section.appendChild(grid);
+    root.appendChild(section);
+  });
+}
 
 let sessionId = null;
 let userStars = 0;
@@ -155,11 +198,8 @@ async function handleSelectedFile(file) {
 }
 
 function resetReflectionFields() {
-  REFLECT_ITEMS.forEach(({ id }) => {
-    const check = document.getElementById(`reflect-${id}-check`);
-    const text = document.getElementById(`reflect-${id}-text`);
-    if (check) check.checked = false;
-    if (text) text.value = "";
+  document.querySelectorAll("#reflect-checklist input[type=checkbox]").forEach((el) => {
+    el.checked = false;
   });
 }
 
@@ -192,6 +232,7 @@ function resetSession() {
   document.getElementById("file-input").value = "";
   document.getElementById("user-note").value = "";
   resetReflectionFields();
+  document.getElementById("reflect-user-note").value = "";
   clearCardPreview();
   setReadLoading(false);
   document.getElementById("read-compact-wrap").hidden = true;
@@ -364,6 +405,10 @@ function clearCardPreview() {
   loading.textContent = "カードを準備しています…";
 }
 
+function reflectUserNote() {
+  return document.getElementById("reflect-user-note").value || "";
+}
+
 async function refreshCardPreview() {
   if (!sessionId) return;
   clearCardPreview();
@@ -375,7 +420,7 @@ async function refreshCardPreview() {
       body: JSON.stringify({
         card_theme: theme,
         user_stars: userStars,
-        user_note: document.getElementById("user-note").value || "",
+        user_note: reflectUserNote(),
       }),
     });
     const data = await res.json();
@@ -395,22 +440,30 @@ async function refreshCardPreview() {
 }
 
 function prepareReflectScreen() {
+  document.getElementById("reflect-user-note").value =
+    document.getElementById("user-note").value || "";
   refreshCardPreview();
 }
 
 function collectReflections() {
   const out = {};
-  REFLECT_ITEMS.forEach(({ id, label }) => {
-    out[id] = {
-      checked: Boolean(document.getElementById(`reflect-${id}-check`)?.checked),
-      text: document.getElementById(`reflect-${id}-text`)?.value || "",
-      label,
+  document.querySelectorAll("#reflect-checklist input[type=checkbox]").forEach((el) => {
+    const key = el.dataset.reflectKey;
+    if (!key) return;
+    out[key] = {
+      checked: el.checked,
+      text: "",
+      label: el.dataset.reflectLabel || "",
     };
   });
   return out;
 }
 
 document.getElementById("card-theme").addEventListener("change", () => {
+  if (!screens.reflect.hidden) refreshCardPreview();
+});
+
+document.getElementById("reflect-user-note").addEventListener("input", () => {
   if (!screens.reflect.hidden) refreshCardPreview();
 });
 
@@ -426,7 +479,7 @@ document.getElementById("btn-export").addEventListener("click", async () => {
       body: JSON.stringify({
         user_stars: userStars,
         card_theme: document.getElementById("card-theme").value || "dark",
-        user_note: document.getElementById("user-note").value || "",
+        user_note: reflectUserNote(),
         reflections: collectReflections(),
       }),
     });
@@ -434,7 +487,7 @@ document.getElementById("btn-export").addEventListener("click", async () => {
     if (!res.ok) {
       throw new Error(data.detail || "書き出しに失敗しました");
     }
-    alert(`書き出しました:\n${data.export_path}`);
+    alert(`書き出しました:\n${data.files.card}\n${data.files.note}`);
     resetSession();
   } catch (err) {
     console.error(err);
@@ -463,3 +516,4 @@ function updateStarButtons() {
 }
 
 updateStarButtons();
+loadReflectItems();

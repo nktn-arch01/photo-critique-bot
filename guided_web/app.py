@@ -26,6 +26,7 @@ from guided_web.settings import (
     set_save_folder,
 )
 from guided_web.stock_export import export_guided_session, render_card_preview, critique_text_for_session
+from guided_web.reflect_prompts import REFLECTION_GROUPS
 
 APP_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = APP_ROOT / "static"
@@ -142,6 +143,7 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
         "path": str(dest),
         "preview_path": str(preview_path),
         "original_filename": file.filename or dest.name,
+        "original_path": file.filename or dest.name,
         "metadata": metadata,
         "dop_info": dop_info,
         "meta_block": meta_block,
@@ -242,6 +244,22 @@ def session_preview(session_id: str) -> FileResponse:
     return FileResponse(path, media_type="image/jpeg")
 
 
+@app.get("/api/reflect-items")
+def reflect_items() -> JSONResponse:
+    return JSONResponse(
+        {
+            "groups": [
+                {
+                    "id": g["id"],
+                    "label": g["label"],
+                    "items": [{"id": i["id"], "label": i["label"]} for i in g["items"]],
+                }
+                for g in REFLECTION_GROUPS
+            ]
+        }
+    )
+
+
 @app.get("/api/settings")
 def get_settings() -> JSONResponse:
     folder = get_save_folder()
@@ -328,7 +346,8 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     loop = asyncio.get_running_loop()
-    save_root = await loop.run_in_executor(_executor, lambda: pick_folder(None))
+    initial = get_save_folder() or default_suggested_folder()
+    save_root = await loop.run_in_executor(_executor, lambda: pick_folder(initial))
     if save_root is None:
         raise HTTPException(status_code=400, detail="保存先が選ばれませんでした")
 
@@ -337,11 +356,11 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
     }
 
     try:
-        export_dir = await loop.run_in_executor(
+        files = await loop.run_in_executor(
             _executor,
             lambda: export_guided_session(
                 sess,
-                save_root=save_root,
+                save_dir=save_root,
                 user_stars=body.user_stars,
                 card_theme=body.card_theme,
                 user_note=body.user_note,
@@ -351,15 +370,12 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    set_save_folder(save_root)
+
     return JSONResponse(
         {
-            "export_path": str(export_dir),
-            "files": {
-                "photo": str(export_dir / "photo.jpg"),
-                "card": str(export_dir / "card.png"),
-                "note": str(export_dir / "note.md"),
-                "session": str(export_dir / "session.json"),
-            },
+            "export_path": files["export_dir"],
+            "files": files,
         }
     )
 

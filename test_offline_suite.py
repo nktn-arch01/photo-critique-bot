@@ -2662,14 +2662,13 @@ def test_guided_body_sections_split():
 
 
 def test_guided_stock_export_writes_files():
-    import json
     import shutil
     import tempfile
     from pathlib import Path
 
     from PIL import Image
 
-    from guided_web.stock_export import export_guided_session
+    from guided_web.stock_export import export_guided_session, export_output_names
 
     td = Path(tempfile.mkdtemp(prefix="guided_export_"))
     try:
@@ -2679,7 +2678,8 @@ def test_guided_stock_export_writes_files():
             "path": str(jpeg),
             "preview_path": str(jpeg),
             "original_filename": "sample.jpg",
-            "meta_block": "=== メタデータ ===\nテスト",
+            "original_path": "/Users/me/Pictures/sample.jpg",
+            "meta_block": "=== EXIF ===\nテスト",
             "api_params": {"image": {"image_id": "test123"}},
             "critique": {
                 "lens": "self",
@@ -2687,27 +2687,38 @@ def test_guided_stock_export_writes_files():
             },
         }
         save_root = td / "stock"
-        out = export_guided_session(
+        save_root.mkdir()
+        assert export_output_names("sample.jpg") == ("sample_LN.png", "sample_LN.md")
+        files = export_guided_session(
             session,
-            save_root=save_root,
+            save_dir=save_root,
             user_stars=4,
             card_theme="light",
             user_note="テスト一言",
+            reflections={"noticed_light": {"checked": True, "text": "", "label": "光・空気"}},
         )
-        assert out.is_dir()
-        assert (out / "photo.jpg").is_file()
-        assert (out / "card.png").is_file()
-        assert (out / "note.md").is_file()
-        assert (out / "session.json").is_file()
-        sess = json.loads((out / "session.json").read_text(encoding="utf-8"))
-        assert sess["user_stars"] == 4
-        assert sess["card_theme"] == "light"
-        assert sess["user_note"] == "テスト一言"
-        note_text = (out / "note.md").read_text(encoding="utf-8")
-        assert "★ 思い: 4/5" in note_text
+        assert (save_root / "sample_LN.png").is_file()
+        assert (save_root / "sample_LN.md").is_file()
+        assert not (save_root / "photo.jpg").exists()
+        note_text = (save_root / "sample_LN.md").read_text(encoding="utf-8")
+        assert "オリジナルファイル: /Users/me/Pictures/sample.jpg" in note_text
         assert "一言: テスト一言" in note_text
+        assert "振り返りメモ: 光・空気" in note_text
+        assert files["card"].endswith("sample_LN.png")
     finally:
         shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_selected_reflection_labels():
+    from guided_web.reflect_prompts import selected_reflection_labels
+
+    labels = selected_reflection_labels(
+        {
+            "noticed_light": {"checked": True, "text": "", "label": "光・空気"},
+            "photo_keep": {"checked": True, "text": "アルバムに", "label": "残したい"},
+        }
+    )
+    assert labels == ["光・空気", "アルバムに"]
 
 
 def test_guided_settings_save_folder_roundtrip():
@@ -2806,6 +2817,7 @@ def run_all():
     test_guided_card_footer_metadata()
     test_guided_body_sections_split()
     test_guided_stock_export_writes_files()
+    test_guided_selected_reflection_labels()
     test_guided_settings_save_folder_roundtrip()
     print("test_offline_suite: OK")
 
