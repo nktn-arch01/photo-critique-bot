@@ -2708,7 +2708,7 @@ def test_guided_stock_export_writes_files():
         assert "オリジナルファイルのパス: /Users/me/Pictures/sample.jpg" in note_text
         assert "★ 思い: 4/5" in note_text
         assert "一言: テスト一言" in note_text
-        assert "振り返りメモ:" not in note_text
+        assert "振り返りメモ: 写真を見て, その時の情景" in note_text
         assert "気づいたことがある" in note_text
         assert "☑ 写真を見て" in note_text
         assert "⬜ 言葉にして" in note_text
@@ -2718,8 +2718,9 @@ def test_guided_stock_export_writes_files():
         stars_pos = note_text.index("★ 思い:")
         note_pos = note_text.index("一言:")
         noticed_pos = note_text.index("気づいたことがある")
+        memo_pos = note_text.index("振り返りメモ:")
         exported_pos = note_text.index("書き出し日時:")
-        assert reflect_pos < path_pos < stars_pos < note_pos < noticed_pos < exported_pos
+        assert reflect_pos < path_pos < stars_pos < note_pos < noticed_pos < memo_pos < exported_pos
         assert files["card"].endswith("sample_LN.png")
     finally:
         shutil.rmtree(td, ignore_errors=True)

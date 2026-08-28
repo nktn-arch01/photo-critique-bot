@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from guided_web.guided_card import create_guided_card
-from guided_web.reflect_prompts import format_reflections_block
+from guided_web.reflect_prompts import format_reflections_block, selected_reflection_labels
 from log_manager import DesktopLogManager
 
 
@@ -99,6 +99,7 @@ def _format_note_markdown(
     manager = DesktopLogManager(Path("/tmp"))
     critique_body = manager._format_structured_content(file_name, "", critique_text)
     reflection_block = format_reflections_block(reflections)
+    reflection_csv = ", ".join(selected_reflection_labels(reflections))
 
     header_lines = [
         "=== 振り返り ===",
@@ -106,6 +107,7 @@ def _format_note_markdown(
         f"★ 思い: {user_stars}/5",
         f"一言: {user_note or '—'}",
         reflection_block,
+        f"振り返りメモ: {reflection_csv or '—'}",
         f"書き出し日時: {datetime.now().isoformat(timespec='seconds')}",
     ]
     header = "\n".join(header_lines) + "\n"
