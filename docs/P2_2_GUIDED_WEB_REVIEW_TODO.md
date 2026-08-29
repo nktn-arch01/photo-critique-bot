@@ -3,7 +3,7 @@
 更新日: 2026-08-29  
 対象: `guided_web/`（Lumina Notes Guided）  
 ブランチ: `cursor/p2-2-web-concept-f193` / PR #21  
-関連: [`AGENTS.md`](../AGENTS.md) / [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md) / [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`](P2_2_GUIDED_CRITIQUE_LIFECYCLE.md)
+関連: [`AGENTS.md`](../AGENTS.md) / [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md) / [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`](P2_2_GUIDED_CRITIQUE_LIFECYCLE.md) / [`P2_2_GUIDED_WALKTHROUGH_REVIEW.md`](P2_2_GUIDED_WALKTHROUGH_REVIEW.md)
 
 ---
 
@@ -98,9 +98,9 @@
 | P9 | ローカル設定・キャッシュの管理 | [x] | `guided_settings.json`、ジオコードはローカルのみ |
 | P10 | 書き出し MD のフルパス・EXIF はローカルのみ | [x] | API には送らない（設計どおり） |
 
-**オフラインテスト:** `test_guided_privacy_prompts_exclude_identifying_metadata`, `test_guided_privacy_audit_whitelist`, `test_guided_critique_runner_uses_api_params`
+**オフラインテスト:** `test_guided_privacy_prompts_exclude_identifying_metadata`, `test_guided_privacy_audit_whitelist`, `test_guided_critique_runner_uses_api_params`, `test_guided_photo_response_omits_identifying_local_fields`
 
-**ブラウザ表示の注意:** `original_path` と `meta_block_lines`（先頭12行）は UI 用ローカル表示。OpenAI には送らない。
+**ブラウザ表示の注意:** 選ぶ画面の表は抽象パラメータ。フルパスはサーバのセッションと書き出し MD のみ（HTTP 応答には出さない）。
 
 ---
 
@@ -148,3 +148,4 @@ cd ~/photo-critique-bot && python3 test_offline_suite.py
 | 2026-08-29 | T13/T14 を状態機械で一本化。正本 `P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`。画面は cancel しない。noop / supersede / destroy |
 | 2026-08-29 | 「言葉にする」で読むへ移る前に前の講評表示を消す。タブ移動の描き戻しは維持 |
 | 2026-08-29 | オーナー Mac：チェック 0–5 と 4i PASS |
+| 2026-08-29 | 全体ウォークスルー。正本 `P2_2_GUIDED_WALKTHROUGH_REVIEW.md`。HTTP から未使用のフルパス／メタ抜粋を除外 |

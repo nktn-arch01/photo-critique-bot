@@ -302,21 +302,17 @@ def _build_photo_session(
 
 
 def _photo_session_response(session_id: str, session: dict[str, Any]) -> dict[str, Any]:
+    """ブラウザへ返す写真セッション。フルパスとメタ全文は載せない（書き出しはサーバ側セッション）。"""
     original_filename = session["original_filename"]
     return {
         "session_id": session_id,
         "preview_url": f"/api/session/{session_id}/preview",
         "file_name": original_filename,
-        "original_path": session.get("original_path") or original_filename,
         "api_parameters": session["api_params"],
         "parameter_display": build_parameter_display(
             session["api_params"],
             file_name=original_filename,
         ),
-        "local_meta_preview": {
-            "file_name": original_filename,
-            "meta_block_lines": (session.get("meta_block") or "").splitlines()[:12],
-        },
     }
 
 

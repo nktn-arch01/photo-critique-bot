@@ -2626,6 +2626,38 @@ def test_guided_upload_returns_parameter_display():
     assert data["parameter_display"][0]["rows"][0]["value"] == "params.jpg"
 
 
+def test_guided_photo_response_omits_identifying_local_fields():
+    """ブラウザ応答にフルパス・メタ抜粋・生 GPS を載せない。"""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "private.jpg"
+    Image.new("RGB", (80, 60), (1, 2, 3)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("private.jpg", f, "image/jpeg")})
+    assert res.status_code == 200
+    data = res.json()
+    assert "session_id" in data
+    assert "parameter_display" in data
+    assert "local_meta_preview" not in data
+    assert "original_path" not in data
+    assert "meta_block" not in data
+    blob = json.dumps(data)
+    assert "gps_lat" not in blob
+    assert "GPSLatitude" not in blob
+    sess = app_module._sessions[data["session_id"]]
+    assert "original_path" in sess
+    assert "meta_block" in sess
+
+
 def test_guided_upload_rejects_unreadable_image():
     import tempfile
     from pathlib import Path
@@ -4018,6 +4050,7 @@ def run_all():
     test_guided_api_parameters_shape()
     test_guided_parameter_display_rows()
     test_guided_upload_returns_parameter_display()
+    test_guided_photo_response_omits_identifying_local_fields()
     test_guided_upload_rejects_unreadable_image()
     test_guided_unreadable_upload_keeps_existing_session()
     test_guided_card_footer_metadata()
