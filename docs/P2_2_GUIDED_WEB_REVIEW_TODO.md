@@ -3,14 +3,15 @@
 更新日: 2026-08-29  
 対象: `guided_web/`（Lumina Notes Guided）  
 ブランチ: `cursor/p2-2-web-concept-f193` / PR #21  
-関連: [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md)
+関連: [`AGENTS.md`](../AGENTS.md) / [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md) / [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md)
 
 ---
 
 ## この文書の位置づけ
 
-「**Guided Web レビュー報告**」（2026-08-29 時点）以降に整理した、**UI/UX・技術・プライバシー**の3軸レビュー結果の正本です。  
-新チャットへの引き継ぎは [`P2_2_GUIDED_WEB_HANDOFF_PROMPT.md`](P2_2_GUIDED_WEB_HANDOFF_PROMPT.md) をコピペしてください。
+「**Guided Web レビュー報告**」（2026-08-29 時点）以降に整理した、**UI/UX・技術・プライバシー**の3軸レビュー結果の正本です。
+
+**2026-08-29 夕方:** Cloud Agent「Guided web review todos」は一区切り。続きは新しい会話。手順は [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md)。貼る文面は [`P2_2_GUIDED_WEB_HANDOFF_PROMPT.md`](P2_2_GUIDED_WEB_HANDOFF_PROMPT.md)。
 
 ### 記号
 
@@ -25,7 +26,7 @@
 | 軸 | 完了 | 部分 | 未対応 | 合計 |
 |----|------|------|--------|------|
 | UI/UX（U1–U16） | 16 | 0 | 0 | 16 |
-| 技術（T1–T14） | 14 | 0 | 0 | 14 |
+| 技術（T1–T14） | 12 | 2 | 0 | 14 |
 | プライバシー（P1–P10） | 9 | 1 | 0 | 10 |
 
 ---
@@ -69,11 +70,10 @@
 | T8 | セッション解放（クリア・写真差し替え） | [x] | `DELETE` / `POST .../release` + `session_cleanup.py` |
 | T9 | 講評未完了時のカード生成ガード | [x] | 400 `critique not ready` |
 | T10 | 書き出し失敗（★未選択・フォルダ取消） | [x] | クライアント／サーバー双方 |
-| T11 | 終了時（Ctrl+C）のクリーンアップ | [x] | FastAPI `lifespan` → `shutdown_sessions` |
+| T11 | 終了時（Ctrl+C）のクリーンアップ | [x] | FastAPI `lifespan` → `shutdown_sessions`。起動は前面プロセス（Mac で Control+C が効くこと） |
 | T12 | クラッシュ時の一時ファイル残存 | [x] | 起動時 `purge_orphan_temp` |
-| T13 | 同一セッションへの同時リクエスト制御 | [x] | session lock + epoch。並行は 409。講評キャンセルで epoch を進める |
-| T14 | タブ閉じ／ポーリング中断後の整理 | [x] | `beforeunload` / `pagehide`（persisted は除外）。セッションIDは消さない。hidden 画面は `inert` |
-| T14 | タブ閉じ／ポーリング中断後の整理 | [x] | `beforeunload` / `pagehide`（persisted は除外）。セッションIDは消さない。hidden 画面は `inert` |
+| T13 | 同一セッションへの同時リクエスト制御 | [~] | lock + epoch はある。2026-08-29 に cancel 方針が何度も逆転した。次会話で状態機械を一本化するまで完了としない |
+| T14 | タブ閉じ／ポーリング中断後の整理 | [~] | `inert` / `pagehide` / タブ離脱で cancel しない、は後付け。T13 と同じくライフサイクル設計が先 |
 
 **主要モジュール:** `guided_web/app.py`, `guided_web/session_cleanup.py`, `guided_web/static/guided.js`
 
@@ -106,13 +106,12 @@
 
 ## 4. 優先度付きバックログ（次の実装候補）
 
-上から順に着手する想定。
+上から順に着手する。**P5 より先に T13/T14 の状態機械。**
 
-### 残（任意・構想拡張）
-
-1. **P5** — 永続セッションログ（`session.json` 等）
-2. **T4 延長** — アップロードサイズ上限
-3. Mac チェックリストのオーナー PASS 記入
+1. **T13/T14** — 講評中の合法状態だけを残す（3段階レビューの文書 → 共通化 → オフラインテスト）。対症療法の cancel フラグを増やさない
+2. **P5** — 永続セッションログ（`session.json` 等）（任意）
+3. **T4 延長** — アップロードサイズ上限（任意）
+4. Mac チェックリストのオーナー PASS 記入
 
 ---
 
@@ -144,3 +143,4 @@ cd ~/photo-critique-bot && python3 test_offline_suite.py
 | 2026-08-29 | Mac で書き出しダイアログをキャンセルすると Tk がワーカーで起動しプロセス abort。キャンセルと unavailable を分離 |
 | 2026-08-29 | 読むの Phase2 待ち中に選ぶへ行くと講評を cancel してフリーズしていた。タブ移動ではポーリングを維持 |
 | 2026-08-29 | 壊れた写真の D&D が既存セッションを先に捨て、プレビューだけ消してパラメータが残っていた。成功時のみ差し替え |
+| 2026-08-29 | 「Guided web review todos」を一区切り。T13/T14 を部分対応に戻し、次会話の手順を `AGENTS.md` / `START_NEXT_CONVERSATION.md` に固定 |

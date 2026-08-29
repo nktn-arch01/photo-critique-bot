@@ -1,0 +1,8 @@
+---
+description: Photo AI Critique の開発ルール（ARCHITECTURE・3段階レビュー・Cloud Agent）
+alwaysApply: true
+---
+
+作業前に `AGENTS.md` と `ARCHITECTURE.md` を読む。対症療法の条件分岐は禁止。オーナーにデバッグさせない。
+
+Guided Web の続きは新しい会話で始める。長いやり直しスレッドを延長しない。モデルは Fast / high-fast を使わない。Linux ブラウザの通過を Mac の完了証明にしない。デモ動画を求められない限りオーナーに送らない。

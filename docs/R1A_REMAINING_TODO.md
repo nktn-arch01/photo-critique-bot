@@ -52,7 +52,7 @@
 
 | ID | 内容 | メモ |
 |----|------|------|
-| **N1（新規）** | 開発 UI から公開向け洗練 UI へ（ローカル FastAPI＋ブラウザ） | 親テーマ。憲章 §3–4 |
+| **N1（新規）** | 開発 UI から公開向け洗練 UI へ（ローカル FastAPI＋ブラウザ） | PR #21 でスパイク中。続きは [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md) |
 | U4 | 表層の評価語彙を対話語彙へ | **DONE（Console）** — `console_ui_copy.py`。Guided は後続 |
 | Q4 | CRITIQUE_SUMMARY を「次の撮影への問い」寄りに | **DONE（Phase 2）** — 見所＋もう一度見る／次のシャッター。N-03 定型は禁止 |
 | U1 | カードで要約／問い上位・★二次（旧 C1） | **DONE（Phase 2）** — 読み順 TITLE→SUMMARY→CRITIQUE_SUMMARY→★ |
@@ -121,3 +121,4 @@
 | 2026-08-13 | P2-2: 公開 UX 憲章を合意（ブランドブック 02・一文・表面・ローカル Web） |
 | 2026-08-13 | P2-2 Phase 1: Console 言葉（U4/S3/Q7） |
 | 2026-08-14 | P2-2 Phase 2: カード主役化（U1/Q1）＋ CRITIQUE_SUMMARY 2拍（Q4） |
+| 2026-08-29 | N1 Guided Web は PR #21。長い Cloud Agent は一区切り。続きは START_NEXT_CONVERSATION.md |

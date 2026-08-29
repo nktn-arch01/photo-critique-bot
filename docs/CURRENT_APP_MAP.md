@@ -1,6 +1,6 @@
 # いまのアプリ全体図（Wave A/B/C 後）
 
-更新日: 2026-08-14  
+更新日: 2026-08-29  
 位置づけ: 公開前βの **現在形**。詳細仕様の正本は [`ARCHITECTURE.md`](../ARCHITECTURE.md)。運用は [`R1A_DESKTOP_OPS_POLICY.md`](R1A_DESKTOP_OPS_POLICY.md)。
 
 ---
@@ -213,4 +213,4 @@ Works（ユーザー作成・月のみ）
 
 **まだやらない／やり残しの一覧:** [`R1A_REMAINING_TODO.md`](R1A_REMAINING_TODO.md)。
 
-**次の代表例:** P2-2 Phase 3（Guided Web）— 構想 [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md)。オーナー PASS 待ち。
+**次の代表例:** P2-2 Guided Web は PR #21（枝 `cursor/p2-2-web-concept-f193`）で実装中。2026-08-29 の長い Cloud Agent は一区切り。続きは [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md)。構想 [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md)。

@@ -3,7 +3,9 @@
 更新日: 2026-08-29  
 対象: **オーナー（コード未経験）**。ターミナルは **コピペ一発** のみ。編集不要。  
 ブランチ: `cursor/p2-2-web-concept-f193`  
-関連: [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`P2_2_GUIDED_WEB_REVIEW_TODO.md`](P2_2_GUIDED_WEB_REVIEW_TODO.md)
+関連: [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md) / [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`P2_2_GUIDED_WEB_REVIEW_TODO.md`](P2_2_GUIDED_WEB_REVIEW_TODO.md)
+
+AI への続きの依頼は、このチェックリストではなく **新しい会話** に [`P2_2_GUIDED_WEB_HANDOFF_PROMPT.md`](P2_2_GUIDED_WEB_HANDOFF_PROMPT.md) を貼ってください。
 
 ---
 

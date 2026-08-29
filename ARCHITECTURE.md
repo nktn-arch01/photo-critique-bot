@@ -83,6 +83,7 @@
 - `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向＋双方向 PASS（2026-08-11）。§0 運用確定。**
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
 - `docs/CURRENT_APP_MAP.md`: **【いまの全体図】** Wave A/B/C 後の入口・2タブ・JPEG Phase1・LINE／Desktop 契約の地図。
+- `AGENTS.md`: **【AI／Cloud Agent 作業ルール】** 3段階レビュー、新しい会話の始め方、Linux と Mac の確認の切り分け。
 - `docs/R1A_REMAINING_TODO.md`: **【やり残し ToDo】** ストレス低減／Lumina Notes UX／AI 質の未着手・延期項目。
 - `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。UX Wave A 計画は `docs/R1A_UX_IMPROVEMENT_PLAN.md`。
 - `docs/R1A_UX_IMPROVEMENT_PLAN.md`: **【UX 改善計画】** 再レビュー後の Wave A/B/C（ストレス低減・Lumina Notes 語彙・AI 質）。
@@ -116,6 +117,7 @@
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。Wave 2 以降の公式名は `{ym}Luminaノート/カード/ログ`（旧「写真分析*」「評価カード」は読込フォールバック）。
 - `PhotoAICritique.command`: レガシー講評バッチのダブルクリック起動（起動時に Console へ誘導。Gatekeeper属性の自動解除機能付き）。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
+- `guided_web/`: **【P2-2 Guided Web】** ローカル FastAPI＋ブラウザ（選ぶ／読む／振り返る）。起動は `scripts/run_guided_web.sh` / `LuminaNotesGuided.command`。作業ルールは `AGENTS.md`。次会話は `docs/START_NEXT_CONVERSATION.md`。ToDo 正本は `docs/P2_2_GUIDED_WEB_REVIEW_TODO.md`。PR #21 の枝で開発中。
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)
 - `main.py`: FastAPI Web サーバー。LINE Webhook ハンドリング、BackgroundTasks、`/health`。カード＋対話【1〜3】のあと反応 Quick Reply。
@@ -133,6 +135,7 @@
 
 ### 開発・運用スタイル規定
 - **開発・テスト時**: ターミナルからのコピペ一発実行（CLIテストや単体テストスクリプト）で動作確認を行う。
+- **Cloud Agent**: Linux VM のブラウザ通過を、Mac の Tk・写真ピッカー・Control+C の完了証明にしない（詳細は `AGENTS.md`）。長いやり直しスレッドは区切って新しい会話で再開する。Guided の状態バグでは Fast モデルを使わない。
 - **push 前（任意・推奨）**: API キー不要の `python3 test_offline_suite.py`（パーサー・処理済み判定・LINE 対話3分割・カード生成レイアウト）。GitHub Actions `Offline tests` ワークフローが同内容を main で自動実行。カード見た目を変える変更では、同スイートのカード自動チェック（サイズ 1080×1350・破損なし・主要文字/写真の描画）を必ず更新・通過させる（規則1レビュー3）。
 - **本番の手動確認**: デスクトップ GUI または LINE で代表1枚（簡易/詳細）— OpenAI 実呼び出しは CI では行わない。
 - **本番運用時（Desktop）**: `LuminaNotesConsole.command` をダブルクリックし、スクリーニング／Lumina Review を実行する。旧一括講評は `PhotoAICritique.command`（レガシー）。
