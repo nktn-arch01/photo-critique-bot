@@ -51,7 +51,7 @@
 | U13 | カードプレビューに「書き出しで更新」のヒント文 | [x] | `#card-preview-hint` |
 | U14 | 成功・失敗通知を `alert` からトースト等の非モーダルへ | [x] | `showToast` / `#toast-region` |
 | U15 | タブ先行遷移時の空状態ガイド（写真未選択・講評未開始等） | [x] | `#read-empty` / `#reflect-empty` + `syncScreenGuides` |
-| U16 | 書き出し成功後に選ぶへ戻る（構想 §3 遷移図） | [x] | `afterExportSuccess` → `navigateToScreen("choose")` |
+| U16 | 書き出し成功後も振り返るに留まる | [x] | `afterExportSuccess` はトーストのみ（選ぶへ遷移しない。構想 §3 をオーナー判断で上書き） |
 
 ---
 

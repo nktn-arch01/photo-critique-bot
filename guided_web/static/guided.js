@@ -21,18 +21,22 @@ async function loadReflectItems() {
 function renderReflectChecklist() {
   const root = document.getElementById("reflect-checklist");
   if (!root) return;
-  root.innerHTML = "";
+  const left = document.createElement("div");
+  left.className = "reflect-checklist-column reflect-checklist-column-left";
+  const right = document.createElement("div");
+  right.className = "reflect-checklist-column reflect-checklist-column-right";
   reflectGroups.forEach((group) => {
     const section = document.createElement("section");
     section.className = "reflect-group";
+    section.dataset.groupId = group.id || "";
 
     const title = document.createElement("h3");
     title.className = "reflect-group-title";
     title.textContent = group.label;
     section.appendChild(title);
 
-    const grid = document.createElement("div");
-    grid.className = "reflect-group-items";
+    const list = document.createElement("div");
+    list.className = "reflect-group-items";
     (group.items || []).forEach((item) => {
       const key = `${group.id}_${item.id}`;
       const label = document.createElement("label");
@@ -46,11 +50,13 @@ function renderReflectChecklist() {
       text.textContent = item.label;
       label.appendChild(input);
       label.appendChild(text);
-      grid.appendChild(label);
+      list.appendChild(label);
     });
-    section.appendChild(grid);
-    root.appendChild(section);
+    section.appendChild(list);
+    const column = group.column === "right" ? right : left;
+    column.appendChild(section);
   });
+  root.replaceChildren(left, right);
 }
 
 let sessionId = null;
@@ -886,7 +892,6 @@ function afterExportSuccess(files) {
   const note = files?.note || "";
   const lines = ["書き出しました", card, note].filter(Boolean);
   showToast(lines.join("\n"), "success");
-  navigateToScreen("choose");
 }
 
 function collectReflections() {

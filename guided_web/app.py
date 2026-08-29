@@ -483,6 +483,7 @@ def reflect_items() -> JSONResponse:
                 {
                     "id": g["id"],
                     "label": g["label"],
+                    "column": g.get("column", "left"),
                     "items": [{"id": i["id"], "label": i["label"]} for i in g["items"]],
                 }
                 for g in REFLECTION_GROUPS

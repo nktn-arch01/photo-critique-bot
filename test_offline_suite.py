@@ -3529,13 +3529,22 @@ def test_guided_reflect_items_endpoint():
     from fastapi.testclient import TestClient
 
     from guided_web import app as app_module
+    from guided_web.reflect_prompts import REFLECTION_GROUPS
 
     client = TestClient(app_module.app)
     res = client.get("/api/reflect-items")
     assert res.status_code == 200
     groups = res.json()["groups"]
-    assert groups[0]["id"] == "noticed"
+    assert [g["id"] for g in groups] == ["noticed", "thought", "photo"]
+    assert groups[0]["column"] == "left"
+    assert groups[1]["column"] == "left"
+    assert groups[2]["column"] == "right"
     assert any(item["label"] == "写真を見て" for item in groups[0]["items"])
+    assert [g["column"] for g in REFLECTION_GROUPS] == ["left", "left", "right"]
+    left_labels = [g["label"] for g in groups if g["column"] == "left"]
+    right_labels = [g["label"] for g in groups if g["column"] == "right"]
+    assert left_labels == ["気づいたことがある", "ふと思ったことは"]
+    assert right_labels == ["この写真を"]
 
 
 def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
@@ -3565,16 +3574,26 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "await abandonInFlightCritique" not in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=22" in html
+    assert "guided.js?v=23" in html
+    assert "guided.css?v=23" in html
     assert "data.cancelled" in js
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("async function ")[0]
     assert pick_fn.index("pickPhotoNative") < pick_fn.index("releaseServerSession")
+    export_fn = js.split("function afterExportSuccess")[1].split("function ")[0]
+    assert "showToast" in export_fn
+    assert "navigateToScreen" not in export_fn
+    assert "reflect-checklist-column-left" in js
+    assert "reflect-checklist-column-right" in js
+    assert "group.column === \"right\"" in js
     assert ".toast-region" in css
     assert ".empty-guide" in css
     assert ".card-preview-hint" in css
     assert "[hidden]" in css
     assert "display: none !important" in css
     assert "inert" in html
+    assert ".reflect-checklist-column" in css
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in css
+    assert "repeat(2, minmax(0, 1fr))" not in css
 
 
 def test_guided_run_script_reports_boot_failure():

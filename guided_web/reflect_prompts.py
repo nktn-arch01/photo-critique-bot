@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-# グループ見出し + チェック項目。UI は 2 列グリッドで表示。
+# グループ見出し + チェック項目。
+# UI は column で左右2列（左: 気づいた／ふと思った、右: この写真を）。
+# 各グループ内の項目は縦1列。
 REFLECTION_GROUPS: tuple[dict, ...] = (
     {
         "id": "noticed",
         "label": "気づいたことがある",
+        "column": "left",
         "items": (
             {"id": "see", "label": "写真を見て"},
             {"id": "words", "label": "言葉にして"},
@@ -15,6 +18,7 @@ REFLECTION_GROUPS: tuple[dict, ...] = (
     {
         "id": "thought",
         "label": "ふと思ったことは",
+        "column": "left",
         "items": (
             {"id": "scene", "label": "その時の情景"},
             {"id": "memory", "label": "その時の記憶"},
@@ -26,6 +30,7 @@ REFLECTION_GROUPS: tuple[dict, ...] = (
     {
         "id": "photo",
         "label": "この写真を",
+        "column": "right",
         "items": (
             {"id": "keep", "label": "手元に置いておきたい"},
             {"id": "revisit", "label": "何度も見返したい"},

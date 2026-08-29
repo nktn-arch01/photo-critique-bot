@@ -340,9 +340,17 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
 }
 
 .reflect-checklist-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem 2.5rem;
+  align-items: start;
+}
+
+.reflect-checklist-column {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.15rem;
+  min-width: 0;
 }
 
 .reflect-group-title {
@@ -353,9 +361,9 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
 }
 
 .reflect-group-items {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .reflect-check {
@@ -373,7 +381,7 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
 }
 
 @media (max-width: 640px) {
-  .reflect-group-items {
+  .reflect-checklist-body {
     grid-template-columns: 1fr;
   }
 }
