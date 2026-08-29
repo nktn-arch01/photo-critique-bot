@@ -98,11 +98,11 @@ def _finish_phase2(session_id: str, lens: str, user_note: str, phase1_text: str)
     try:
         full, parsed, sections = run_phase2(
             Path(sess["path"]),
-            sess["metadata"],
-            sess["dop_info"],
+            sess["api_params"],
             phase1_text,
             lens=lens,
             user_note=user_note,
+            session_id=session_id,
         )
         sess["critique"].update(
             {
@@ -258,10 +258,10 @@ async def start_critique(
             _executor,
             lambda: run_phase1(
                 Path(sess["path"]),
-                sess["metadata"],
-                sess["dop_info"],
+                sess["api_params"],
                 lens=body.lens,
                 user_note=body.user_note,
+                session_id=session_id,
             ),
         )
     except Exception as e:

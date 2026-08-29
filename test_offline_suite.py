@@ -2743,6 +2743,114 @@ def test_guided_format_reflections_block():
     assert "振り返りメモ" not in block
 
 
+def test_guided_privacy_prompts_exclude_identifying_metadata():
+    from guided_web.guided_privacy import (
+        GuidedCritiqueContext,
+        assert_prompt_is_privacy_safe,
+        build_guided_phase1_prompt,
+        build_guided_phase2_prompt,
+    )
+
+    api_params = {
+        "image": {
+            "image_id": "sess123",
+            "size": "4032x3024",
+            "shot_at": "2026-06-21T12:00:00+09:00",
+            "timezone": "Asia/Tokyo",
+            "region": "東京",
+            "time_band": "正午（九）",
+        },
+        "camera": {
+            "focal_length": "50mm",
+            "aperture": "f/2.8",
+            "shutter_speed": "1/250",
+            "iso": "400",
+            "mode": "マニュアル",
+            "exposure_compensation": "0EV",
+        },
+    }
+    ctx = GuidedCritiqueContext.from_api_params(api_params, user_note="静かな午後")
+    p1 = build_guided_phase1_prompt(ctx)
+    p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
+    assert "東京" in p1
+    assert "正午（九）" in p1
+    assert "静かな午後" in p2
+    assert "抽象パラメータ" in p1
+    assert_prompt_is_privacy_safe(p1)
+    assert_prompt_is_privacy_safe(p2)
+
+
+def test_guided_privacy_audit_whitelist():
+    import json
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import guided_web.guided_privacy as gp
+
+    td = Path(tempfile.mkdtemp(prefix="guided_privacy_"))
+    old_path = gp._AUDIT_PATH
+    try:
+        gp._AUDIT_PATH = td / "audit.jsonl"
+        api_params = {
+            "image": {
+                "image_id": "abc",
+                "size": "100x100",
+                "shot_at": "2026-01-01T12:00:00+09:00",
+                "timezone": "Asia/Tokyo",
+                "region": "東京",
+                "time_band": "夜",
+                "file_name": "secret.jpg",
+                "gps_lat": 35.68,
+            },
+            "camera": {
+                "focal_length": "35mm",
+                "aperture": "f/4",
+                "shutter_speed": "1/60",
+                "iso": "800",
+                "mode": "絞り優先",
+                "exposure_compensation": "-0.3EV",
+                "camera_model": "Secret Camera",
+            },
+        }
+        gp.record_api_audit(session_id="sess1", api_params=api_params, user_note="hi")
+        line = gp._AUDIT_PATH.read_text(encoding="utf-8").strip()
+        entry = json.loads(line)
+        audited = entry["api_parameters"]
+        assert "file_name" not in audited.get("image", {})
+        assert "gps_lat" not in audited.get("image", {})
+        assert "camera_model" not in audited.get("camera", {})
+        assert audited["image"]["region"] == "東京"
+        assert entry["user_note_sha256"]
+    finally:
+        gp._AUDIT_PATH = old_path
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_critique_runner_uses_api_params():
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from guided_web.critique_runner import run_phase1
+
+    captured: dict = {}
+
+    def fake_generate(image_path, api_params, **kwargs):
+        captured["api_params"] = api_params
+        captured["kwargs"] = kwargs
+        return "■TITLE: T\n■SUMMARY: S\n■SCORES:\n感性: ★★★☆☆ (3/5)\n■CRITIQUE_SUMMARY: テスト"
+
+    api_params = {
+        "image": {"image_id": "x", "region": "東京", "time_band": "夜"},
+        "camera": {"iso": "400"},
+    }
+    with patch("guided_web.critique_runner.generate_guided_critique", fake_generate):
+        run_phase1(Path("dummy.jpg"), api_params, lens="self", user_note="note", session_id="sid")
+    assert captured["api_params"] is api_params
+    assert captured["kwargs"]["session_id"] == "sid"
+    assert captured["kwargs"]["user_note"] == "note"
+
+
 def test_guided_selected_reflection_labels():
     from guided_web.reflect_prompts import selected_reflection_labels
 
@@ -2852,6 +2960,9 @@ def run_all():
     test_guided_body_sections_split()
     test_guided_stock_export_writes_files()
     test_guided_format_reflections_block()
+    test_guided_privacy_prompts_exclude_identifying_metadata()
+    test_guided_privacy_audit_whitelist()
+    test_guided_critique_runner_uses_api_params()
     test_guided_selected_reflection_labels()
     test_guided_settings_save_folder_roundtrip()
     print("test_offline_suite: OK")
