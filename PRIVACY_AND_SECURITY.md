@@ -32,7 +32,7 @@
 | 変数 | 既定 | 意味 |
 |------|------|------|
 | `CRITIQUE_SAVE_DB` | `true` | `false` で **DB への講評ログ insert をスキップ**（モード設定は継続） |
-| `CRITIQUE_SAVE_FULL_TEXT` | `true` | `false` で DB に **全文を保存せず** 要約・タイトル等のみ |
+| `CRITIQUE_SAVE_FULL_TEXT` | `false` | `true` のときだけ DB に講評**全文**を保存。既定はタイトル・要約・スコア・反応のみ。既に入っている全文は自動では消えず、30日削除または手動更新が必要。 |
 | `SUPABASE_CARD_SIGNED_SECONDS` | 未設定 | 設定すると **署名付き URL**（Private バケット向け）。例: `604800`（7日） |
 | `STORAGE_PATH_SALT` | 固定文字列 | Storage フォルダハッシュ用（変更するとパスが変わる） |
 
@@ -68,7 +68,7 @@
 
 ### 中期的（中）
 
-- [ ] ログ保持 **`CRITIQUE_SAVE_FULL_TEXT=false`** で要約のみ保存にするか検討  
+- [x] ログ保持 **既定は全文を保存しない**（`CRITIQUE_SAVE_FULL_TEXT=true` でオプトイン）  
 - [ ] 不要になった Storage / DB 行の **月次削除**（`retention_purge.py` + GitHub Secrets 設定済みか確認）  
 - [ ] LINE 友だち向け **簡易プライバシー説明**（固定メッセージ）  
 

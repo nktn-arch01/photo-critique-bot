@@ -62,6 +62,7 @@
 | **LINE Bot (Render)** | `SUPABASE_SERVICE_ROLE_KEY` | 必須 | Supabase の管理者権限キー（RLS非依存で安全にログ記録）。 |
 | **LINE Bot (Render)** | `LINE_CHANNEL_SECRET` | 必須 | LINE Messaging API チャンネルシークレット。 |
 | **LINE Bot (Render)** | `LINE_CHANNEL_ACCESS_TOKEN` | 必須 | LINE Messaging API アクセストークン。 |
+| **LINE Bot (Render)** | `CRITIQUE_SAVE_FULL_TEXT` | 任意 | 既定 `false`。`true` のときだけ `critique_logs` に講評全文を保存。 |
 
 ---
 

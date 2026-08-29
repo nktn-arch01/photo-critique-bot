@@ -37,7 +37,7 @@ from generate_critique_card import (
 )
 from line_messaging import split_full_critique_for_line
 from log_manager import DesktopLogManager
-from privacy_utils import storage_path_from_card_url
+from privacy_utils import full_critique_text_for_storage, storage_path_from_card_url
 
 CARD_SAMPLE = """
 ■TITLE: 沈黙を割る線
@@ -371,6 +371,29 @@ def test_storage_path_from_card_url():
     )
     assert storage_path_from_card_url(signed) == "abc123/msg_card.png"
     assert storage_path_from_card_url("") is None
+
+
+def test_line_db_omits_full_critique_text_by_default():
+    """LINE の DB は既定で講評全文を残さない（オプトインのみ）。"""
+    import os
+
+    from privacy_utils import should_save_full_critique_text
+
+    saved = os.environ.pop("CRITIQUE_SAVE_FULL_TEXT", None)
+    try:
+        assert should_save_full_critique_text() is False
+        assert full_critique_text_for_storage("長い講評本文") == ""
+        os.environ["CRITIQUE_SAVE_FULL_TEXT"] = "false"
+        assert full_critique_text_for_storage("長い講評本文") == ""
+        os.environ["CRITIQUE_SAVE_FULL_TEXT"] = "true"
+        assert full_critique_text_for_storage("長い講評本文") == "長い講評本文"
+        os.environ["CRITIQUE_SAVE_FULL_TEXT"] = "1"
+        assert should_save_full_critique_text() is True
+    finally:
+        if saved is None:
+            os.environ.pop("CRITIQUE_SAVE_FULL_TEXT", None)
+        else:
+            os.environ["CRITIQUE_SAVE_FULL_TEXT"] = saved
 
 
 def _is_near(color, target, tol=12):
@@ -2477,6 +2500,7 @@ def run_all():
     test_line_dialogue_split_sections_1_to_3()
     test_iptc_phase1_block_upsert_preserves_stages_and_user()
     test_storage_path_from_card_url()
+    test_line_db_omits_full_critique_text_by_default()
     test_normalize_card_theme()
     test_create_critique_card_layout()
     test_create_critique_card_light_theme()

@@ -16,7 +16,7 @@ from privacy_utils import (
     card_signed_url_seconds,
     redact_line_user_id,
     should_save_critique_db,
-    should_save_full_critique_text,
+    full_critique_text_for_storage,
 )
 
 
@@ -152,7 +152,7 @@ class SupabaseManager:
             return None
 
         parsed = parse_critique_text(critique_text)
-        full_text = critique_text if should_save_full_critique_text() else ""
+        full_text = full_critique_text_for_storage(critique_text)
 
         payload = {
             "line_user_id": line_user_id,

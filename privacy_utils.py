@@ -25,7 +25,15 @@ def should_save_critique_db() -> bool:
 
 
 def should_save_full_critique_text() -> bool:
-    return os.getenv("CRITIQUE_SAVE_FULL_TEXT", "true").strip().lower() in ("1", "true", "yes")
+    """DB に講評全文を残すか。既定は残さない（要約・タイトル・スコア・反応は残る）。"""
+    return os.getenv("CRITIQUE_SAVE_FULL_TEXT", "false").strip().lower() in ("1", "true", "yes")
+
+
+def full_critique_text_for_storage(critique_text: str) -> str:
+    """critique_logs.full_critique_text に書く値。既定は空文字。"""
+    if should_save_full_critique_text():
+        return critique_text
+    return ""
 
 
 def storage_path_from_card_url(card_image_url: str) -> str | None:
