@@ -20,3 +20,6 @@ COMMENT ON TABLE public.critique_events IS
   'Anonymous LINE usage events. No LINE user ID, full critique text, or card URL.';
 
 ALTER TABLE public.critique_events ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT, INSERT, UPDATE ON public.critique_events TO service_role;
+NOTIFY pgrst, 'reload schema';
