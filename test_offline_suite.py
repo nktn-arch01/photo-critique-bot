@@ -2901,6 +2901,24 @@ def test_guided_settings_save_folder_roundtrip():
         assert loaded == folder.resolve()
         data = json.loads(gs._SETTINGS_PATH.read_text(encoding="utf-8"))
         assert data["save_folder"] == str(folder.resolve())
+        photos = td / "photos"
+        photos.mkdir()
+        export = td / "export"
+        export.mkdir()
+        gs.set_save_folder(export)
+        gs.set_photo_folder(photos)
+        assert gs.get_save_folder() == export.resolve()
+        assert gs.get_photo_folder() == photos.resolve()
+        data = json.loads(gs._SETTINGS_PATH.read_text(encoding="utf-8"))
+        assert data["save_folder"] == str(export.resolve())
+        assert data["photo_folder"] == str(photos.resolve())
+        tmp_session = td / "lumina_guided" / "sid"
+        tmp_session.mkdir(parents=True)
+        skipped = gs.remember_photo_source(tmp_session / "x.jpg")
+        assert skipped is None
+        assert gs.get_photo_folder() == photos.resolve()
+        remembered = gs.remember_photo_source(photos / "shot.jpg")
+        assert remembered == photos.resolve()
     finally:
         gs._SETTINGS_PATH = old_path
         shutil.rmtree(td, ignore_errors=True)
@@ -3246,7 +3264,7 @@ def test_guided_cancel_then_force_restart_starts_fresh():
             json={"lens": "self", "user_note": "", "force_restart": True},
         )
     assert start_res.status_code == 200
-    assert start_res.json()["status"] in {"phase2_running", "complete"}
+    assert start_res.json()["status"] in {"phase1_running", "phase2_running", "complete"}
     assert sess["epoch"] == 3
 
 
@@ -3308,6 +3326,173 @@ def test_guided_ui_and_critique_executors_are_separate():
     ai = app_module._get_critique_executor()
     assert ui is not ai
     assert ui._thread_name_prefix != ai._thread_name_prefix
+
+
+def test_guided_photo_pick_opens_photo_folder_not_export_folder():
+    import shutil
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    import guided_web.settings as gs
+
+    td = Path(tempfile.mkdtemp(prefix="guided_folders_"))
+    photos = td / "camera_roll"
+    export = td / "notes_out"
+    photos.mkdir()
+    export.mkdir()
+    old_path = gs._SETTINGS_PATH
+    captured = {}
+
+    def fake_pick(initial):
+        captured["initial"] = Path(initial) if initial else None
+        return None
+
+    try:
+        gs._SETTINGS_PATH = td / "guided_settings.json"
+        gs.set_photo_folder(photos)
+        gs.set_save_folder(export)
+        client = TestClient(app_module.app)
+        with patch("guided_web.app.pick_image_file", side_effect=fake_pick):
+            res = client.post("/api/session/photo-pick")
+        assert res.status_code == 400
+        assert captured["initial"] == photos.resolve()
+        assert captured["initial"] != export.resolve()
+    finally:
+        gs._SETTINGS_PATH = old_path
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_stale_cancel_does_not_kill_newer_critique():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "stale.jpg"
+    Image.new("RGB", (80, 60), (3, 4, 5)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("stale.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 6
+    sess["critique"] = {"status": "phase1_running", "lens": "self"}
+    stale = client.post(f"/api/session/{session_id}/critique/cancel?epoch=5")
+    assert stale.status_code == 200
+    assert stale.json()["status"] == "phase1_running"
+    assert sess["epoch"] == 6
+    current = client.post(f"/api/session/{session_id}/critique/cancel?epoch=6")
+    assert current.json()["status"] == "idle"
+    assert sess["epoch"] == 7
+
+
+def test_guided_live_cancel_and_clear_during_slow_phase1():
+    """講評 POST が Phase1 を待たないので、待ち中のキャンセルとクリアがすぐ終わる。"""
+    import socket
+    import threading
+    import time
+    from pathlib import Path
+    from unittest.mock import patch
+
+    import httpx
+    import uvicorn
+    from PIL import Image
+
+    from guided_web import app as app_module
+
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    phase1_entered = threading.Event()
+    phase1_release = threading.Event()
+
+    def slow_phase1(*_args, **_kwargs):
+        phase1_entered.set()
+        phase1_release.wait(timeout=10)
+        raise RuntimeError("slow fixture")
+
+    config = uvicorn.Config(
+        app_module.app,
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    base = f"http://127.0.0.1:{port}"
+    jpeg = Path("/tmp/guided_web_test/live.jpg")
+    jpeg.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (64, 48), (12, 34, 56)).save(jpeg, "JPEG")
+
+    with patch("guided_web.app.shutdown_sessions", return_value={"dropped": 0, "orphans": []}), patch(
+        "guided_web.app._shutdown_executors", lambda: None
+    ), patch("guided_web.app.run_phase1", side_effect=slow_phase1), patch(
+        "guided_web.app.run_phase2", side_effect=AssertionError("phase2 should not run")
+    ):
+        thread.start()
+        try:
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                try:
+                    httpx.get(f"{base}/api/health", timeout=0.3).raise_for_status()
+                    break
+                except Exception:
+                    time.sleep(0.05)
+            else:
+                raise AssertionError("uvicorn did not start")
+
+            with httpx.Client(base_url=base, timeout=5.0) as client:
+                up = client.post("/api/session/photo", files={"file": ("live.jpg", jpeg.read_bytes(), "image/jpeg")})
+                assert up.status_code == 200
+                sid = up.json()["session_id"]
+                t0 = time.monotonic()
+                start = client.post(
+                    f"/api/session/{sid}/critique",
+                    json={"lens": "self", "user_note": "", "force_restart": True},
+                )
+                start_elapsed = time.monotonic() - t0
+                assert start.status_code == 200, start.text
+                assert start.json()["status"] == "phase1_running"
+                assert start_elapsed < 1.5, start_elapsed
+                epoch = start.json()["epoch"]
+                assert phase1_entered.wait(timeout=3)
+                t1 = time.monotonic()
+                cancel = client.post(f"/api/session/{sid}/critique/cancel", params={"epoch": epoch})
+                assert cancel.status_code == 200
+                assert cancel.json()["status"] == "idle"
+                rel = client.post(f"/api/session/{sid}/release")
+                assert rel.status_code == 200
+                up2 = client.post(
+                    "/api/session/photo",
+                    files={"file": ("live2.jpg", jpeg.read_bytes(), "image/jpeg")},
+                )
+                assert up2.status_code == 200
+                sid2 = up2.json()["session_id"]
+                start2 = client.post(
+                    f"/api/session/{sid2}/critique",
+                    json={"lens": "self", "user_note": "", "force_restart": True},
+                )
+                assert start2.status_code == 200
+                assert start2.json()["status"] == "phase1_running"
+                assert time.monotonic() - t1 < 2.0
+                client.post(
+                    f"/api/session/{sid2}/critique/cancel",
+                    params={"epoch": start2.json()["epoch"]},
+                )
+        finally:
+            phase1_release.set()
+            server.should_exit = True
+            thread.join(timeout=4)
 
 
 def test_guided_phase2_retry_skips_when_already_running():
@@ -3376,9 +3561,11 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "function abandonInFlightCritique" in js
     assert "AbortController" in js
     assert "/critique/cancel" in js
-    assert "pendingCritiqueCancel" in js
-    assert "await pendingCritiqueCancel" in js
-    assert "guided.js?v=20" in html
+    assert "activeCritiqueEpoch" in js
+    assert "await abandonInFlightCritique" not in js
+    assert "pendingCritiqueCancel" not in js
+    assert "function pollCritique" in js
+    assert "guided.js?v=21" in html
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("async function ")[0]
     assert pick_fn.index("pickPhotoNative") < pick_fn.index("releaseServerSession")
     assert ".toast-region" in css
@@ -3394,9 +3581,12 @@ def test_guided_run_script_reports_boot_failure():
 
     text = Path("scripts/run_guided_web.sh").read_text(encoding="utf-8")
     assert "エラー: サーバの起動に失敗しました。" in text
-    assert "kill -0" in text
+    assert "python3 -m guided_web.app" in text
+    assert "listening_pids" in text
+    assert "lsof" in text
     assert "起動確認タイムアウト" in text
-    assert "tee" in text
+    assert "このターミナルで Control+C を押すと停止します。" in text
+    assert ">(tee" not in text
 
 
 def run_all():
@@ -3490,6 +3680,9 @@ def run_all():
     test_guided_cancel_then_force_restart_starts_fresh()
     test_guided_photo_pick_uses_ui_executor_while_critique_runs()
     test_guided_ui_and_critique_executors_are_separate()
+    test_guided_photo_pick_opens_photo_folder_not_export_folder()
+    test_guided_stale_cancel_does_not_kill_newer_critique()
+    test_guided_live_cancel_and_clear_during_slow_phase1()
     test_guided_phase2_retry_skips_when_already_running()
     test_guided_reflect_items_endpoint()
     test_guided_ui_uses_toast_empty_guides_and_export_navigation()

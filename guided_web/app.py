@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -26,8 +26,11 @@ from guided_web.folder_picker import pick_folder
 from guided_web.parameter_display import build_parameter_display
 from guided_web.reflect_prompts import REFLECTION_GROUPS
 from guided_web.settings import (
+    default_photo_folder,
     default_suggested_folder,
+    get_photo_folder,
     get_save_folder,
+    remember_photo_source,
     set_save_folder,
 )
 from guided_web.stock_export import export_guided_session, render_card_preview, critique_text_for_session
@@ -130,6 +133,7 @@ def _critique_public(sess: dict) -> dict[str, Any]:
         "status": c.get("status", "idle"),
         "error": c.get("error"),
         "lens": c.get("lens"),
+        "epoch": int(sess.get("epoch") or 0),
     }
     if c.get("phase1_parsed"):
         p1 = c["phase1_parsed"]
@@ -145,6 +149,50 @@ def _critique_public(sess: dict) -> dict[str, Any]:
         fp = c["full_parsed"]
         out["body"] = fp.get("body")
     return out
+
+
+async def _run_phase1_then_phase2(
+    session_id: str,
+    lens: str,
+    user_note: str,
+    epoch: int,
+) -> None:
+    """Phase 1 を裏で走らせ、成功したら Phase 2 へ。HTTP 応答は待たない。"""
+    sess = _sessions.get(session_id)
+    if not sess or not is_current_epoch(sess, epoch):
+        return
+    loop = asyncio.get_running_loop()
+    try:
+        phase1_text, phase1_parsed = await loop.run_in_executor(
+            _get_critique_executor(),
+            lambda: run_phase1(
+                Path(sess["path"]),
+                sess["api_params"],
+                lens=lens,
+                user_note=user_note,
+                session_id=session_id,
+            ),
+        )
+    except Exception as e:
+        with ensure_session_lock(sess):
+            if is_current_epoch(sess, epoch) and session_id in _sessions:
+                sess["critique"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "lens": lens,
+                }
+        return
+    with ensure_session_lock(sess):
+        if session_id not in _sessions or not is_current_epoch(sess, epoch):
+            return
+        sess["critique"].update(
+            {
+                "status": "phase2_running",
+                "phase1_raw": phase1_text,
+                "phase1_parsed": phase1_parsed,
+            }
+        )
+    await _finish_phase2(session_id, lens, user_note, phase1_text, epoch)
 
 
 async def _finish_phase2(
@@ -296,10 +344,10 @@ async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
 async def pick_photo() -> JSONResponse:
     """Mac 等のネイティブダイアログで写真を選び、オリジナルのフルパスを記録する。"""
     loop = asyncio.get_running_loop()
-    initial = get_save_folder() or default_suggested_folder()
+    initial = get_photo_folder() or default_photo_folder()
     picked = await loop.run_in_executor(
         _get_ui_executor(),
-        lambda: pick_image_file(initial.parent if initial and initial.is_file() else initial),
+        lambda: pick_image_file(initial),
     )
     if picked is None:
         raise HTTPException(status_code=400, detail="photo not selected")
@@ -308,6 +356,7 @@ async def pick_photo() -> JSONResponse:
     if not source.is_file():
         raise HTTPException(status_code=400, detail="photo not found")
 
+    remember_photo_source(source)
     session_id, session = _build_photo_session(
         source,
         original_path=str(source),
@@ -362,58 +411,22 @@ async def start_critique(
             "error": None,
         }
 
-    loop = asyncio.get_running_loop()
-    try:
-        phase1_text, phase1_parsed = await loop.run_in_executor(
-            _get_critique_executor(),
-            lambda: run_phase1(
-                Path(sess["path"]),
-                sess["api_params"],
-                lens=body.lens,
-                user_note=body.user_note,
-                session_id=session_id,
-            ),
-        )
-    except Exception as e:
-        with lock:
-            if is_current_epoch(sess, epoch) and session_id in _sessions:
-                sess["critique"] = {
-                    "status": "error",
-                    "error": str(e),
-                    "lens": body.lens,
-                }
-                return JSONResponse(_critique_public(sess), status_code=500)
-        current = _sessions.get(session_id)
-        if current:
-            return JSONResponse(_critique_public(current), status_code=409)
-        raise HTTPException(status_code=404, detail="session not found") from e
-
-    with lock:
-        if session_id not in _sessions or not is_current_epoch(sess, epoch):
-            current = _sessions.get(session_id)
-            if not current:
-                raise HTTPException(status_code=404, detail="session not found")
-            return JSONResponse(_critique_public(current), status_code=409)
-        sess["critique"].update(
-            {
-                "status": "phase2_running",
-                "phase1_raw": phase1_text,
-                "phase1_parsed": phase1_parsed,
-            }
-        )
     background_tasks.add_task(
-        _finish_phase2, session_id, body.lens, body.user_note, phase1_text, epoch
+        _run_phase1_then_phase2, session_id, body.lens, body.user_note, epoch
     )
     return JSONResponse(_critique_public(sess))
 
 
 @app.post("/api/session/{session_id}/critique/cancel")
-def cancel_session_critique(session_id: str) -> JSONResponse:
+def cancel_session_critique(
+    session_id: str,
+    epoch: int | None = Query(default=None),
+) -> JSONResponse:
     """もう一度／タブ離脱。写真は残し、進行中の講評だけ無効化する。"""
     sess = _sessions.get(session_id)
     if not sess:
         raise HTTPException(status_code=404, detail="session not found")
-    cancel_critique(sess)
+    cancel_critique(sess, epoch=epoch)
     return JSONResponse(_critique_public(sess))
 
 
@@ -481,11 +494,13 @@ def reflect_items() -> JSONResponse:
 @app.get("/api/settings")
 def get_settings() -> JSONResponse:
     folder = get_save_folder()
-    suggested = default_suggested_folder()
+    photo = get_photo_folder()
     return JSONResponse(
         {
             "save_folder": str(folder) if folder else None,
-            "suggested_folder": str(suggested),
+            "photo_folder": str(photo) if photo else None,
+            "suggested_folder": str(default_suggested_folder()),
+            "suggested_photo_folder": str(default_photo_folder()),
         }
     )
 

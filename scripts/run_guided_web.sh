@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Lumina Notes Guided Web — 起動スクリプト（ターミナルにコピペ一発で実行可）
+# サーバは前面で動かす。Control+C がそのプロセスに届き、確実に止まる。
 set -euo pipefail
 
 export PATH="/usr/local/bin:/opt/homebrew/bin:${HOME}/.pyenv/shims:${PATH}"
@@ -23,57 +24,80 @@ echo "依存パッケージを確認しています…"
 python3 -m pip install -q python-multipart fastapi uvicorn pillow 2>/dev/null || \
   python3 -m pip install python-multipart fastapi uvicorn pillow
 
+listening_pids() {
+  lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN -t 2>/dev/null || true
+}
+
+stop_listening() {
+  local pids
+  pids="$(listening_pids)"
+  if [[ -z "$pids" ]]; then
+    return 0
+  fi
+  echo "サーバを停止します…"
+  # bash 3.2 互換（Mac 標準）
+  echo "$pids" | while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  for _ in 1 2 3 4 5 6 7 8; do
+    [[ -z "$(listening_pids)" ]] && break
+    sleep 0.25
+  done
+  echo "$pids" | while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill -KILL "$pid" 2>/dev/null || true
+  done
+}
+
 if curl -sf "${URL}api/health" >/dev/null 2>&1; then
   echo "すでに起動中です: ${URL}"
+  echo "このターミナルで Control+C を押すと停止します。"
   open "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || true
+  trap 'echo; stop_listening; exit 0' INT TERM
+  while curl -sf "${URL}api/health" >/dev/null 2>&1; do
+    sleep 1
+  done
   exit 0
 fi
 
-BOOT_LOG="${TMPDIR:-/tmp}/lumina_guided_boot_${PORT}.log"
-: > "$BOOT_LOG"
-
-echo "サーバを起動します（終了は Ctrl+C）…"
 export GUIDED_WEB_PORT="$PORT"
 
-python3 -m guided_web.app > >(tee "$BOOT_LOG") 2>&1 &
-SERVER_PID=$!
-
-cleanup_server() {
-  if kill -0 "$SERVER_PID" 2>/dev/null; then
-    kill -INT "$SERVER_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
-  fi
-}
-trap cleanup_server INT TERM
-
-ready=0
-for _ in $(seq 1 40); do
-  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    echo "エラー: サーバの起動に失敗しました。"
-    echo "---- ログ（${BOOT_LOG}）----"
-    cat "$BOOT_LOG" 2>/dev/null || true
-    echo "----------------"
-    echo "ポート ${PORT} が使われている場合は次を試してください:"
-    echo "  GUIDED_WEB_PORT=8766 bash scripts/run_guided_web.sh"
-    exit 1
-  fi
-  if curl -sf "${URL}api/health" >/dev/null 2>&1; then
-    ready=1
-    break
-  fi
-  sleep 0.25
-done
-
-if [ "$ready" -eq 0 ]; then
+opener() {
+  for _ in $(seq 1 40); do
+    if curl -sf "${URL}api/health" >/dev/null 2>&1; then
+      echo "ブラウザを開きます: ${URL}"
+      open "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || true
+      return 0
+    fi
+    sleep 0.25
+  done
   echo "エラー: サーバが ${URL} で応答しません（起動確認タイムアウト）。"
-  echo "---- ログ（${BOOT_LOG}）----"
-  tail -n 50 "$BOOT_LOG" 2>/dev/null || true
-  echo "----------------"
-  cleanup_server
+  echo "ポート ${PORT} が使われている場合は次を試してください:"
+  echo "  GUIDED_WEB_PORT=8766 bash scripts/run_guided_web.sh"
+  return 1
+}
+
+echo "サーバを起動します（終了は Control+C）…"
+opener &
+OPENER_PID=$!
+
+cleanup_opener() {
+  kill "$OPENER_PID" 2>/dev/null || true
+  wait "$OPENER_PID" 2>/dev/null || true
+}
+
+# python は前面。Control+C は uvicorn に届く。
+set +e
+python3 -m guided_web.app
+status=$?
+set -e
+cleanup_opener
+
+if [[ "$status" -ne 0 && "$status" -ne 130 && "$status" -ne 143 ]]; then
+  echo "エラー: サーバの起動に失敗しました。"
+  echo "ポート ${PORT} が使われている場合は次を試してください:"
+  echo "  GUIDED_WEB_PORT=8766 bash scripts/run_guided_web.sh"
   exit 1
 fi
-
-echo "ブラウザを開きます: ${URL}"
-open "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || true
-
-wait "$SERVER_PID" || true
+exit "$status"
