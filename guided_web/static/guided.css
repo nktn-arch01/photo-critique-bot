@@ -204,6 +204,7 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
 .skeleton { padding: 2rem; text-align: center; color: var(--muted); }
 
 .read-hint { color: var(--muted); font-size: 0.9rem; margin: 1rem 0; }
+.read-phase2-retry { display: block; margin: 0 0 1rem; font-size: 0.9rem; }
 
 .read-title { font-size: 1.5rem; font-weight: 600; margin: 0 0 0.5rem; }
 .read-summary { font-size: 1.1rem; margin: 0 0 0.75rem; }

@@ -2888,6 +2888,76 @@ def test_guided_settings_save_folder_roundtrip():
         shutil.rmtree(td, ignore_errors=True)
 
 
+def test_guided_session_delete_removes_temp_dir():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.session_cleanup import guided_temp_root
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "cleanup.jpg"
+    Image.new("RGB", (80, 60), (90, 100, 110)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("cleanup.jpg", f, "image/jpeg")})
+    assert res.status_code == 200
+    session_id = res.json()["session_id"]
+    temp_dir = guided_temp_root() / session_id
+    assert temp_dir.is_dir()
+
+    del_res = client.delete(f"/api/session/{session_id}")
+    assert del_res.status_code == 200
+    assert del_res.json() == {"ok": True}
+    assert not temp_dir.exists()
+    assert client.get(f"/api/session/{session_id}/critique").status_code == 404
+
+
+def test_guided_phase2_retry_restarts_background():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "retry.jpg"
+    Image.new("RGB", (80, 60), (40, 50, 60)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("retry.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    app_module._sessions[session_id]["critique"] = {
+        "status": "error",
+        "error": "timeout",
+        "lens": "self",
+        "user_note": "note",
+        "phase1_raw": PHASE1_SAMPLE,
+        "phase1_parsed": parse_critique_text(PHASE1_SAMPLE),
+    }
+
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        mock_phase2.return_value = (
+            PHASE1_SAMPLE + PHASE2_SAMPLE,
+            parse_critique_text(PHASE2_SAMPLE),
+            [{"id": "1", "heading": "【1】", "text": "one"}],
+        )
+        retry_res = client.post(f"/api/session/{session_id}/critique/phase2/retry")
+    assert retry_res.status_code == 200
+    assert retry_res.json()["status"] == "phase2_running"
+    mock_phase2.assert_called_once()
+
+    crit = client.get(f"/api/session/{session_id}/critique").json()
+    assert crit["status"] == "complete"
+    assert crit["sections"]
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -2965,6 +3035,8 @@ def run_all():
     test_guided_critique_runner_uses_api_params()
     test_guided_selected_reflection_labels()
     test_guided_settings_save_folder_roundtrip()
+    test_guided_session_delete_removes_temp_dir()
+    test_guided_phase2_retry_restarts_background()
     print("test_offline_suite: OK")
 
 

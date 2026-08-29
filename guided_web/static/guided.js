@@ -54,6 +54,28 @@ function renderReflectChecklist() {
 }
 
 let sessionId = null;
+
+async function releaseServerSession() {
+  if (!sessionId) return;
+  const id = sessionId;
+  try {
+    await fetch(`/api/session/${id}`, { method: "DELETE" });
+  } catch (err) {
+    console.warn("session cleanup failed", err);
+  }
+}
+
+function setPhase2RetryVisible(visible) {
+  const btn = document.getElementById("btn-phase2-retry");
+  if (btn) btn.hidden = !visible;
+}
+
+function resetPhase2Hint() {
+  const hint = document.getElementById("read-phase2-hint");
+  hint.textContent = "詳しい言葉を読み込んでいます…";
+  hint.hidden = true;
+  setPhase2RetryVisible(false);
+}
 let userStars = 0;
 let currentFileName = null;
 let localPreviewUrl = null;
@@ -246,6 +268,8 @@ async function applyPhotoSession(data, previewFile) {
 }
 
 async function handleSelectedFile(file) {
+  await releaseServerSession();
+  sessionId = null;
   revokeLocalPreview();
   localPreviewUrl = URL.createObjectURL(file);
   setChoosePhotoPreview(localPreviewUrl);
@@ -255,6 +279,8 @@ async function handleSelectedFile(file) {
 }
 
 async function handleNativePhotoPick() {
+  await releaseServerSession();
+  sessionId = null;
   const data = await pickPhotoNative();
   if (!data) return;
   revokeLocalPreview();
@@ -364,7 +390,7 @@ function clearReadData() {
   document.getElementById("read-title").textContent = "";
   document.getElementById("read-summary").textContent = "";
   document.getElementById("read-point").textContent = "";
-  document.getElementById("read-phase2-hint").hidden = true;
+  resetPhase2Hint();
   document.getElementById("read-scores").innerHTML = "";
   document.getElementById("read-sections-123").innerHTML = "";
   document.getElementById("read-sections-4567").innerHTML = "";
@@ -407,7 +433,8 @@ function showReadPanelsPhase1() {
   updateKeepButton();
 }
 
-function clearAllSession() {
+async function clearAllSession() {
+  await releaseServerSession();
   sessionId = null;
   currentFileName = null;
   serverPreviewUrl = null;
@@ -480,7 +507,7 @@ async function startCritique() {
   const hint = document.getElementById("read-phase2-hint");
   critiqueInProgress = true;
   setReadLoading(true);
-  hint.hidden = true;
+  resetPhase2Hint();
 
   const lens = document.getElementById("lens-select").value || "self";
   const userNote = document.getElementById("user-note").value || "";
@@ -522,16 +549,43 @@ async function pollCritiqueComplete() {
     const data = await res.json();
     if (data.status === "complete") {
       renderCritique(data);
-      hint.hidden = true;
+      resetPhase2Hint();
       await activateDropdownsSequentially(data);
       return;
     }
     if (data.status === "error") {
+      hint.hidden = false;
       hint.textContent = data.error || "詳細の取得に失敗しました";
+      setPhase2RetryVisible(true);
       return;
     }
   }
-  hint.textContent = "詳細の取得がタイムアウトしました。もう一度お試しください。";
+  hint.hidden = false;
+  hint.textContent = "詳細の取得がタイムアウトしました。";
+  setPhase2RetryVisible(true);
+}
+
+async function retryPhase2() {
+  if (!sessionId) return;
+  const hint = document.getElementById("read-phase2-hint");
+  setPhase2RetryVisible(false);
+  hint.hidden = false;
+  hint.textContent = "詳しい言葉を読み込んでいます…";
+  try {
+    const res = await fetch(`/api/session/${sessionId}/critique/phase2/retry`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || "再取得に失敗しました");
+    }
+    await pollCritiqueComplete();
+  } catch (err) {
+    console.error(err);
+    hint.hidden = false;
+    hint.textContent = err.message || "詳細の取得に失敗しました";
+    setPhase2RetryVisible(true);
+  }
 }
 
 function appendSectionBlock(container, sec) {
@@ -579,6 +633,10 @@ function renderCritique(data) {
 
 document.getElementById("btn-reset").addEventListener("click", () => {
   clearAllSession();
+});
+
+document.getElementById("btn-phase2-retry").addEventListener("click", () => {
+  retryPhase2();
 });
 
 document.querySelectorAll(".screen-nav [data-screen]").forEach((btn) => {

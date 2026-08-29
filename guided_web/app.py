@@ -28,7 +28,7 @@ from guided_web.settings import (
     set_save_folder,
 )
 from guided_web.stock_export import export_guided_session, render_card_preview, critique_text_for_session
-from guided_web.reflect_prompts import REFLECTION_GROUPS
+from guided_web.session_cleanup import pop_session, remove_tree
 
 APP_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = APP_ROOT / "static"
@@ -152,6 +152,7 @@ def _build_photo_session(
     session = {
         "path": str(dest),
         "preview_path": str(preview_path),
+        "temp_dir": str(tmp_dir),
         "original_filename": original_filename,
         "original_path": original_path,
         "metadata": metadata,
@@ -188,19 +189,21 @@ def _photo_session_response(session_id: str, session: dict[str, Any]) -> dict[st
 @app.post("/api/session/photo")
 async def upload_photo(file: UploadFile = File(...)) -> JSONResponse:
     suffix = Path(file.filename or "photo.jpg").suffix or ".jpg"
-    tmp_dir = Path(tempfile.gettempdir()) / "lumina_guided" / f"upload_{uuid.uuid4().hex}"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    dest = tmp_dir / f"upload{suffix}"
-    data = await file.read()
-    dest.write_bytes(data)
-
-    original_filename = file.filename or dest.name
-    session_id, session = _build_photo_session(
-        dest,
-        original_path=original_filename,
-        original_filename=original_filename,
-    )
-    return JSONResponse(_photo_session_response(session_id, session))
+    staging_dir = Path(tempfile.gettempdir()) / "lumina_guided" / f"upload_{uuid.uuid4().hex}"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    dest = staging_dir / f"upload{suffix}"
+    try:
+        data = await file.read()
+        dest.write_bytes(data)
+        original_filename = file.filename or dest.name
+        session_id, session = _build_photo_session(
+            dest,
+            original_path=original_filename,
+            original_filename=original_filename,
+        )
+        return JSONResponse(_photo_session_response(session_id, session))
+    finally:
+        remove_tree(staging_dir)
 
 
 @app.post("/api/session/photo-pick")
@@ -225,6 +228,13 @@ async def pick_photo() -> JSONResponse:
         original_filename=source.name,
     )
     return JSONResponse(_photo_session_response(session_id, session))
+
+
+@app.delete("/api/session/{session_id}")
+def delete_session(session_id: str) -> JSONResponse:
+    if pop_session(_sessions, session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return JSONResponse({"ok": True})
 
 
 @app.post("/api/session/{session_id}/critique")
@@ -282,6 +292,29 @@ async def start_critique(
     background_tasks.add_task(
         _finish_phase2, session_id, body.lens, body.user_note, phase1_text
     )
+    return JSONResponse(_critique_public(sess))
+
+
+@app.post("/api/session/{session_id}/critique/phase2/retry")
+async def retry_phase2(session_id: str, background_tasks: BackgroundTasks) -> JSONResponse:
+    """Phase1 を維持したまま Phase2 のみ再実行する（タイムアウト・失敗時の復帰）。"""
+    sess = _sessions.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    crit = sess.get("critique") or {}
+    if crit.get("status") == "complete":
+        return JSONResponse(_critique_public(sess))
+
+    phase1_text = crit.get("phase1_raw")
+    if not phase1_text:
+        raise HTTPException(status_code=400, detail="phase1 not available")
+
+    lens = crit.get("lens") or "self"
+    user_note = crit.get("user_note") or ""
+    sess["critique"]["status"] = "phase2_running"
+    sess["critique"]["error"] = None
+    background_tasks.add_task(_finish_phase2, session_id, lens, user_note, phase1_text)
     return JSONResponse(_critique_public(sess))
 
 
