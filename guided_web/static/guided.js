@@ -920,6 +920,9 @@ document.getElementById("btn-export").addEventListener("click", async () => {
       }),
     });
     const data = await res.json();
+    if (data.cancelled) {
+      return;
+    }
     if (!res.ok) {
       throw new Error(data.detail || "書き出しに失敗しました");
     }

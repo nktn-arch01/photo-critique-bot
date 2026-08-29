@@ -520,7 +520,7 @@ async def pick_save_folder() -> JSONResponse:
     initial = get_save_folder() or default_suggested_folder()
     picked = await loop.run_in_executor(_get_ui_executor(), lambda: pick_folder(initial))
     if picked is None:
-        raise HTTPException(status_code=400, detail="folder not selected")
+        return JSONResponse({"ok": False, "cancelled": True})
     resolved = set_save_folder(picked)
     return JSONResponse({"save_folder": str(resolved)})
 
@@ -582,7 +582,7 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
     initial = get_save_folder() or default_suggested_folder()
     save_root = await loop.run_in_executor(_get_ui_executor(), lambda: pick_folder(initial))
     if save_root is None:
-        raise HTTPException(status_code=400, detail="保存先が選ばれませんでした")
+        return JSONResponse({"ok": False, "cancelled": True})
 
     reflections = {
         key: item.model_dump() for key, item in body.reflections.items()

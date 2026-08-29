@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import platform
 import subprocess
 from pathlib import Path
+
+from guided_web.native_dialog import DialogResult, DialogStatus, interpret_osascript, pick_mac_then_optional_tk
 
 _IMAGE_TYPES_MAC = (
     "public.image",
@@ -27,14 +28,10 @@ _IMAGE_TYPES_MAC = (
 
 def pick_image_file(initial: Path | None = None) -> Path | None:
     """ユーザーにオリジナル画像を選ばせる。キャンセル時は None。"""
-    if platform.system() == "Darwin":
-        picked = _pick_image_mac(initial)
-        if picked is not None:
-            return picked
-    return _pick_image_tk(initial)
+    return pick_mac_then_optional_tk(_pick_image_mac, _pick_image_tk, initial)
 
 
-def _pick_image_mac(initial: Path | None) -> Path | None:
+def _pick_image_mac(initial: Path | None) -> DialogResult:
     prompt = "写真を選択"
     type_list = ", ".join(f'"{t}"' for t in _IMAGE_TYPES_MAC)
     if initial and initial.expanduser().is_dir():
@@ -57,18 +54,16 @@ def _pick_image_mac(initial: Path | None) -> Path | None:
             timeout=300,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if proc.returncode != 0:
-        return None
-    text = (proc.stdout or "").strip()
-    if not text:
-        return None
-    path = Path(text)
-    return path if path.is_file() else None
+    except (OSError, subprocess.TimeoutExpired) as err:
+        return interpret_osascript(error=err)
+    result = interpret_osascript(proc)
+    if result.status is DialogStatus.PICKED and result.path is not None:
+        if not result.path.is_file():
+            return DialogResult(DialogStatus.CANCELLED)
+    return result
 
 
-def _pick_image_tk(initial: Path | None) -> Path | None:
+def _pick_image_tk(initial: Path | None = None) -> Path | None:
     try:
         import tkinter as tk
         from tkinter import filedialog

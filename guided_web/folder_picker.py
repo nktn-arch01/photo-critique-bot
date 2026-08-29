@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import platform
 import subprocess
 from pathlib import Path
+
+from guided_web.native_dialog import interpret_osascript, pick_mac_then_optional_tk
 
 
 def pick_folder(initial: Path | None = None) -> Path | None:
     """ユーザーに保存先フォルダを選ばせる。キャンセル時は None。"""
-    if platform.system() == "Darwin":
-        picked = _pick_folder_mac(initial)
-        if picked is not None:
-            return picked
-    return _pick_folder_tk(initial)
+    return pick_mac_then_optional_tk(_pick_folder_mac, _pick_folder_tk, initial)
 
 
-def _pick_folder_mac(initial: Path | None) -> Path | None:
+def _pick_folder_mac(initial: Path | None) -> DialogResult:
     prompt = "Note の保存先フォルダを選択"
     if initial and initial.expanduser().is_dir():
         init = initial.expanduser().resolve()
@@ -34,14 +31,9 @@ def _pick_folder_mac(initial: Path | None) -> Path | None:
             timeout=300,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if proc.returncode != 0:
-        return None
-    text = (proc.stdout or "").strip()
-    if not text:
-        return None
-    return Path(text.rstrip("/"))
+    except (OSError, subprocess.TimeoutExpired) as err:
+        return interpret_osascript(error=err)
+    return interpret_osascript(proc)
 
 
 def _pick_folder_tk(initial: Path | None) -> Path | None:

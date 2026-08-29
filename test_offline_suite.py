@@ -3565,7 +3565,8 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "await abandonInFlightCritique" not in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=21" in html
+    assert "guided.js?v=22" in html
+    assert "data.cancelled" in js
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("async function ")[0]
     assert pick_fn.index("pickPhotoNative") < pick_fn.index("releaseServerSession")
     assert ".toast-region" in css
@@ -3595,6 +3596,100 @@ def test_offline_ci_installs_guided_web_deps():
     text = Path(".github/workflows/offline-tests.yml").read_text(encoding="utf-8")
     for pkg in ("fastapi", "uvicorn", "python-multipart", "httpx"):
         assert pkg in text, pkg
+
+
+def test_native_dialog_cancel_does_not_fall_through_to_tk():
+    """Mac で osascript をキャンセルしたら Tk を起動しない（プロセス abort 防止）。"""
+    import subprocess
+    from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from guided_web.native_dialog import DialogResult, DialogStatus, interpret_osascript, pick_mac_then_optional_tk
+
+    cancelled = interpret_osascript(SimpleNamespace(returncode=1, stdout=""))
+    assert cancelled.status is DialogStatus.CANCELLED
+    picked = interpret_osascript(SimpleNamespace(returncode=0, stdout="/Users/me/Notes\n"))
+    assert picked.status is DialogStatus.PICKED
+    assert picked.path == Path("/Users/me/Notes")
+    missing = interpret_osascript(error=FileNotFoundError("osascript"))
+    assert missing.status is DialogStatus.UNAVAILABLE
+    timed = interpret_osascript(error=subprocess.TimeoutExpired(cmd="osascript", timeout=1))
+    assert timed.status is DialogStatus.CANCELLED
+
+    tk_called = {"n": 0}
+
+    def fake_tk(_initial):
+        tk_called["n"] += 1
+        return Path("/tmp/tk")
+
+    with patch("guided_web.native_dialog.platform.system", return_value="Darwin"):
+        out = pick_mac_then_optional_tk(
+            lambda _i: DialogResult(DialogStatus.CANCELLED),
+            fake_tk,
+            None,
+        )
+    assert out is None
+    assert tk_called["n"] == 0
+
+    with patch("guided_web.native_dialog.platform.system", return_value="Darwin"):
+        out = pick_mac_then_optional_tk(
+            lambda _i: DialogResult(DialogStatus.UNAVAILABLE),
+            fake_tk,
+            None,
+        )
+    assert out == Path("/tmp/tk")
+    assert tk_called["n"] == 1
+
+
+def test_guided_folder_pick_cancel_skips_tk_on_mac():
+    from unittest.mock import patch
+
+    from guided_web import folder_picker as fp
+    from guided_web.native_dialog import DialogResult, DialogStatus
+
+    tk_called = {"n": 0}
+
+    def boom_tk(_initial):
+        tk_called["n"] += 1
+        raise AssertionError("Tk must not run after Mac cancel")
+
+    with patch("guided_web.native_dialog.platform.system", return_value="Darwin"), patch.object(
+        fp, "_pick_folder_mac", return_value=DialogResult(DialogStatus.CANCELLED)
+    ), patch.object(fp, "_pick_folder_tk", side_effect=boom_tk):
+        assert fp.pick_folder() is None
+    assert tk_called["n"] == 0
+
+
+def test_guided_export_cancel_is_not_an_error():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "export.jpg"
+    Image.new("RGB", (80, 60), (1, 2, 3)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("export.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    app_module._sessions[session_id]["critique"] = {
+        "status": "complete",
+        "lens": "self",
+        "phase1_raw": PHASE1_SAMPLE,
+    }
+    with patch("guided_web.app.pick_folder", return_value=None):
+        export_res = client.post(
+            f"/api/session/{session_id}/export",
+            json={"user_stars": 3, "card_theme": "dark", "user_note": "", "reflections": {}},
+        )
+    assert export_res.status_code == 200
+    assert export_res.json()["cancelled"] is True
 
 
 def run_all():
@@ -3696,6 +3791,9 @@ def run_all():
     test_guided_ui_uses_toast_empty_guides_and_export_navigation()
     test_guided_run_script_reports_boot_failure()
     test_offline_ci_installs_guided_web_deps()
+    test_native_dialog_cancel_does_not_fall_through_to_tk()
+    test_guided_folder_pick_cancel_skips_tk_on_mac()
+    test_guided_export_cancel_is_not_an_error()
     print("test_offline_suite: OK")
 
 
