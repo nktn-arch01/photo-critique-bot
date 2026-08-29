@@ -223,7 +223,22 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
   line-height: 1.6;
   white-space: pre-wrap;
 }
-.read-section { margin-bottom: 0.5rem; }
+.read-group.read-group-pending {
+  opacity: 0.55;
+}
+.read-group.read-group-pending summary {
+  color: var(--muted);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.read-group.read-group-pending .read-group-body {
+  pointer-events: none;
+}
+
+#btn-keep:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 .card-preview-wrap {
   background: #fff;

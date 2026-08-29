@@ -270,6 +270,52 @@ function resetReflectionFields() {
   document.getElementById("card-theme").value = "dark";
 }
 
+function readDropdownElements() {
+  return [
+    document.getElementById("detail-scores"),
+    document.getElementById("detail-sections-123"),
+    document.getElementById("detail-sections-4567"),
+  ];
+}
+
+function resetReadDropdowns() {
+  readDropdownElements().forEach((el) => {
+    if (!el) return;
+    el.open = false;
+    el.classList.add("read-group-pending");
+  });
+  updateKeepButton();
+}
+
+function activateReadDropdowns() {
+  readDropdownElements().forEach((el) => {
+    if (!el) return;
+    el.classList.remove("read-group-pending");
+  });
+  updateKeepButton();
+}
+
+function updateKeepButton() {
+  const btn = document.getElementById("btn-keep");
+  if (!btn) return;
+  const pending = readDropdownElements().some(
+    (el) => el && el.classList.contains("read-group-pending"),
+  );
+  btn.disabled = pending || critiqueInProgress;
+}
+
+function bindReadDropdownGuards() {
+  readDropdownElements().forEach((el) => {
+    if (!el || el.dataset.guardBound) return;
+    el.dataset.guardBound = "1";
+    el.addEventListener("toggle", () => {
+      if (el.classList.contains("read-group-pending")) {
+        el.open = false;
+      }
+    });
+  });
+}
+
 function clearReadData() {
   critiqueInProgress = false;
   hideReadPhoto();
@@ -286,6 +332,8 @@ function clearReadData() {
   document.getElementById("read-sections-4567").innerHTML = "";
   document.getElementById("read-skeleton").textContent = "いま写真を読んでいます…";
   document.getElementById("read-skeleton").hidden = true;
+  resetReadDropdowns();
+  updateKeepButton();
 }
 
 function clearReflectData() {
@@ -304,18 +352,26 @@ function clearReadAndReflectData() {
 
 function setReadLoading(loading) {
   document.getElementById("read-skeleton").hidden = !loading;
+  document.getElementById("read-detail").hidden = false;
   if (loading) {
     document.getElementById("read-compact-wrap").hidden = true;
     document.getElementById("read-actions").hidden = true;
-    document.getElementById("read-detail").hidden = true;
+    resetReadDropdowns();
   }
+  updateKeepButton();
 }
 
-function showReadPanels() {
+function showReadPanelsPhase1() {
   document.getElementById("read-skeleton").hidden = true;
   document.getElementById("read-compact-wrap").hidden = false;
   document.getElementById("read-actions").hidden = false;
   document.getElementById("read-detail").hidden = false;
+  updateKeepButton();
+}
+
+function showReadPanelsComplete() {
+  showReadPanelsPhase1();
+  activateReadDropdowns();
 }
 
 function clearAllSession() {
@@ -407,16 +463,20 @@ async function startCritique() {
       throw new Error(data.error || data.detail || "講評の開始に失敗しました");
     }
     renderCritique(data);
-    showReadPanels();
+    showReadPanelsPhase1();
     critiqueInProgress = false;
+    updateKeepButton();
 
     if (data.status === "phase2_running") {
       hint.hidden = false;
       await pollCritiqueComplete();
+    } else if (data.status === "complete") {
+      showReadPanelsComplete();
     }
   } catch (err) {
     console.error(err);
     critiqueInProgress = false;
+    updateKeepButton();
     const skeleton = document.getElementById("read-skeleton");
     skeleton.textContent = "言葉を読み取れませんでした。APIキーとネットワークを確認してください。";
     setReadLoading(true);
@@ -432,6 +492,7 @@ async function pollCritiqueComplete() {
     if (data.status === "complete") {
       renderCritique(data);
       hint.hidden = true;
+      showReadPanelsComplete();
       return;
     }
     if (data.status === "error") {
@@ -500,6 +561,7 @@ document.getElementById("btn-again").addEventListener("click", () => {
 });
 
 document.getElementById("btn-keep").addEventListener("click", () => {
+  if (document.getElementById("btn-keep").disabled) return;
   prepareReflectScreen();
   navigateToScreen("reflect");
 });
@@ -628,4 +690,5 @@ function updateStarButtons() {
 }
 
 updateStarButtons();
+bindReadDropdownGuards();
 loadReflectItems();
