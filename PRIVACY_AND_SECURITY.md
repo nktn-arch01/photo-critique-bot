@@ -8,8 +8,9 @@
 
 | 場所 | 内容 | リスクの要点 |
 |------|------|----------------|
-| **Supabase `critique_logs`** | LINE user ID、講評全文、カード URL 等 | Table Editor で閲覧可能（プロジェクト管理者） |
-| **Supabase `user_settings`** | LINE user ID、compact/full、card_theme (dark/light) | 同上 |
+| **Supabase `critique_logs`** | LINE user ID、講評要約、カード URL 等（全文は既定オフ） | Table Editor で閲覧可能（プロジェクト管理者）。**30 日で削除** |
+| **Supabase `critique_events`** | 匿名ハッシュ、テーマ、TITLE、要約、スコア、反応 | LINE ID・全文・カードなし。**30 日削除の対象外**（分析用） |
+| **Supabase `user_settings`** | LINE user ID、compact/full、card_theme (dark/light) | Table Editor で閲覧可能。運用に必要なため残る |
 | **Supabase Storage `critique-cards`** | 講評カード PNG | **Public バケットだと URL 漏洩で第三者も閲覧可能** |
 | **Render ログ** | エラー・処理状況（user ID はマスク済み） | Render アカウント保持者が閲覧 |
 | **OpenAI** | 送信した画像・プロンプト | [OpenAI データポリシー](https://openai.com/policies) に従う（API 利用規約の確認） |
@@ -22,7 +23,7 @@
 
 | 機能 | 説明 |
 |------|------|
-| **`privacy_utils.py`** | ログ用 user ID マスク、Storage パス用ハッシュフォルダ |
+| **`privacy_utils.py`** | ログ用 user ID マスク、Storage パス用ハッシュ、分析用 `user_hash` |
 | **Storage パス** | `{16文字ハッシュ}/{message_id}_card.png`（生の LINE ID をパスに含めない） |
 | **Render ログ** | `line_user_id` 全文を出さない |
 | **環境変数** | 下表（Render に設定可能） |
@@ -33,6 +34,7 @@
 |------|------|------|
 | `CRITIQUE_SAVE_DB` | `true` | `false` で **DB への講評ログ insert をスキップ**（モード設定は継続） |
 | `CRITIQUE_SAVE_FULL_TEXT` | `false` | `true` のときだけ DB に講評**全文**を保存。既定はタイトル・要約・スコア・反応のみ。既に入っている全文は自動では消えず、30日削除または手動更新が必要。 |
+| `ANALYTICS_HASH_SALT` | `lumina-analytics` | 分析テーブル `user_hash` 用。`STORAGE_PATH_SALT` と**同じ値にしない**。変更すると同一ユーザーの集計が切れる。 |
 | `SUPABASE_CARD_SIGNED_SECONDS` | 未設定 | 設定すると **署名付き URL**（Private バケット向け）。例: `604800`（7日） |
 | `STORAGE_PATH_SALT` | 固定文字列 | Storage フォルダハッシュ用（変更するとパスが変わる） |
 
@@ -44,8 +46,9 @@
 2. **Storage `critique-cards` を Private に** → Render に `SUPABASE_CARD_SIGNED_SECONDS=604800`  
 3. **Table Editor へのアクセス** … 信頼できるアカウントのみ、2FA 有効化  
 4. **Service Role Key** … Render のみ。GitHub・スクショに載せない  
-5. **保持期間** … **`retention_purge.py`** + GitHub Actions **`Monthly retention purge`**（`.github/workflows/retention-purge.yml`）で **30 日超**の `critique_logs` と `critique-cards` を毎月自動削除。手動は `DRY_RUN=true python retention_purge.py`  
-6. **利用者への説明** … LINE Bot 利用時に「写真は AI 解析・カード生成のため外部サービスに送信される」旨をプロフィールや固定文で告知  
+5. **保持期間** … **`retention_purge.py`** + GitHub Actions **`Monthly retention purge`**（`.github/workflows/retention-purge.yml`）で **30 日超**の `critique_logs` と `critique-cards` を毎月自動削除。**`critique_events` は削除しない。** 手動は `DRY_RUN=true python retention_purge.py`  
+6. **分析テーブル** … **`supabase/add_critique_events.sql`** を SQL Editor で1回実行  
+7. **利用者への説明** … LINE Bot 利用時に「写真は AI 解析・カード生成のため外部サービスに送信される」旨をプロフィールや固定文で告知  
 
 ### GitHub Actions 用 Secrets（月次削除）
 
@@ -69,6 +72,7 @@
 ### 中期的（中）
 
 - [x] ログ保持 **既定は全文を保存しない**（`CRITIQUE_SAVE_FULL_TEXT=true` でオプトイン）  
+- [x] 分析用匿名テーブル **`critique_events`**（LINE ID・全文・カードなし）  
 - [ ] 不要になった Storage / DB 行の **月次削除**（`retention_purge.py` + GitHub Secrets 設定済みか確認）  
 - [ ] LINE 友だち向け **簡易プライバシー説明**（固定メッセージ）  
 

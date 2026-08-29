@@ -131,13 +131,13 @@ flowchart LR
   Full13 --> Push3[3通テキスト]
   Push3 --> QR[Quick Reply 3段階]
   QR --> Clear[キャッシュ消去]
-  QR --> DB["critique_logs.user_reaction"]
+  QR --> DB["critique_logs + critique_events"]
 ```
 
 - モード「簡易／詳細」切替は案内上 **カード＋対話に統一**
 - CRITIQUE_SUMMARY のテキスト通は送らない
 - Desktop の Full ログ（【1〜7】）とは **別契約**
-- **N2:** 対話【1〜3】の最後に Quick Reply（👍いいね／💭もう少し／😐いまいち）→ DB `user_reaction`（good/mixed/weak）。Q5 の材料
+- **N2:** 対話【1〜3】の最後に Quick Reply（👍いいね／💭もう少し／😐いまいち）→ 運用は `critique_logs.user_reaction`、分析は匿名の `critique_events`。Q5 の材料は **`critique_events` を書き出す**
 
 ---
 

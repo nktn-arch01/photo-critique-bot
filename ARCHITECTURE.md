@@ -39,7 +39,8 @@
   ├── 4. 共通コア (generate_critique_card.py) ➔ カード画像描画（`card_theme`: `dark` / `light`）
   ├── 5. SupabaseManager (supabase_client.py)
   │      ├── Storage (critique-cards) へ PNG アップロード ➔ Public URL 取得
-  │      └── DB (critique_logs / user_settings) へ ログ保存 & カード背景 (`dark`/`light`) 取得
+  │      ├── DB (critique_logs / user_settings) へ ログ保存 & カード背景 (`dark`/`light`) 取得
+  │      └── DB (`critique_events`) へ匿名の利用イベント（ハッシュ・スコア・反応。LINE ID なし）
   ├── 6. line_messaging.py ➔ Wave C: カード即時 push のあと対話【1】【2】【3】を3通（1リクエスト最大5通）
   ├── 7. LINE Messaging API ➔ 画像カード + テキスト Push 送信
   └── 8. テキスト「背景」➔ QuickReply でライト/ダーク選択 ➔ `user_settings.card_theme` 保存
@@ -63,6 +64,7 @@
 | **LINE Bot (Render)** | `LINE_CHANNEL_SECRET` | 必須 | LINE Messaging API チャンネルシークレット。 |
 | **LINE Bot (Render)** | `LINE_CHANNEL_ACCESS_TOKEN` | 必須 | LINE Messaging API アクセストークン。 |
 | **LINE Bot (Render)** | `CRITIQUE_SAVE_FULL_TEXT` | 任意 | 既定 `false`。`true` のときだけ `critique_logs` に講評全文を保存。 |
+| **LINE Bot (Render)** | `ANALYTICS_HASH_SALT` | 任意 | `critique_events.user_hash` 用。`STORAGE_PATH_SALT` と共用しない。 |
 
 ---
 
@@ -124,8 +126,8 @@
 - `prompt_contracts.py`: **【プロンプト契約】** 審判語禁止・時間帯禁止・人物分岐のオフライン回帰正本（P2-1 Q2/Q3）。
 - `scripts/summarize_h3_deltas.py` / `scripts/summarize_user_reactions.py`: H3 差分・LINE 反応の集計（Q5。自動書き換えなし）。手順は `docs/P2_1_PROMPT_IMPROVEMENT_LOOP.md`。
 - `docs/P2_2_PUBLIC_UX_CHARTER.md`: **【公開 UX 憲章】** ブランドブック準拠の体験合意（Guided／Console／LINE、ローカル Web）。`docs/brand/LuminaNotes_BrandBook_02.pdf`。
-- `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`)。`card_theme` と `critique_logs.user_reaction` を永続化。列追加 SQL: `supabase/add_card_theme.sql` / `supabase/add_user_reaction.sql`。
-- `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
+- `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`, 分析用 `critique_events`) および Storage (`critique-cards`)。`card_theme` と `user_reaction` を永続化。列追加 SQL: `supabase/add_card_theme.sql` / `supabase/add_user_reaction.sql` / `supabase/add_critique_events.sql`。
+- `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除（**`critique_events` は残す**）。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
 
 ---
 

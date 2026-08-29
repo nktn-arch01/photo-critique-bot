@@ -373,6 +373,68 @@ def test_storage_path_from_card_url():
     assert storage_path_from_card_url("") is None
 
 
+def test_line_analytics_event_is_anonymous():
+    """分析行に LINE ID・全文・カード URL を載せない。Storage ハッシュとも別塩。"""
+    import os
+
+    from privacy_utils import (
+        CRITIQUE_EVENT_FORBIDDEN_KEYS,
+        analytics_user_hash,
+        critique_event_payload,
+        storage_folder_for_user,
+    )
+
+    saved_analytics = os.environ.pop("ANALYTICS_HASH_SALT", None)
+    saved_storage = os.environ.pop("STORAGE_PATH_SALT", None)
+    try:
+        line_id = "U" + "a" * 32
+        payload = critique_event_payload(
+            line_user_id=line_id,
+            card_theme="dark",
+            title="沈黙を割る線",
+            critique_summary="短い要約",
+            scores_json={"眼差の輪郭": {"val": 4}},
+        )
+        assert set(payload) <= {
+            "user_hash",
+            "card_theme",
+            "title",
+            "critique_summary",
+            "scores_json",
+            "user_reaction",
+        }
+        for key in CRITIQUE_EVENT_FORBIDDEN_KEYS:
+            assert key not in payload
+        assert line_id not in repr(payload)
+        assert payload["user_hash"] == analytics_user_hash(line_id)
+        assert len(payload["user_hash"]) == 64
+        assert payload["user_hash"] != storage_folder_for_user(line_id)
+        assert not payload["user_hash"].startswith(storage_folder_for_user(line_id))
+
+        os.environ["ANALYTICS_HASH_SALT"] = "other-salt"
+        assert analytics_user_hash(line_id) != payload["user_hash"]
+    finally:
+        if saved_analytics is None:
+            os.environ.pop("ANALYTICS_HASH_SALT", None)
+        else:
+            os.environ["ANALYTICS_HASH_SALT"] = saved_analytics
+        if saved_storage is None:
+            os.environ.pop("STORAGE_PATH_SALT", None)
+        else:
+            os.environ["STORAGE_PATH_SALT"] = saved_storage
+
+
+def test_retention_purge_does_not_target_critique_events():
+    from pathlib import Path
+
+    source = Path("retention_purge.py").read_text(encoding="utf-8")
+    assert "critique_logs" in source
+    assert "critique-cards" in source
+    assert "critique_events" in source
+    assert "table(\"critique_events\")" not in source
+    assert "は削除しない" in source
+
+
 def test_line_db_omits_full_critique_text_by_default():
     """LINE の DB は既定で講評全文を残さない（オプトインのみ）。"""
     import os
@@ -2500,6 +2562,8 @@ def run_all():
     test_line_dialogue_split_sections_1_to_3()
     test_iptc_phase1_block_upsert_preserves_stages_and_user()
     test_storage_path_from_card_url()
+    test_line_analytics_event_is_anonymous()
+    test_retention_purge_does_not_target_critique_events()
     test_line_db_omits_full_critique_text_by_default()
     test_normalize_card_theme()
     test_create_critique_card_layout()

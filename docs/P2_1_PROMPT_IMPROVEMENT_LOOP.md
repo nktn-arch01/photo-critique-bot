@@ -59,11 +59,11 @@ python3 scripts/summarize_h3_deltas.py --sessions eval/fixtures_q5/sample_sessio
 
 ### B. LINE 反応（いいね／もう少し／いまいち）
 
-1. Supabase → `critique_logs` を JSON または CSV で書き出し（`user_reaction`, `title`, `critique_summary` があれば十分）  
+1. Supabase → **`critique_events`** を JSON または CSV で書き出し（`user_reaction`, `title`, `critique_summary` があれば十分。LINE user ID は無い）  
 2. 実行:
 
 ```bash
-python3 scripts/summarize_user_reactions.py --input ~/Downloads/critique_logs.json --md
+python3 scripts/summarize_user_reactions.py --input ~/Downloads/critique_events.json --md
 ```
 
 見るポイント: `weak` / `mixed` の TITLE・CRITIQUE_SUMMARY の傾向。

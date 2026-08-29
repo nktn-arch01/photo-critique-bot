@@ -13,10 +13,12 @@ from critique_parser import parse_critique_text
 from card_theme import DEFAULT_CARD_THEME, normalize_card_theme
 from line_reactions import REACTION_VALUES, parse_reaction_label
 from privacy_utils import (
+    analytics_user_hash,
     card_signed_url_seconds,
+    critique_event_payload,
+    full_critique_text_for_storage,
     redact_line_user_id,
     should_save_critique_db,
-    full_critique_text_for_storage,
 )
 
 
@@ -174,10 +176,48 @@ class SupabaseManager:
                 f"[Supabase DB Success] user={redact_line_user_id(line_user_id)} id={row_id}",
                 flush=True,
             )
+            self._insert_critique_event(line_user_id, parsed)
             return row_id
         except Exception as e:
             print(f"[Supabase DB Error] {e}", flush=True)
             return None
+
+    def _insert_critique_event(self, line_user_id: str, parsed: dict) -> None:
+        """分析用の匿名行。失敗しても講評の返信は止めない。"""
+        if not self.client:
+            return
+        try:
+            payload = critique_event_payload(
+                line_user_id=line_user_id,
+                card_theme=self.get_user_card_theme(line_user_id),
+                title=parsed.get("title") or "",
+                critique_summary=parsed.get("point_text") or "",
+                scores_json=json.loads(json.dumps(parsed.get("scores") or {}, ensure_ascii=False)),
+            )
+            self.client.table("critique_events").insert(payload).execute()
+            print("[Supabase critique_events Success]", flush=True)
+        except Exception as e:
+            print(f"[Supabase critique_events Error] {e}", flush=True)
+
+    def _update_latest_critique_event_reaction(self, line_user_id: str, value: str) -> None:
+        if not self.client:
+            return
+        try:
+            res = (
+                self.client.table("critique_events")
+                .select("id")
+                .eq("user_hash", analytics_user_hash(line_user_id))
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if not res.data:
+                return
+            self.client.table("critique_events").update({"user_reaction": value}).eq(
+                "id", res.data[0]["id"]
+            ).execute()
+        except Exception as e:
+            print(f"[Supabase critique_events reaction Error] {e}", flush=True)
 
     def save_user_reaction(self, line_user_id: str, reaction: str) -> bool:
         """直近の未反応 critique_logs 行に user_reaction を書く。
@@ -214,6 +254,7 @@ class SupabaseManager:
             self.client.table("critique_logs").update({"user_reaction": value}).eq(
                 "id", row_id
             ).execute()
+            self._update_latest_critique_event_reaction(line_user_id, value)
             print(
                 f"[Supabase reaction Success] user={redact_line_user_id(line_user_id)} "
                 f"id={row_id} reaction={value}",

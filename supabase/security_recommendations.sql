@@ -4,6 +4,7 @@
 -- 1. RLS を有効化（テーブルが存在する場合）
 ALTER TABLE IF EXISTS public.user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.critique_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.critique_events ENABLE ROW LEVEL SECURITY;
 
 -- 2. anon / authenticated からの直接読み取りを禁止（ポリシー未作成＝拒否）
 --    バックエンド（service_role）のみ Table Editor / API 経由で操作。

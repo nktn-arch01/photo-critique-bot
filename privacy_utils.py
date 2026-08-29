@@ -20,6 +20,58 @@ def storage_folder_for_user(line_user_id: str) -> str:
     return digest[:16]
 
 
+def analytics_user_hash(line_user_id: str) -> str:
+    """分析用の不可逆ハッシュ。STORAGE_PATH_SALT とは別の塩を使う。"""
+    salt = os.getenv("ANALYTICS_HASH_SALT", "lumina-analytics")
+    return hashlib.sha256(f"{salt}:{line_user_id}".encode("utf-8")).hexdigest()
+
+
+CRITIQUE_EVENT_KEYS = frozenset(
+    {
+        "user_hash",
+        "card_theme",
+        "title",
+        "critique_summary",
+        "scores_json",
+        "user_reaction",
+    }
+)
+CRITIQUE_EVENT_FORBIDDEN_KEYS = frozenset(
+    {
+        "line_user_id",
+        "user_id",
+        "card_image_url",
+        "image_url",
+        "full_critique_text",
+    }
+)
+
+
+def critique_event_payload(
+    *,
+    line_user_id: str,
+    card_theme: str,
+    title: str,
+    critique_summary: str,
+    scores_json: object,
+    user_reaction: str | None = None,
+) -> dict:
+    """critique_events に書いてよい項目だけを返す（LINE ID・全文・カード URL は入れない）。"""
+    payload = {
+        "user_hash": analytics_user_hash(line_user_id),
+        "card_theme": card_theme,
+        "title": title or "",
+        "critique_summary": critique_summary or "",
+        "scores_json": scores_json,
+    }
+    if user_reaction:
+        payload["user_reaction"] = user_reaction
+    extra = set(payload) - CRITIQUE_EVENT_KEYS
+    if extra:
+        raise ValueError(f"critique_events に許可しないキー: {sorted(extra)}")
+    return payload
+
+
 def should_save_critique_db() -> bool:
     return os.getenv("CRITIQUE_SAVE_DB", "true").strip().lower() in ("1", "true", "yes")
 

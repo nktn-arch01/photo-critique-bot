@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """LINE user_reaction（いいね／もう少し／いまいち）を集計する（Q5）。
 
-Supabase の Table Editor から critique_logs を JSON/CSV エクスポートして渡す。
+Supabase の Table Editor から **critique_events** を JSON/CSV エクスポートして渡す。
+（運用テーブル critique_logs ではなく、匿名の分析テーブル。）
 API キー不要。プロンプトは自動変更しません。
 
 使い方:

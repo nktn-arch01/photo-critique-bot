@@ -1,6 +1,8 @@
 """
 Supabase critique_logs と critique-cards Storage の保持期間削除。
 
+分析用の `critique_events` は削除しない（匿名・長期）。
+
 手動: RETENTION_DAYS=30 python retention_purge.py
 ドライラン: DRY_RUN=true python retention_purge.py
 
