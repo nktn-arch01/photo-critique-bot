@@ -16,6 +16,7 @@ from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from PIL import Image, UnidentifiedImageError
 
 from ai_vision import prepare_vision_image_bytes
 from guided_metadata import build_guided_api_parameters
@@ -169,6 +170,15 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _assert_readable_image(path: Path) -> None:
+    """読めないファイルをセッションにしない（トーストの失敗通知と対）。"""
+    try:
+        with Image.open(path) as image:
+            image.load()
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="unreadable image") from exc
+
+
 def _build_photo_session(
     source_path: Path,
     *,
@@ -181,37 +191,42 @@ def _build_photo_session(
     tmp_dir.mkdir(parents=True, exist_ok=True)
     suffix = source_path.suffix or ".jpg"
     dest = tmp_dir / f"upload{suffix}"
-    if source_path.resolve() != dest.resolve():
-        shutil.copy2(source_path, dest)
-    else:
-        dest = source_path
-
-    api_params, metadata, dop_info, meta_block = build_guided_api_parameters(
-        dest, image_id=session_id, geocode=True
-    )
-    preview_path = tmp_dir / "preview.jpg"
     try:
-        preview_bytes, _ = prepare_vision_image_bytes(dest)
-        preview_path.write_bytes(preview_bytes)
-    except Exception:
-        preview_path = dest
+        if source_path.resolve() != dest.resolve():
+            shutil.copy2(source_path, dest)
+        else:
+            dest = source_path
+        _assert_readable_image(dest)
 
-    session = {
-        "path": str(dest),
-        "preview_path": str(preview_path),
-        "temp_dir": str(tmp_dir),
-        "original_filename": original_filename,
-        "original_path": original_path,
-        "metadata": metadata,
-        "dop_info": dop_info,
-        "meta_block": meta_block,
-        "api_params": api_params.to_dict(),
-        "critique": {"status": "idle"},
-        "card_preview_path": None,
-        "card_preview_theme": None,
-    }
-    _sessions[session_id] = session
-    return session_id, session
+        api_params, metadata, dop_info, meta_block = build_guided_api_parameters(
+            dest, image_id=session_id, geocode=True
+        )
+        preview_path = tmp_dir / "preview.jpg"
+        try:
+            preview_bytes, _ = prepare_vision_image_bytes(dest)
+            preview_path.write_bytes(preview_bytes)
+        except Exception:
+            preview_path = dest
+
+        session = {
+            "path": str(dest),
+            "preview_path": str(preview_path),
+            "temp_dir": str(tmp_dir),
+            "original_filename": original_filename,
+            "original_path": original_path,
+            "metadata": metadata,
+            "dop_info": dop_info,
+            "meta_block": meta_block,
+            "api_params": api_params.to_dict(),
+            "critique": {"status": "idle"},
+            "card_preview_path": None,
+            "card_preview_theme": None,
+        }
+        _sessions[session_id] = session
+        return session_id, session
+    except Exception:
+        remove_tree(tmp_dir)
+        raise
 
 
 def _photo_session_response(session_id: str, session: dict[str, Any]) -> dict[str, Any]:

@@ -2626,6 +2626,24 @@ def test_guided_upload_returns_parameter_display():
     assert data["parameter_display"][0]["rows"][0]["value"] == "params.jpg"
 
 
+def test_guided_upload_rejects_unreadable_image():
+    import tempfile
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    fake = td / "fake.jpg"
+    fake.write_text("not-a-jpeg", encoding="utf-8")
+    with fake.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("fake.jpg", f, "image/jpeg")})
+    assert res.status_code == 400
+    assert res.json()["detail"] == "unreadable image"
+
+
 def test_guided_card_footer_metadata():
     import tempfile
     from pathlib import Path
@@ -3183,6 +3201,7 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert ".toast-region" in css
     assert ".empty-guide" in css
     assert ".card-preview-hint" in css
+    assert ".photo-preview[hidden]" in css
 
 
 def test_guided_run_script_reports_boot_failure():
@@ -3263,6 +3282,7 @@ def run_all():
     test_guided_api_parameters_shape()
     test_guided_parameter_display_rows()
     test_guided_upload_returns_parameter_display()
+    test_guided_upload_rejects_unreadable_image()
     test_guided_card_footer_metadata()
     test_guided_body_sections_split()
     test_guided_stock_export_writes_files()

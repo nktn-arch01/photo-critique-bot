@@ -207,7 +207,10 @@ async function uploadPhoto(file) {
   const fd = new FormData();
   fd.append("file", file);
   const res = await fetch("/api/session/photo", { method: "POST", body: fd });
-  if (!res.ok) throw new Error("upload failed");
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || "upload failed");
+  }
   return res.json();
 }
 
@@ -325,8 +328,14 @@ async function handleSelectedFile(file) {
   localPreviewUrl = URL.createObjectURL(file);
   setChoosePhotoPreview(localPreviewUrl);
 
-  const data = await uploadPhoto(file);
-  await applyPhotoSession(data, file);
+  try {
+    const data = await uploadPhoto(file);
+    await applyPhotoSession(data, file);
+  } catch (err) {
+    revokeLocalPreview();
+    setChoosePhotoPreview(null);
+    throw err;
+  }
 }
 
 async function handleNativePhotoPick() {
@@ -509,6 +518,11 @@ document.getElementById("pick-file").addEventListener("click", async () => {
   try {
     await handleNativePhotoPick();
   } catch (err) {
+    const msg = String(err && err.message ? err.message : "");
+    if (msg.includes("unreadable image") || msg.includes("not found")) {
+      showToast("写真の読み込みに失敗しました。もう一度お試しください。", "error");
+      return;
+    }
     console.warn("native photo pick unavailable, falling back to file input", err);
     document.getElementById("file-input").click();
   }
