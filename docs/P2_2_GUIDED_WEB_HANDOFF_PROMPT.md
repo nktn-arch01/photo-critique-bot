@@ -42,7 +42,7 @@ Linux のブラウザで JPEG をコンソール注入したり `fetch` を差�
 
 ## Git / PR
 
-- 作業ブランチ: `cursor/p2-2-web-concept-f193`（この案内が別枝なら、取り込み後にこちらへ揃える）
+- 作業ブランチ: 案内取り込み前は `cursor/next-session-handoff-d105`。取り込み後は `cursor/p2-2-web-concept-f193`
 - PR: #21（base: `main`）
 - 起動: `bash scripts/run_guided_web.sh`
 - 回帰: `python3 test_offline_suite.py`

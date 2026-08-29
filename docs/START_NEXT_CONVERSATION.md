@@ -23,8 +23,8 @@ Cursor の Cloud Agent 一覧で、次の名前の作業は **終了（または
 1. Cursor で **新しい Cloud Agent** を開始する  
 2. リポジトリ: `nktn-arch01/photo-critique-bot`  
 3. **ブランチ（重要）**
-   - この案内の PR が Guided Web の枝に取り込まれたあと: `cursor/p2-2-web-concept-f193`
-   - 取り込む前に始めるとき: この案内を出した枝（例: `cursor/next-session-handoff-d105`）
+   - **今すぐ始める（推奨）:** `cursor/next-session-handoff-d105`（この案内が入っている枝。GitHub PR #22）
+   - この案内が Guided Web の枝に取り込まれたあと: `cursor/p2-2-web-concept-f193`
 4. **モデル**: Fast や high-fast は選ばない。**high（通常のしっかりめ）** にする  
 5. 最初のメッセージに、次のファイルの **囲みの中だけ** を貼る  
    - [`P2_2_GUIDED_WEB_HANDOFF_PROMPT.md`](P2_2_GUIDED_WEB_HANDOFF_PROMPT.md)
