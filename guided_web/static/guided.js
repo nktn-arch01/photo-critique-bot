@@ -138,6 +138,62 @@ function abandonInFlightCritique() {
   fetch(`/api/session/${id}/critique/cancel${query}`, { method: "POST" }).catch(() => {});
 }
 
+function critiqueWatchIsLive() {
+  return Boolean(critiqueAbort && !critiqueAbort.signal.aborted);
+}
+
+function applyInterruptedCritiqueHint() {
+  critiqueInProgress = false;
+  const hint = document.getElementById("read-phase2-hint");
+  const pending = readDropdownElements().some(
+    (el) => el && el.classList.contains("read-group-pending"),
+  );
+  if (hint && pending) {
+    hint.hidden = false;
+    hint.textContent = "詳しい言葉が途切れました。「選ぶ」で「言葉にする」を押してください。";
+    setPhase2RetryVisible(false);
+  }
+  updateKeepButton();
+}
+
+async function ensureCritiqueWatch() {
+  if (!sessionId || critiqueWatchIsLive()) return;
+  try {
+    const res = await fetch(`/api/session/${sessionId}/critique`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.epoch != null) activeCritiqueEpoch = data.epoch;
+    if (data.status === "complete") {
+      await applyCritiqueProgress(data, critiqueGeneration);
+      critiqueInProgress = false;
+      resetPhase2Hint();
+      updateKeepButton();
+      return;
+    }
+    if (data.status === "phase1_running" || data.status === "phase2_running") {
+      const requestId = critiqueGeneration;
+      critiqueAbort = new AbortController();
+      critiqueInProgress = true;
+      updateKeepButton();
+      await applyCritiqueProgress(data, requestId);
+      if (requestId !== critiqueGeneration) return;
+      const hint = document.getElementById("read-phase2-hint");
+      if (data.status === "phase2_running") hint.hidden = false;
+      await pollCritique(requestId, Boolean(data.phase1));
+      if (requestId !== critiqueGeneration) return;
+      critiqueInProgress = false;
+      updateKeepButton();
+      return;
+    }
+    if (data.status === "idle") {
+      applyInterruptedCritiqueHint();
+    }
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+    console.error(err);
+  }
+}
+
 function syncSpeakButton() {
   const btn = document.getElementById("btn-speak");
   if (btn) btn.disabled = !sessionId;
@@ -179,14 +235,14 @@ function syncScreenGuides() {
 }
 
 function navigateToScreen(name) {
-  if (name !== "read") {
-    abandonInFlightCritique();
-  }
   if (name === "read" && readPhotoShown && activePreviewUrl()) {
     setReadPhotoPreview(activePreviewUrl());
   }
   syncScreenGuides();
   showScreen(name);
+  if (name === "read") {
+    void ensureCritiqueWatch();
+  }
 }
 
 function activePreviewUrl() {
@@ -359,6 +415,7 @@ async function applyPhotoSession(data, previewFile) {
 }
 
 async function handleSelectedFile(file) {
+  abandonInFlightCritique();
   await releaseServerSession();
   sessionId = null;
   revokeLocalPreview();
@@ -385,6 +442,7 @@ async function handleNativePhotoPick() {
   try {
     const data = await pickPhotoNative();
     if (!data) return;
+    abandonInFlightCritique();
     await releaseServerSession();
     sessionId = null;
     revokeLocalPreview();
@@ -702,7 +760,10 @@ async function pollCritique(requestId, shownPhase1) {
     if (requestId !== critiqueGeneration) return;
     const data = await res.json();
     if (data.epoch != null) activeCritiqueEpoch = data.epoch;
-    if (data.status === "idle") return;
+    if (data.status === "idle") {
+      applyInterruptedCritiqueHint();
+      return;
+    }
     if (data.phase1 && !shownPhase1) {
       shownPhase1 = true;
       await applyCritiqueProgress(data, requestId);

@@ -38,7 +38,7 @@ Guided Web（`guided_web/`）の**完成度を上げる**。レビュー報告�
 ### 技術
 - `session_cleanup.py` + `DELETE /api/session/{id}` + `POST /api/session/{id}/release`
 - FastAPI `lifespan`: 起動時孤児掃除 / Ctrl+C で全セッション解放
-- 講評 epoch + lock（並行は 409）、`pagehide` + sendBeacon
+- 講評 epoch + lock（並行は 409）、`pagehide` + sendBeacon。画面タブの行き来では講評を cancel しない
 - `POST /api/session/{id}/critique/phase2/retry`
 - 起動失敗時は `scripts/run_guided_web.sh` がログを出して exit 1
 - オフライン: `test_guided_session_delete_removes_temp_dir`, `test_guided_phase2_retry_restarts_background`, `test_guided_purge_orphan_temp_keeps_live_sessions`, `test_guided_lifespan_purges_orphans_and_shutdown_sessions`

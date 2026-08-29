@@ -422,7 +422,7 @@ def cancel_session_critique(
     session_id: str,
     epoch: int | None = Query(default=None),
 ) -> JSONResponse:
-    """もう一度／タブ離脱。写真は残し、進行中の講評だけ無効化する。"""
+    """クリア／写真差し替え用。写真は残し、進行中の講評だけ無効化する。"""
     sess = _sessions.get(session_id)
     if not sess:
         raise HTTPException(status_code=404, detail="session not found")

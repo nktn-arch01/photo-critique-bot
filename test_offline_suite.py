@@ -3574,11 +3574,20 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "await abandonInFlightCritique" not in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=24" in html
-    assert "guided.css?v=24" in html
+    assert "guided.js?v=25" in html
+    assert "guided.css?v=25" in html
     assert "data.cancelled" in js
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("async function ")[0]
-    assert pick_fn.index("pickPhotoNative") < pick_fn.index("releaseServerSession")
+    assert pick_fn.index("pickPhotoNative") < pick_fn.index("abandonInFlightCritique")
+    assert pick_fn.index("abandonInFlightCritique") < pick_fn.index("releaseServerSession")
+    nav_fn = js.split("function navigateToScreen")[1].split("function ")[0]
+    assert "abandonInFlightCritique" not in nav_fn
+    assert "ensureCritiqueWatch" in nav_fn
+    assert "function ensureCritiqueWatch" in js
+    assert "function applyInterruptedCritiqueHint" in js
+    assert "function critiqueWatchIsLive" in js
+    selected_fn = js.split("async function handleSelectedFile")[1].split("async function ")[0]
+    assert selected_fn.index("abandonInFlightCritique") < selected_fn.index("releaseServerSession")
     export_fn = js.split("function afterExportSuccess")[1].split("function ")[0]
     assert "showToast" in export_fn
     assert "navigateToScreen" not in export_fn
@@ -3621,7 +3630,7 @@ def test_guided_index_html_is_not_cached():
     assert res.status_code == 200
     cache = (res.headers.get("cache-control") or "").lower()
     assert "no-store" in cache
-    assert "guided.js?v=24" in res.text
+    assert "guided.js?v=25" in res.text
     assert 'http-equiv="Cache-Control"' in res.text
 
 
