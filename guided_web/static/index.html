@@ -44,7 +44,6 @@
   <main id="screen-read" class="screen" hidden>
     <img id="read-photo-preview" class="photo-preview read-photo" alt="選んだ写真" hidden />
     <div id="read-skeleton" class="skeleton" hidden>いま写真を読んでいます…</div>
-    <p id="read-empty-hint" class="read-hint" hidden>選ぶで写真を選んでください。</p>
     <div id="read-compact-wrap" class="read-compact" hidden>
       <h2 id="read-title" class="read-title"></h2>
       <p id="read-summary" class="read-summary"></p>
@@ -56,18 +55,25 @@
       <button type="button" id="btn-keep">この言葉を残す</button>
     </div>
     <article id="read-detail" class="read-detail" hidden>
-      <details id="detail-scores" class="read-details">
+      <details id="detail-scores" class="read-details read-group">
         <summary>観察の輪郭</summary>
         <div id="read-scores"></div>
       </details>
-      <div id="read-sections"></div>
+      <details id="detail-sections-123" class="read-details read-group">
+        <summary>１・２・３</summary>
+        <div id="read-sections-123"></div>
+      </details>
+      <details id="detail-sections-4567" class="read-details read-group">
+        <summary>４、５、６、７</summary>
+        <div id="read-sections-4567"></div>
+      </details>
     </article>
   </main>
 
   <main id="screen-reflect" class="screen" hidden>
     <div class="card-preview-wrap">
       <img id="card-preview-img" class="card-preview-img" alt="カードプレビュー" hidden />
-      <p id="card-preview-loading" class="card-preview-loading">カードを準備しています…</p>
+      <p id="card-preview-loading" class="card-preview-loading" hidden>カードを準備しています…</p>
     </div>
     <fieldset class="field">
       <legend>この写真に対する思い <span class="required">必須</span></legend>
@@ -97,6 +103,6 @@
     </div>
   </main>
 
-  <script src="/static/guided.js?v=11"></script>
+  <script src="/static/guided.js?v=12"></script>
 </body>
 </html>

@@ -60,6 +60,7 @@ let localPreviewUrl = null;
 let serverPreviewUrl = null;
 let cardPreviewLoaded = false;
 let critiqueInProgress = false;
+let readPhotoShown = false;
 
 function showScreen(name) {
   Object.entries(screens).forEach(([key, el]) => {
@@ -72,14 +73,8 @@ function showScreen(name) {
 }
 
 function navigateToScreen(name) {
-  if (name === "read") {
-    if (activePreviewUrl()) {
-      setPhotoPreview(activePreviewUrl());
-    }
-    updateReadEmptyState();
-  }
-  if (name === "reflect") {
-    ensureReflectPreview();
+  if (name === "read" && readPhotoShown && activePreviewUrl()) {
+    setReadPhotoPreview(activePreviewUrl());
   }
   showScreen(name);
 }
@@ -88,22 +83,43 @@ function activePreviewUrl() {
   return serverPreviewUrl || localPreviewUrl;
 }
 
-function setPhotoPreview(url) {
-  const chooseImg = document.getElementById("photo-preview");
-  const readImg = document.getElementById("read-photo-preview");
-  [chooseImg, readImg].forEach((img) => {
-    if (!img) return;
-    if (url) {
-      img.src = url;
-      img.hidden = false;
-    } else {
-      img.removeAttribute("src");
-      img.hidden = true;
-    }
-  });
+function setChoosePhotoPreview(url) {
+  const img = document.getElementById("photo-preview");
   const dropZone = document.getElementById("drop-zone");
+  if (!img) return;
+  if (url) {
+    img.src = url;
+    img.hidden = false;
+  } else {
+    img.removeAttribute("src");
+    img.hidden = true;
+  }
   if (dropZone) {
     dropZone.classList.toggle("has-photo", Boolean(url));
+  }
+}
+
+function setReadPhotoPreview(url) {
+  const img = document.getElementById("read-photo-preview");
+  if (!img) return;
+  if (url) {
+    img.src = url;
+    img.hidden = false;
+  } else {
+    img.removeAttribute("src");
+    img.hidden = true;
+  }
+}
+
+function hideReadPhoto() {
+  readPhotoShown = false;
+  setReadPhotoPreview(null);
+}
+
+function setPhotoPreview(url) {
+  setChoosePhotoPreview(url);
+  if (readPhotoShown) {
+    setReadPhotoPreview(url);
   }
 }
 
@@ -218,12 +234,13 @@ async function applyPhotoSession(data, previewFile) {
   currentFileName = data.file_name || previewFile?.name;
   serverPreviewUrl = data.preview_url || null;
   if (serverPreviewUrl) {
-    setPhotoPreview(serverPreviewUrl);
+    setChoosePhotoPreview(serverPreviewUrl);
   } else if (previewFile) {
     revokeLocalPreview();
     localPreviewUrl = URL.createObjectURL(previewFile);
-    setPhotoPreview(localPreviewUrl);
+    setChoosePhotoPreview(localPreviewUrl);
   }
+  hideReadPhoto();
   renderParams(data);
   showScreen("choose");
 }
@@ -231,7 +248,7 @@ async function applyPhotoSession(data, previewFile) {
 async function handleSelectedFile(file) {
   revokeLocalPreview();
   localPreviewUrl = URL.createObjectURL(file);
-  setPhotoPreview(localPreviewUrl);
+  setChoosePhotoPreview(localPreviewUrl);
 
   const data = await uploadPhoto(file);
   await applyPhotoSession(data, file);
@@ -255,6 +272,7 @@ function resetReflectionFields() {
 
 function clearReadData() {
   critiqueInProgress = false;
+  hideReadPhoto();
   setReadLoading(false);
   document.getElementById("read-compact-wrap").hidden = true;
   document.getElementById("read-actions").hidden = true;
@@ -264,10 +282,10 @@ function clearReadData() {
   document.getElementById("read-point").textContent = "";
   document.getElementById("read-phase2-hint").hidden = true;
   document.getElementById("read-scores").innerHTML = "";
-  document.getElementById("read-sections").innerHTML = "";
+  document.getElementById("read-sections-123").innerHTML = "";
+  document.getElementById("read-sections-4567").innerHTML = "";
   document.getElementById("read-skeleton").textContent = "いま写真を読んでいます…";
   document.getElementById("read-skeleton").hidden = true;
-  document.getElementById("read-empty-hint").hidden = true;
 }
 
 function clearReflectData() {
@@ -284,29 +302,9 @@ function clearReadAndReflectData() {
   clearReflectData();
 }
 
-function updateReadEmptyState() {
-  const hint = document.getElementById("read-empty-hint");
-  const skeleton = document.getElementById("read-skeleton");
-  const hasCritique = Boolean(document.getElementById("read-title").textContent.trim());
-  if (!sessionId) {
-    hint.hidden = false;
-    hint.textContent = "選ぶで写真を選んでください。";
-    skeleton.hidden = true;
-    return;
-  }
-  if (!hasCritique && !critiqueInProgress) {
-    hint.hidden = false;
-    hint.textContent = "選ぶで「言葉にする」を押してください。";
-    skeleton.hidden = true;
-    return;
-  }
-  hint.hidden = true;
-}
-
 function setReadLoading(loading) {
   document.getElementById("read-skeleton").hidden = !loading;
   if (loading) {
-    document.getElementById("read-empty-hint").hidden = true;
     document.getElementById("read-compact-wrap").hidden = true;
     document.getElementById("read-actions").hidden = true;
     document.getElementById("read-detail").hidden = true;
@@ -315,7 +313,6 @@ function setReadLoading(loading) {
 
 function showReadPanels() {
   document.getElementById("read-skeleton").hidden = true;
-  document.getElementById("read-empty-hint").hidden = true;
   document.getElementById("read-compact-wrap").hidden = false;
   document.getElementById("read-actions").hidden = false;
   document.getElementById("read-detail").hidden = false;
@@ -326,7 +323,8 @@ function clearAllSession() {
   currentFileName = null;
   serverPreviewUrl = null;
   revokeLocalPreview();
-  setPhotoPreview(null);
+  setChoosePhotoPreview(null);
+  hideReadPhoto();
   document.getElementById("params-preview").hidden = true;
   document.getElementById("params-preview-body").innerHTML = "";
   document.getElementById("btn-speak").disabled = true;
@@ -380,18 +378,18 @@ dropZone.addEventListener("drop", async (e) => {
 
 document.getElementById("btn-speak").addEventListener("click", () => {
   if (!sessionId) return;
-  if (activePreviewUrl()) {
-    setPhotoPreview(activePreviewUrl());
-  }
+  clearReadAndReflectData();
   navigateToScreen("read");
+  if (activePreviewUrl()) {
+    setReadPhotoPreview(activePreviewUrl());
+    readPhotoShown = true;
+  }
   startCritique();
 });
 
 async function startCritique() {
   const hint = document.getElementById("read-phase2-hint");
-  const emptyHint = document.getElementById("read-empty-hint");
   critiqueInProgress = true;
-  emptyHint.hidden = true;
   setReadLoading(true);
   hint.hidden = true;
 
@@ -402,7 +400,7 @@ async function startCritique() {
     const res = await fetch(`/api/session/${sessionId}/critique`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lens, user_note: userNote }),
+      body: JSON.stringify({ lens, user_note: userNote, force_restart: true }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -444,6 +442,20 @@ async function pollCritiqueComplete() {
   hint.textContent = "詳細の取得がタイムアウトしました。もう一度お試しください。";
 }
 
+function appendSectionBlock(container, sec) {
+  const block = document.createElement("div");
+  block.className = "read-section-block";
+  const heading = document.createElement("h3");
+  heading.className = "read-section-heading";
+  heading.textContent = sec.heading || `【${sec.id}】`;
+  const body = document.createElement("div");
+  body.className = "read-section-text";
+  body.textContent = sec.text;
+  block.appendChild(heading);
+  block.appendChild(body);
+  container.appendChild(block);
+}
+
 function renderCritique(data) {
   const p1 = data.phase1 || {};
   document.getElementById("read-title").textContent = p1.title || "";
@@ -459,22 +471,17 @@ function renderCritique(data) {
     scoresEl.appendChild(line);
   });
 
-  const sectionsEl = document.getElementById("read-sections");
-  sectionsEl.innerHTML = "";
+  const sections123 = document.getElementById("read-sections-123");
+  const sections4567 = document.getElementById("read-sections-4567");
+  sections123.innerHTML = "";
+  sections4567.innerHTML = "";
   (data.sections || []).forEach((sec) => {
-    if (!["1", "2", "3", "4", "5", "6", "7"].includes(sec.id)) return;
-    const details = document.createElement("details");
-    details.className = "read-details read-section";
-    if (sec.id === "2") {
-      details.open = false;
+    if (["1", "2", "3"].includes(sec.id)) {
+      appendSectionBlock(sections123, sec);
     }
-    const summary = document.createElement("summary");
-    summary.textContent = sec.heading || `【${sec.id}】`;
-    const body = document.createElement("div");
-    body.textContent = sec.text;
-    details.appendChild(summary);
-    details.appendChild(body);
-    sectionsEl.appendChild(details);
+    if (["4", "5", "6", "7"].includes(sec.id)) {
+      appendSectionBlock(sections4567, sec);
+    }
   });
 }
 
@@ -489,9 +496,6 @@ document.querySelectorAll(".screen-nav [data-screen]").forEach((btn) => {
 });
 
 document.getElementById("btn-again").addEventListener("click", () => {
-  if (activePreviewUrl()) {
-    setPhotoPreview(activePreviewUrl());
-  }
   navigateToScreen("choose");
 });
 
@@ -510,8 +514,7 @@ function clearCardPreview() {
   const loading = document.getElementById("card-preview-loading");
   img.hidden = true;
   img.removeAttribute("src");
-  loading.hidden = false;
-  loading.textContent = "カードを準備しています…";
+  loading.hidden = true;
   cardPreviewLoaded = false;
 }
 
@@ -521,7 +524,13 @@ function reflectUserNote() {
 
 async function refreshCardPreview() {
   if (!sessionId) return;
-  clearCardPreview();
+  const img = document.getElementById("card-preview-img");
+  const loading = document.getElementById("card-preview-loading");
+  img.hidden = true;
+  img.removeAttribute("src");
+  loading.hidden = false;
+  cardPreviewLoaded = false;
+
   const theme = document.getElementById("card-theme").value || "dark";
   try {
     const res = await fetch(`/api/session/${sessionId}/card`, {
@@ -537,23 +546,15 @@ async function refreshCardPreview() {
     if (!res.ok) {
       throw new Error(data.detail || "カードの生成に失敗しました");
     }
-    const img = document.getElementById("card-preview-img");
-    const loading = document.getElementById("card-preview-loading");
     img.src = `${data.card_url}?t=${Date.now()}`;
     img.hidden = false;
     loading.hidden = true;
     cardPreviewLoaded = true;
   } catch (err) {
     console.error(err);
-    document.getElementById("card-preview-loading").textContent =
-      "カードを表示できませんでした。講評が完了してからお試しください。";
+    loading.hidden = true;
     cardPreviewLoaded = false;
   }
-}
-
-function ensureReflectPreview() {
-  if (!sessionId || cardPreviewLoaded) return;
-  refreshCardPreview();
 }
 
 function prepareReflectScreen() {
@@ -561,7 +562,7 @@ function prepareReflectScreen() {
   if (!reflectNote.value.trim()) {
     reflectNote.value = document.getElementById("user-note").value || "";
   }
-  ensureReflectPreview();
+  refreshCardPreview();
 }
 
 function collectReflections() {

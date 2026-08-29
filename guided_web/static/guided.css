@@ -209,6 +209,20 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
 .read-summary { font-size: 1.1rem; margin: 0 0 0.75rem; }
 .read-point { font-size: 1.15rem; line-height: 1.6; margin: 0 0 1rem; }
 .read-details { margin-bottom: 0.5rem; background: #fff; padding: 0.5rem 0.75rem; border-radius: 6px; }
+.read-group + .read-group { margin-top: 0.5rem; }
+.read-section-block { margin-bottom: 0.75rem; }
+.read-section-block:last-child { margin-bottom: 0; }
+.read-section-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.read-section-text {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
 .read-section { margin-bottom: 0.5rem; }
 
 .card-preview-wrap {

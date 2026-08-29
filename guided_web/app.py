@@ -42,6 +42,7 @@ _executor = ThreadPoolExecutor(max_workers=2)
 class CritiqueStartBody(BaseModel):
     lens: str = "self"
     user_note: str = Field(default="", max_length=4000)
+    force_restart: bool = False
 
 
 class CardPreviewBody(BaseModel):
@@ -237,7 +238,11 @@ async def start_critique(
         raise HTTPException(status_code=404, detail="session not found")
 
     crit = sess.get("critique") or {}
-    if crit.get("status") == "complete" and crit.get("lens") == body.lens:
+    if (
+        not body.force_restart
+        and crit.get("status") == "complete"
+        and crit.get("lens") == body.lens
+    ):
         return JSONResponse(_critique_public(sess))
 
     sess["critique"] = {
