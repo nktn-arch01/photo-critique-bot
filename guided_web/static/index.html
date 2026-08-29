@@ -10,9 +10,9 @@
   <header class="app-header">
     <h1>Lumina Notes</h1>
     <nav class="screen-nav" aria-label="画面">
-      <span class="active" data-screen="choose">選ぶ</span>
-      <span data-screen="read">読む</span>
-      <span data-screen="reflect">振り返る</span>
+      <button type="button" class="active" data-screen="choose">選ぶ</button>
+      <button type="button" data-screen="read">読む</button>
+      <button type="button" data-screen="reflect">振り返る</button>
     </nav>
   </header>
 
@@ -32,7 +32,7 @@
       </select>
     </label>
     <div class="actions choose-actions split-actions">
-      <button type="button" id="btn-reset" class="secondary">リセット</button>
+      <button type="button" id="btn-reset" class="secondary">クリア</button>
       <button type="button" id="btn-speak" disabled>言葉にする</button>
     </div>
     <section id="params-preview" class="params-preview" hidden aria-labelledby="params-heading">
@@ -43,7 +43,8 @@
 
   <main id="screen-read" class="screen" hidden>
     <img id="read-photo-preview" class="photo-preview read-photo" alt="選んだ写真" hidden />
-    <div id="read-skeleton" class="skeleton">いま写真を読んでいます…</div>
+    <div id="read-skeleton" class="skeleton" hidden>いま写真を読んでいます…</div>
+    <p id="read-empty-hint" class="read-hint" hidden>選ぶで写真を選んでください。</p>
     <div id="read-compact-wrap" class="read-compact" hidden>
       <h2 id="read-title" class="read-title"></h2>
       <p id="read-summary" class="read-summary"></p>
@@ -96,6 +97,6 @@
     </div>
   </main>
 
-  <script src="/static/guided.js?v=10"></script>
+  <script src="/static/guided.js?v=11"></script>
 </body>
 </html>

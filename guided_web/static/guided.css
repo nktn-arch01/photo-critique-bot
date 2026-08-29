@@ -24,8 +24,21 @@ body {
 
 .app-header h1 { margin: 0 0 0.5rem; font-size: 1.25rem; font-weight: 500; }
 
-.screen-nav { display: flex; gap: 1rem; font-size: 0.9rem; opacity: 0.85; }
-.screen-nav .active { color: var(--gold); font-weight: 600; }
+.screen-nav { display: flex; gap: 0.5rem; font-size: 0.9rem; }
+.screen-nav button {
+  background: transparent;
+  border: none;
+  color: var(--ivory);
+  opacity: 0.85;
+  font: inherit;
+  min-height: 36px;
+  padding: 0.25rem 0.65rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.screen-nav button:hover { opacity: 1; background: rgba(255, 255, 255, 0.08); }
+.screen-nav button.active { color: var(--gold); font-weight: 600; opacity: 1; }
+.screen-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .screen { padding: 1.25rem; max-width: 720px; margin: 0 auto; }
 
