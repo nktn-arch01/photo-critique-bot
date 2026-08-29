@@ -3574,8 +3574,8 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "await abandonInFlightCritique" not in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=23" in html
-    assert "guided.css?v=23" in html
+    assert "guided.js?v=24" in html
+    assert "guided.css?v=24" in html
     assert "data.cancelled" in js
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("async function ")[0]
     assert pick_fn.index("pickPhotoNative") < pick_fn.index("releaseServerSession")
@@ -3605,8 +3605,24 @@ def test_guided_run_script_reports_boot_failure():
     assert "listening_pids" in text
     assert "lsof" in text
     assert "起動確認タイムアウト" in text
-    assert "このターミナルで Control+C を押すと停止します。" in text
+    assert "前のサーバを止めて、最新のプログラムで起動し直します…" in text
+    assert "すでに起動中です" not in text
+    assert "サーバを起動します（終了は Control+C）…" in text
     assert ">(tee" not in text
+
+
+def test_guided_index_html_is_not_cached():
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    res = client.get("/")
+    assert res.status_code == 200
+    cache = (res.headers.get("cache-control") or "").lower()
+    assert "no-store" in cache
+    assert "guided.js?v=24" in res.text
+    assert 'http-equiv="Cache-Control"' in res.text
 
 
 def test_offline_ci_installs_guided_web_deps():
@@ -3809,6 +3825,7 @@ def run_all():
     test_guided_reflect_items_endpoint()
     test_guided_ui_uses_toast_empty_guides_and_export_navigation()
     test_guided_run_script_reports_boot_failure()
+    test_guided_index_html_is_not_cached()
     test_offline_ci_installs_guided_web_deps()
     test_native_dialog_cancel_does_not_fall_through_to_tk()
     test_guided_folder_pick_cancel_skips_tk_on_mac()

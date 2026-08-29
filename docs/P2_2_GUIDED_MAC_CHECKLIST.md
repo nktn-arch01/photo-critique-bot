@@ -163,7 +163,7 @@ Control + C
 
 （キーボードの `control` キーを押しながら `C`）
 
-**見てほしいこと**: サーバが止まり、ブラウザは更新しても繋がらなくなる。一時フォルダ（`/tmp/lumina_guided` 相当）は終了時に掃除されます。すでに起動中だった場合も、同じターミナルの Control+C で止まります。
+**見てほしいこと**: サーバが止まり、ブラウザは更新しても繋がらなくなる。一時フォルダ（`/tmp/lumina_guided` 相当）は終了時に掃除されます。起動コマンドを再度実行すると、前のサーバを止めて最新で起動し直します。
 
 | # | 結果 |
 |---|------|
@@ -218,9 +218,23 @@ cd ~/photo-critique-bot && GUIDED_WEB_PORT=8766 bash scripts/run_guided_web.sh
 
 ブラウザは `http://127.0.0.1:8766/` を開く。
 
+### 表示が古いまま（改修が反映されない）
+
+ターミナルに次を **まとめて** 貼り付けて Enter。前のサーバは自動で止まり、最新で起動し直します。
+
+```bash
+cd ~/photo-critique-bot
+git fetch origin
+git checkout cursor/p2-2-web-concept-f193
+git pull origin cursor/p2-2-web-concept-f193
+bash scripts/run_guided_web.sh
+```
+
+ブラウザは **⌘ + Shift + R**。それでも古いときは、そのタブを閉じてターミナルが開いた新しい画面を使ってください。
+
 ### すでに起動中
 
-同じ `bash scripts/run_guided_web.sh` を再度実行すると「すでに起動中」と出てブラウザだけ開きます。
+同じ起動コマンドをもう一度実行すると、前のサーバを止めて最新のプログラムで起動し直します。
 
 ---
 

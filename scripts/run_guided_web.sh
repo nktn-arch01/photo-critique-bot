@@ -50,24 +50,25 @@ stop_listening() {
   done
 }
 
-if curl -sf "${URL}api/health" >/dev/null 2>&1; then
-  echo "すでに起動中です: ${URL}"
-  echo "このターミナルで Control+C を押すと停止します。"
-  open "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || true
-  trap 'echo; stop_listening; exit 0' INT TERM
-  while curl -sf "${URL}api/health" >/dev/null 2>&1; do
-    sleep 1
-  done
-  exit 0
+if [[ -n "$(listening_pids)" ]]; then
+  echo "前のサーバを止めて、最新のプログラムで起動し直します…"
+  stop_listening
+  if [[ -n "$(listening_pids)" ]]; then
+    echo "エラー: 前のサーバを停止できませんでした。"
+    echo "ポート ${PORT} が使われている場合は次を試してください:"
+    echo "  GUIDED_WEB_PORT=8766 bash scripts/run_guided_web.sh"
+    exit 1
+  fi
 fi
 
 export GUIDED_WEB_PORT="$PORT"
+OPEN_URL="${URL}?v=$(date +%s)"
 
 opener() {
   for _ in $(seq 1 40); do
     if curl -sf "${URL}api/health" >/dev/null 2>&1; then
       echo "ブラウザを開きます: ${URL}"
-      open "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || true
+      open "$OPEN_URL" 2>/dev/null || xdg-open "$OPEN_URL" 2>/dev/null || true
       return 0
     fi
     sleep 0.25
