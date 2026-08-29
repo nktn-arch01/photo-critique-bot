@@ -110,7 +110,7 @@
 
 1. **P5** — 永続セッションログ（`session.json` 等）（任意）
 2. **T4 延長** — アップロードサイズ上限（任意）
-3. Mac チェックリスト：オーナー 0–5 と 4i PASS（2026-08-29）。フォルダ選択 Cancel（4f の Cancel）は未確認のまま
+3. Mac チェックリスト：オーナー 0–5・4i・4f Cancel PASS（2026-08-29）。残り未確認は 3e / 3f / 4b / 5（Control+C）
 
 ---
 
@@ -124,7 +124,7 @@ cd ~/photo-critique-bot && bash scripts/run_guided_web.sh
 ハードリフレッシュ: **⌘ + Shift + R**  
 詳細手順: [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md)
 
-講評の途中でタブを動かす・もう一度・クリア・書き出し Cancel は、Linux の自動テストで状態機械を固定済み。**Mac の写真ピッカー／フォルダ選択／Control+C は未確認**（チェックリスト 3e / 3f / 4b / 4f の Cancel / 5）。
+講評の途中でタブを動かす・もう一度・クリア・書き出し Cancel は、Linux の自動テストで状態機械を固定済み。**フォルダ選択 Cancel（4f）はオーナー PASS（2026-08-29）。** 残り Mac 未確認は写真ピッカー／タブ操作／Control+C（チェックリスト 3e / 3f / 4b / 5）。
 
 オフライン自動テスト:
 
@@ -149,3 +149,4 @@ cd ~/photo-critique-bot && python3 test_offline_suite.py
 | 2026-08-29 | 「言葉にする」で読むへ移る前に前の講評表示を消す。タブ移動の描き戻しは維持 |
 | 2026-08-29 | オーナー Mac：チェック 0–5 と 4i PASS |
 | 2026-08-29 | 全体ウォークスルー。正本 `P2_2_GUIDED_WALKTHROUGH_REVIEW.md`。HTTP から未使用のフルパス／メタ抜粋を除外 |
+| 2026-08-29 | オーナー Mac：書き出しフォルダ選択 Cancel（4f）PASS |
