@@ -110,8 +110,27 @@ let localPreviewUrl = null;
 let serverPreviewUrl = null;
 let cardPreviewLoaded = false;
 let critiqueInProgress = false;
+let critiqueGeneration = 0;
+let critiqueAbort = null;
+let pendingCritiqueCancel = Promise.resolve();
 let readPhotoShown = false;
 let reflectPrepared = false;
+
+function abandonInFlightCritique() {
+  critiqueGeneration += 1;
+  if (critiqueAbort) {
+    critiqueAbort.abort();
+    critiqueAbort = null;
+  }
+  const shouldCancel = critiqueInProgress;
+  critiqueInProgress = false;
+  setReadLoading(false);
+  const id = sessionId;
+  if (!shouldCancel || !id) return pendingCritiqueCancel;
+  const wait = fetch(`/api/session/${id}/critique/cancel`, { method: "POST" }).catch(() => {});
+  pendingCritiqueCancel = pendingCritiqueCancel.then(() => wait).catch(() => {});
+  return pendingCritiqueCancel;
+}
 
 function syncSpeakButton() {
   const btn = document.getElementById("btn-speak");
@@ -154,6 +173,9 @@ function syncScreenGuides() {
 }
 
 function navigateToScreen(name) {
+  if (name !== "read") {
+    abandonInFlightCritique();
+  }
   if (name === "read" && readPhotoShown && activePreviewUrl()) {
     setReadPhotoPreview(activePreviewUrl());
   }
@@ -502,7 +524,7 @@ function setReadLoading(loading) {
   document.getElementById("read-detail").hidden = false;
   if (loading) {
     document.getElementById("read-compact-wrap").hidden = true;
-    document.getElementById("read-actions").hidden = true;
+    document.getElementById("read-actions").hidden = false;
     resetReadDropdowns();
   }
   updateKeepButton();
@@ -517,6 +539,7 @@ function showReadPanelsPhase1() {
 }
 
 async function clearAllSession() {
+  await abandonInFlightCritique();
   await releaseServerSession();
   sessionId = null;
   currentFileName = null;
@@ -596,6 +619,12 @@ document.getElementById("btn-speak").addEventListener("click", () => {
 });
 
 async function startCritique() {
+  await pendingCritiqueCancel;
+  const requestId = ++critiqueGeneration;
+  if (critiqueAbort) critiqueAbort.abort();
+  critiqueAbort = new AbortController();
+  const signal = critiqueAbort.signal;
+
   const hint = document.getElementById("read-phase2-hint");
   critiqueInProgress = true;
   setReadLoading(true);
@@ -609,8 +638,11 @@ async function startCritique() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lens, user_note: userNote, force_restart: true }),
+      signal,
     });
+    if (requestId !== critiqueGeneration) return;
     const data = await res.json().catch(() => ({}));
+    if (requestId !== critiqueGeneration) return;
     if (res.status === 404) {
       sessionId = null;
       critiqueInProgress = false;
@@ -619,34 +651,45 @@ async function startCritique() {
       navigateToScreen("choose");
       return;
     }
+    if (res.status === 409) {
+      throw new Error("いま読み込みの途中です。少し待ってから、もう一度「言葉にする」を押してください。");
+    }
     if (!res.ok) {
       throw new Error(data.error || data.detail || "講評の開始に失敗しました");
     }
     renderCritique(data);
     showReadPanelsPhase1();
-    critiqueInProgress = false;
     await activateDropdownsSequentially(data);
+    if (requestId !== critiqueGeneration) return;
 
     if (data.status === "phase2_running") {
       hint.hidden = false;
-      await pollCritiqueComplete();
+      await pollCritiqueComplete(requestId);
     }
+    if (requestId !== critiqueGeneration) return;
+    critiqueInProgress = false;
+    updateKeepButton();
   } catch (err) {
+    if (err.name === "AbortError" || requestId !== critiqueGeneration) return;
     console.error(err);
     critiqueInProgress = false;
     updateKeepButton();
     const skeleton = document.getElementById("read-skeleton");
-    skeleton.textContent = "言葉を読み取れませんでした。APIキーとネットワークを確認してください。";
+    skeleton.textContent = err.message || "言葉を読み取れませんでした。APIキーとネットワークを確認してください。";
     setReadLoading(true);
   }
 }
 
-async function pollCritiqueComplete() {
+async function pollCritiqueComplete(requestId) {
   const hint = document.getElementById("read-phase2-hint");
   for (let i = 0; i < 120; i++) {
+    if (requestId !== critiqueGeneration) return;
     await new Promise((r) => setTimeout(r, 1500));
+    if (requestId !== critiqueGeneration) return;
     const res = await fetch(`/api/session/${sessionId}/critique`);
+    if (requestId !== critiqueGeneration) return;
     const data = await res.json();
+    if (data.status === "idle") return;
     if (data.status === "complete") {
       renderCritique(data);
       resetPhase2Hint();
@@ -660,6 +703,7 @@ async function pollCritiqueComplete() {
       return;
     }
   }
+  if (requestId !== critiqueGeneration) return;
   hint.hidden = false;
   hint.textContent = "詳細の取得がタイムアウトしました。";
   setPhase2RetryVisible(true);
@@ -679,7 +723,7 @@ async function retryPhase2() {
     if (!res.ok) {
       throw new Error(data.detail || data.error || "再取得に失敗しました");
     }
-    await pollCritiqueComplete();
+    await pollCritiqueComplete(critiqueGeneration);
   } catch (err) {
     console.error(err);
     hint.hidden = false;

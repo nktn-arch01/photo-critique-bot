@@ -33,6 +33,7 @@ from guided_web.settings import (
 from guided_web.stock_export import export_guided_session, render_card_preview, critique_text_for_session
 from guided_web.session_cleanup import (
     bump_epoch,
+    cancel_critique,
     critique_is_running,
     ensure_session_lock,
     is_current_epoch,
@@ -47,29 +48,48 @@ STATIC_DIR = APP_ROOT / "static"
 DEFAULT_PORT = int(os.getenv("GUIDED_WEB_PORT", "8765"))
 
 _sessions: dict[str, dict] = {}
-_executor: ThreadPoolExecutor | None = None
+_critique_executor: ThreadPoolExecutor | None = None
+_ui_executor: ThreadPoolExecutor | None = None
 
 
-def _get_executor() -> ThreadPoolExecutor:
-    """プロセス内で使い回し。lifespan 終了後のテスト再実行でも再生成する。"""
-    global _executor
-    if _executor is None or getattr(_executor, "_shutdown", False):
-        _executor = ThreadPoolExecutor(max_workers=2)
-    return _executor
+def _make_pool(name: str) -> ThreadPoolExecutor:
+    return ThreadPoolExecutor(max_workers=2, thread_name_prefix=name)
+
+
+def _get_critique_executor() -> ThreadPoolExecutor:
+    """Vision / 講評 / カード。ピッカーと共有しない。"""
+    global _critique_executor
+    if _critique_executor is None or getattr(_critique_executor, "_shutdown", False):
+        _critique_executor = _make_pool("guided-ai")
+    return _critique_executor
+
+
+def _get_ui_executor() -> ThreadPoolExecutor:
+    """写真・フォルダ選択。AI 待ちで UI が止まらない。"""
+    global _ui_executor
+    if _ui_executor is None or getattr(_ui_executor, "_shutdown", False):
+        _ui_executor = _make_pool("guided-ui")
+    return _ui_executor
+
+
+def _shutdown_executors() -> None:
+    global _critique_executor, _ui_executor
+    for pool in (_critique_executor, _ui_executor):
+        if pool is not None:
+            pool.shutdown(wait=False, cancel_futures=True)
+    _critique_executor = None
+    _ui_executor = None
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """起動時に孤児 temp を掃き、終了時（Ctrl+C）に全セッションを解放する。"""
-    global _executor
     purge_orphan_temp(_sessions)
     try:
         yield
     finally:
         shutdown_sessions(_sessions)
-        if _executor is not None:
-            _executor.shutdown(wait=False, cancel_futures=True)
-            _executor = None
+        _shutdown_executors()
 
 
 app = FastAPI(title="Lumina Notes Guided", version="0.3.0", lifespan=lifespan)
@@ -127,7 +147,7 @@ def _critique_public(sess: dict) -> dict[str, Any]:
     return out
 
 
-def _finish_phase2(
+async def _finish_phase2(
     session_id: str,
     lens: str,
     user_note: str,
@@ -137,14 +157,18 @@ def _finish_phase2(
     sess = _sessions.get(session_id)
     if not sess or not is_current_epoch(sess, epoch):
         return
+    loop = asyncio.get_running_loop()
     try:
-        full, parsed, sections = run_phase2(
-            Path(sess["path"]),
-            sess["api_params"],
-            phase1_text,
-            lens=lens,
-            user_note=user_note,
-            session_id=session_id,
+        full, parsed, sections = await loop.run_in_executor(
+            _get_critique_executor(),
+            lambda: run_phase2(
+                Path(sess["path"]),
+                sess["api_params"],
+                phase1_text,
+                lens=lens,
+                user_note=user_note,
+                session_id=session_id,
+            ),
         )
         with ensure_session_lock(sess):
             if not is_current_epoch(sess, epoch):
@@ -274,7 +298,7 @@ async def pick_photo() -> JSONResponse:
     loop = asyncio.get_running_loop()
     initial = get_save_folder() or default_suggested_folder()
     picked = await loop.run_in_executor(
-        _get_executor(),
+        _get_ui_executor(),
         lambda: pick_image_file(initial.parent if initial and initial.is_file() else initial),
     )
     if picked is None:
@@ -341,7 +365,7 @@ async def start_critique(
     loop = asyncio.get_running_loop()
     try:
         phase1_text, phase1_parsed = await loop.run_in_executor(
-            _get_executor(),
+            _get_critique_executor(),
             lambda: run_phase1(
                 Path(sess["path"]),
                 sess["api_params"],
@@ -380,6 +404,16 @@ async def start_critique(
     background_tasks.add_task(
         _finish_phase2, session_id, body.lens, body.user_note, phase1_text, epoch
     )
+    return JSONResponse(_critique_public(sess))
+
+
+@app.post("/api/session/{session_id}/critique/cancel")
+def cancel_session_critique(session_id: str) -> JSONResponse:
+    """もう一度／タブ離脱。写真は残し、進行中の講評だけ無効化する。"""
+    sess = _sessions.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="session not found")
+    cancel_critique(sess)
     return JSONResponse(_critique_public(sess))
 
 
@@ -469,7 +503,7 @@ def save_folder_setting(body: SaveFolderBody) -> JSONResponse:
 async def pick_save_folder() -> JSONResponse:
     loop = asyncio.get_running_loop()
     initial = get_save_folder() or default_suggested_folder()
-    picked = await loop.run_in_executor(_get_executor(), lambda: pick_folder(initial))
+    picked = await loop.run_in_executor(_get_ui_executor(), lambda: pick_folder(initial))
     if picked is None:
         raise HTTPException(status_code=400, detail="folder not selected")
     resolved = set_save_folder(picked)
@@ -490,7 +524,7 @@ async def generate_card_preview(session_id: str, body: CardPreviewBody) -> JSONR
     loop = asyncio.get_running_loop()
     try:
         await loop.run_in_executor(
-            _get_executor(),
+            _get_critique_executor(),
             lambda: render_card_preview(
                 sess,
                 card_path,
@@ -531,7 +565,7 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
 
     loop = asyncio.get_running_loop()
     initial = get_save_folder() or default_suggested_folder()
-    save_root = await loop.run_in_executor(_get_executor(), lambda: pick_folder(initial))
+    save_root = await loop.run_in_executor(_get_ui_executor(), lambda: pick_folder(initial))
     if save_root is None:
         raise HTTPException(status_code=400, detail="保存先が選ばれませんでした")
 
@@ -541,7 +575,7 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
 
     try:
         files = await loop.run_in_executor(
-            _get_executor(),
+            _get_critique_executor(),
             lambda: export_guided_session(
                 sess,
                 save_dir=save_root,

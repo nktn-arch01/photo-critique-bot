@@ -3114,6 +3114,7 @@ def test_guided_critique_rejects_parallel_without_restart():
 
 
 def test_guided_phase2_ignores_stale_epoch():
+    import asyncio
     import tempfile
     from pathlib import Path
     from unittest.mock import patch
@@ -3134,9 +3135,179 @@ def test_guided_phase2_ignores_stale_epoch():
     sess["epoch"] = 2
     sess["critique"] = {"status": "phase2_running", "lens": "self", "error": None}
     with patch("guided_web.app.run_phase2") as mock_phase2:
-        app_module._finish_phase2(session_id, "self", "", PHASE1_SAMPLE, epoch=1)
+        asyncio.run(app_module._finish_phase2(session_id, "self", "", PHASE1_SAMPLE, epoch=1))
     mock_phase2.assert_not_called()
     assert sess["critique"]["status"] == "phase2_running"
+
+
+def test_guided_cancel_critique_keeps_photo_and_discards_stale_phase2():
+    import asyncio
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "cancel.jpg"
+    Image.new("RGB", (80, 60), (15, 25, 35)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("cancel.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 1
+    sess["critique"] = {
+        "status": "phase1_running",
+        "lens": "self",
+        "user_note": "note",
+        "phase1_raw": PHASE1_SAMPLE,
+    }
+
+    cancel_res = client.post(f"/api/session/{session_id}/critique/cancel")
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "idle"
+    assert sess["epoch"] == 2
+    assert client.get(f"/api/session/{session_id}/preview").status_code == 200
+
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        asyncio.run(app_module._finish_phase2(session_id, "self", "note", PHASE1_SAMPLE, epoch=1))
+    mock_phase2.assert_not_called()
+    assert sess["critique"]["status"] == "idle"
+
+
+def test_guided_cancel_complete_critique_is_noop():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "keep.jpg"
+    Image.new("RGB", (80, 60), (40, 50, 60)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("keep.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    parsed = parse_critique_text(PHASE1_SAMPLE)
+    sess["epoch"] = 4
+    sess["critique"] = {
+        "status": "complete",
+        "lens": "self",
+        "user_note": "keep me",
+        "phase1_raw": PHASE1_SAMPLE,
+        "phase1_parsed": parsed,
+        "full_raw": PHASE1_SAMPLE,
+        "full_parsed": parsed,
+        "sections": [],
+    }
+    cancel_res = client.post(f"/api/session/{session_id}/critique/cancel")
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "complete"
+    assert sess["epoch"] == 4
+    assert sess["critique"]["phase1_raw"] == PHASE1_SAMPLE
+
+
+def test_guided_cancel_then_force_restart_starts_fresh():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "restart.jpg"
+    Image.new("RGB", (80, 60), (9, 10, 11)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("restart.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 1
+    sess["critique"] = {"status": "phase1_running", "lens": "self"}
+    assert client.post(f"/api/session/{session_id}/critique/cancel").json()["status"] == "idle"
+
+    parsed = parse_critique_text(PHASE1_SAMPLE)
+    with patch("guided_web.app.run_phase1", return_value=(PHASE1_SAMPLE, parsed)), patch(
+        "guided_web.app.run_phase2", return_value=(PHASE1_SAMPLE, parsed, [])
+    ):
+        start_res = client.post(
+            f"/api/session/{session_id}/critique",
+            json={"lens": "self", "user_note": "", "force_restart": True},
+        )
+    assert start_res.status_code == 200
+    assert start_res.json()["status"] in {"phase2_running", "complete"}
+    assert sess["epoch"] == 3
+
+
+def test_guided_photo_pick_uses_ui_executor_while_critique_runs():
+    """講評中でも写真選択が AI 実行器を待たない。"""
+    import threading
+    import time
+    from concurrent.futures import wait as wait_futures
+    from unittest.mock import patch
+
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    started = threading.Semaphore(0)
+    release = threading.Event()
+
+    def blocking_worker():
+        started.release()
+        release.wait(timeout=8)
+
+    critique_exec = app_module._get_critique_executor()
+    futures = [critique_exec.submit(blocking_worker) for _ in range(2)]
+    assert started.acquire(timeout=2)
+    assert started.acquire(timeout=2)
+
+    picked_called = {"n": 0}
+
+    def fake_pick(_initial):
+        picked_called["n"] += 1
+        return None
+
+    client = TestClient(app_module.app)
+    result = {}
+
+    def do_pick():
+        t0 = time.monotonic()
+        with patch("guided_web.app.pick_image_file", side_effect=fake_pick):
+            result["res"] = client.post("/api/session/photo-pick")
+        result["elapsed"] = time.monotonic() - t0
+
+    try:
+        t = threading.Thread(target=do_pick)
+        t.start()
+        t.join(timeout=2.5)
+        assert not t.is_alive()
+        assert result["res"].status_code == 400
+        assert picked_called["n"] == 1
+        assert result["elapsed"] < 2.0, result["elapsed"]
+    finally:
+        release.set()
+        wait_futures(futures, timeout=3)
+
+
+def test_guided_ui_and_critique_executors_are_separate():
+    from guided_web import app as app_module
+
+    ui = app_module._get_ui_executor()
+    ai = app_module._get_critique_executor()
+    assert ui is not ai
+    assert ui._thread_name_prefix != ai._thread_name_prefix
 
 
 def test_guided_phase2_retry_skips_when_already_running():
@@ -3202,13 +3373,19 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "function releaseSessionOnUnload" in js
     assert "el.inert = !on" in js
     assert "nativePickInFlight" in js
+    assert "function abandonInFlightCritique" in js
+    assert "AbortController" in js
+    assert "/critique/cancel" in js
+    assert "pendingCritiqueCancel" in js
+    assert "await pendingCritiqueCancel" in js
+    assert "guided.js?v=20" in html
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("async function ")[0]
-    assert pick_fn.indexOf("pickPhotoNative") < pick_fn.indexOf("releaseServerSession")
+    assert pick_fn.index("pickPhotoNative") < pick_fn.index("releaseServerSession")
     assert ".toast-region" in css
     assert ".empty-guide" in css
     assert ".card-preview-hint" in css
-    assert ".photo-preview[hidden]" in css
-    assert ".screen[hidden]" in css
+    assert "[hidden]" in css
+    assert "display: none !important" in css
     assert "inert" in html
 
 
@@ -3308,6 +3485,11 @@ def run_all():
     test_guided_lifespan_purges_orphans_and_shutdown_sessions()
     test_guided_critique_rejects_parallel_without_restart()
     test_guided_phase2_ignores_stale_epoch()
+    test_guided_cancel_critique_keeps_photo_and_discards_stale_phase2()
+    test_guided_cancel_complete_critique_is_noop()
+    test_guided_cancel_then_force_restart_starts_fresh()
+    test_guided_photo_pick_uses_ui_executor_while_critique_runs()
+    test_guided_ui_and_critique_executors_are_separate()
     test_guided_phase2_retry_skips_when_already_running()
     test_guided_reflect_items_endpoint()
     test_guided_ui_uses_toast_empty_guides_and_export_navigation()

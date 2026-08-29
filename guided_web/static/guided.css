@@ -8,6 +8,10 @@
 
 * { box-sizing: border-box; }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
@@ -42,12 +46,6 @@ body {
 
 .screen { padding: 1.25rem; max-width: 720px; margin: 0 auto; }
 
-/* hidden 画面が display 指定に負けてクリックを奪わない */
-.screen[hidden],
-input[hidden] {
-  display: none !important;
-}
-
 .drop-zone {
   border: 2px dashed var(--muted);
   border-radius: 8px;
@@ -75,11 +73,6 @@ input[hidden] {
   margin: 0 auto 0.75rem;
   border-radius: 6px;
   object-fit: contain;
-}
-
-.photo-preview[hidden],
-.card-preview-img[hidden] {
-  display: none;
 }
 
 .read-photo {

@@ -132,3 +132,23 @@ def is_current_epoch(session: dict[str, Any], epoch: int) -> bool:
 def critique_is_running(session: dict[str, Any]) -> bool:
     crit = session.get("critique") or {}
     return crit.get("status") in CRITIQUE_RUNNING
+
+
+def cancel_critique(session: dict[str, Any]) -> int:
+    """進行中の講評を捨てる。写真セッションと完了済み講評は残す。
+
+    実行中だけ epoch を進め、遅延した Phase 2 の書き込みを無効化する。
+    完了済みを idle に戻すと「この言葉を残す」のカードが壊れる。
+    """
+    with ensure_session_lock(session):
+        if not critique_is_running(session):
+            return int(session.get("epoch") or 0)
+        epoch = bump_epoch(session)
+        crit = session.get("critique") or {}
+        session["critique"] = {
+            "status": "idle",
+            "error": None,
+            "lens": crit.get("lens"),
+            "user_note": crit.get("user_note"),
+        }
+        return epoch
