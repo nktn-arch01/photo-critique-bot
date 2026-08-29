@@ -3,7 +3,7 @@
 更新日: 2026-08-28  
 対象: **オーナー（コード未経験）**。ターミナルは **コピペ一発** のみ。編集不要。  
 ブランチ: `cursor/p2-2-web-concept-f193`  
-関連: [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md)
+関連: [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`P2_2_GUIDED_WEB_REVIEW_TODO.md`](P2_2_GUIDED_WEB_REVIEW_TODO.md)
 
 ---
 

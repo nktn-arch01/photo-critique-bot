@@ -16,6 +16,8 @@
 | レスポンシブ（PC／タブレット／携帯） | ✅ 確定（§5.2） |
 | API 抽象パラメータ仕様 | ✅ 確定（§7.3） |
 | 実装 | 🔄 スパイク進行中（`guided_web/`） |
+| レビュー ToDo | [`P2_2_GUIDED_WEB_REVIEW_TODO.md`](P2_2_GUIDED_WEB_REVIEW_TODO.md)（UI/UX・技術 T1–T14・プライバシー P1–P10） |
+| 新チャット引き継ぎ | [`P2_2_GUIDED_WEB_HANDOFF_PROMPT.md`](P2_2_GUIDED_WEB_HANDOFF_PROMPT.md) |
 
 ---
 
