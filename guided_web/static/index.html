@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Lumina Notes — Guided</title>
-  <link rel="stylesheet" href="/static/guided.css" />
+  <link rel="stylesheet" href="/static/guided.css?v=16" />
 </head>
 <body>
   <header class="app-header">
@@ -42,6 +42,11 @@
   </main>
 
   <main id="screen-read" class="screen" hidden>
+    <div id="read-empty" class="empty-guide">
+      <p class="empty-guide-lead">まだ言葉はありません。</p>
+      <p>「選ぶ」で写真を選び、「言葉にする」を押すと、ここに対話が現れます。</p>
+    </div>
+    <div id="read-body" hidden>
     <img id="read-photo-preview" class="photo-preview read-photo" alt="選んだ写真" hidden />
     <div id="read-skeleton" class="skeleton" hidden>いま写真を読んでいます…</div>
     <div id="read-compact-wrap" class="read-compact" hidden>
@@ -69,12 +74,19 @@
         <div id="read-sections-4567" class="read-group-body"></div>
       </details>
     </article>
+    </div>
   </main>
 
   <main id="screen-reflect" class="screen" hidden>
+    <div id="reflect-empty" class="empty-guide">
+      <p class="empty-guide-lead">まだ残す言葉がありません。</p>
+      <p>「読む」で「この言葉を残す」を押すと、カードと振り返りがここに現れます。</p>
+    </div>
+    <div id="reflect-body" hidden>
     <div class="card-preview-wrap">
       <img id="card-preview-img" class="card-preview-img" alt="カードプレビュー" hidden />
       <p id="card-preview-loading" class="card-preview-loading" hidden>カードを準備しています…</p>
+      <p id="card-preview-hint" class="card-preview-hint">書き出したときに、このプレビューは更新されます。</p>
     </div>
     <fieldset class="field">
       <legend>この写真に対する思い <span class="required">必須</span></legend>
@@ -102,8 +114,11 @@
       <span></span>
       <button type="button" id="btn-export" disabled>Noteに書き出す</button>
     </div>
+    </div>
   </main>
 
-  <script src="/static/guided.js?v=15"></script>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-relevant="additions"></div>
+
+  <script src="/static/guided.js?v=16"></script>
 </body>
 </html>

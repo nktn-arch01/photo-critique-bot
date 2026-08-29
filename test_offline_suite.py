@@ -2958,6 +2958,243 @@ def test_guided_phase2_retry_restarts_background():
     assert crit["sections"]
 
 
+def test_guided_purge_orphan_temp_keeps_live_sessions():
+    import tempfile
+    from pathlib import Path
+
+    from guided_web.session_cleanup import purge_orphan_temp, remove_tree
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_guided_test_"))
+    live_dir = root / "live1"
+    live_dir.mkdir()
+    (live_dir / "keep.txt").write_text("keep", encoding="utf-8")
+    orphan = root / "orphan1"
+    orphan.mkdir()
+    (orphan / "gone.txt").write_text("gone", encoding="utf-8")
+    staging = root / "upload_abc"
+    staging.mkdir()
+    try:
+        sessions = {"live1": {"temp_dir": str(live_dir)}}
+        removed = purge_orphan_temp(sessions, root=root)
+        assert "orphan1" in removed
+        assert "upload_abc" in removed
+        assert "live1" not in removed
+        assert live_dir.is_dir()
+        assert not orphan.exists()
+        assert not staging.exists()
+    finally:
+        remove_tree(root)
+
+
+def test_guided_shutdown_sessions_removes_all():
+    import tempfile
+    from pathlib import Path
+
+    from guided_web.session_cleanup import remove_tree, shutdown_sessions
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_guided_shut_"))
+    a = root / "a"
+    b = root / "b"
+    a.mkdir()
+    b.mkdir()
+    leftover = root / "upload_left"
+    leftover.mkdir()
+    sessions = {
+        "a": {"temp_dir": str(a)},
+        "b": {"temp_dir": str(b)},
+    }
+    try:
+        result = shutdown_sessions(sessions, root=root)
+        assert result["dropped"] == 2
+        assert "upload_left" in result["orphans"]
+        assert sessions == {}
+        assert not a.exists()
+        assert not b.exists()
+        assert not leftover.exists()
+    finally:
+        remove_tree(root)
+
+
+def test_guided_session_release_is_idempotent():
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    missing = "missing-session-id"
+    del_res = client.delete(f"/api/session/{missing}")
+    assert del_res.status_code == 200
+    assert del_res.json() == {"ok": True}
+    rel_res = client.post(f"/api/session/{missing}/release")
+    assert rel_res.status_code == 200
+    assert rel_res.json() == {"ok": True}
+
+
+def test_guided_lifespan_purges_orphans_and_shutdown_sessions():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.session_cleanup import guided_temp_root
+
+    root = guided_temp_root()
+    orphan = root / "orphan_lifespan_test"
+    orphan.mkdir(parents=True, exist_ok=True)
+    (orphan / "junk.txt").write_text("x", encoding="utf-8")
+
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "life.jpg"
+    Image.new("RGB", (80, 60), (20, 30, 40)).save(jpeg, "JPEG")
+    session_id = None
+    temp_dir = None
+    with TestClient(app_module.app) as client:
+        assert not orphan.exists()
+        with jpeg.open("rb") as f:
+            res = client.post("/api/session/photo", files={"file": ("life.jpg", f, "image/jpeg")})
+        assert res.status_code == 200
+        session_id = res.json()["session_id"]
+        temp_dir = root / session_id
+        assert temp_dir.is_dir()
+        assert client.get("/api/health").json()["status"] == "ok"
+
+    assert session_id not in app_module._sessions
+    assert not temp_dir.exists()
+
+
+def test_guided_critique_rejects_parallel_without_restart():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "lock.jpg"
+    Image.new("RGB", (80, 60), (11, 22, 33)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("lock.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    app_module._sessions[session_id]["critique"] = {
+        "status": "phase1_running",
+        "lens": "self",
+    }
+    with patch("guided_web.app.run_phase1") as mock_phase1:
+        locked = client.post(
+            f"/api/session/{session_id}/critique",
+            json={"lens": "self", "force_restart": False},
+        )
+    assert locked.status_code == 409
+    assert locked.json()["status"] == "phase1_running"
+    mock_phase1.assert_not_called()
+
+
+def test_guided_phase2_ignores_stale_epoch():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "epoch.jpg"
+    Image.new("RGB", (80, 60), (50, 60, 70)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("epoch.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 2
+    sess["critique"] = {"status": "phase2_running", "lens": "self", "error": None}
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        app_module._finish_phase2(session_id, "self", "", PHASE1_SAMPLE, epoch=1)
+    mock_phase2.assert_not_called()
+    assert sess["critique"]["status"] == "phase2_running"
+
+
+def test_guided_phase2_retry_skips_when_already_running():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "running.jpg"
+    Image.new("RGB", (80, 60), (8, 9, 10)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("running.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    app_module._sessions[session_id]["critique"] = {
+        "status": "phase2_running",
+        "lens": "self",
+        "phase1_raw": PHASE1_SAMPLE,
+        "phase1_parsed": parse_critique_text(PHASE1_SAMPLE),
+    }
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        retry_res = client.post(f"/api/session/{session_id}/critique/phase2/retry")
+    assert retry_res.status_code == 200
+    assert retry_res.json()["status"] == "phase2_running"
+    mock_phase2.assert_not_called()
+
+
+def test_guided_reflect_items_endpoint():
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    res = client.get("/api/reflect-items")
+    assert res.status_code == 200
+    groups = res.json()["groups"]
+    assert groups[0]["id"] == "noticed"
+    assert any(item["label"] == "写真を見て" for item in groups[0]["items"])
+
+
+def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
+    from pathlib import Path
+
+    html = Path("guided_web/static/index.html").read_text(encoding="utf-8")
+    js = Path("guided_web/static/guided.js").read_text(encoding="utf-8")
+    css = Path("guided_web/static/guided.css").read_text(encoding="utf-8")
+    assert 'id="toast-region"' in html
+    assert 'id="read-empty"' in html
+    assert 'id="reflect-empty"' in html
+    assert 'id="card-preview-hint"' in html
+    assert "alert(" not in js
+    assert "function showToast" in js
+    assert "function afterExportSuccess" in js
+    assert "function syncScreenGuides" in js
+    assert "sendBeacon" in js
+    assert "pagehide" in js
+    assert ".toast-region" in css
+    assert ".empty-guide" in css
+    assert ".card-preview-hint" in css
+
+
+def test_guided_run_script_reports_boot_failure():
+    from pathlib import Path
+
+    text = Path("scripts/run_guided_web.sh").read_text(encoding="utf-8")
+    assert "エラー: サーバの起動に失敗しました。" in text
+    assert "kill -0" in text
+    assert "起動確認タイムアウト" in text
+    assert "tee" in text
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -3037,6 +3274,16 @@ def run_all():
     test_guided_settings_save_folder_roundtrip()
     test_guided_session_delete_removes_temp_dir()
     test_guided_phase2_retry_restarts_background()
+    test_guided_purge_orphan_temp_keeps_live_sessions()
+    test_guided_shutdown_sessions_removes_all()
+    test_guided_session_release_is_idempotent()
+    test_guided_lifespan_purges_orphans_and_shutdown_sessions()
+    test_guided_critique_rejects_parallel_without_restart()
+    test_guided_phase2_ignores_stale_epoch()
+    test_guided_phase2_retry_skips_when_already_running()
+    test_guided_reflect_items_endpoint()
+    test_guided_ui_uses_toast_empty_guides_and_export_navigation()
+    test_guided_run_script_reports_boot_failure()
     print("test_offline_suite: OK")
 
 

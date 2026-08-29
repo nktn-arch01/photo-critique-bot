@@ -59,10 +59,38 @@ async function releaseServerSession() {
   if (!sessionId) return;
   const id = sessionId;
   try {
-    await fetch(`/api/session/${id}`, { method: "DELETE" });
+    await fetch(`/api/session/${id}/release`, { method: "POST" });
   } catch (err) {
     console.warn("session cleanup failed", err);
   }
+}
+
+function releaseSessionOnPageHide() {
+  if (!sessionId) return;
+  const id = sessionId;
+  const url = `/api/session/${id}/release`;
+  const sent = typeof navigator.sendBeacon === "function" && navigator.sendBeacon(url);
+  if (!sent) {
+    fetch(url, { method: "POST", keepalive: true }).catch(() => {});
+  }
+  sessionId = null;
+}
+
+const TOAST_MS = 4200;
+
+function showToast(message, tone = "info") {
+  const region = document.getElementById("toast-region");
+  if (!region || !message) return;
+  const el = document.createElement("div");
+  el.className = `toast toast-${tone}`;
+  el.setAttribute("role", tone === "error" ? "alert" : "status");
+  el.textContent = message;
+  region.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("visible"));
+  window.setTimeout(() => {
+    el.classList.remove("visible");
+    window.setTimeout(() => el.remove(), 280);
+  }, TOAST_MS);
 }
 
 function setPhase2RetryVisible(visible) {
@@ -83,6 +111,7 @@ let serverPreviewUrl = null;
 let cardPreviewLoaded = false;
 let critiqueInProgress = false;
 let readPhotoShown = false;
+let reflectPrepared = false;
 
 function showScreen(name) {
   Object.entries(screens).forEach(([key, el]) => {
@@ -94,10 +123,32 @@ function showScreen(name) {
   });
 }
 
+function hasReadContent() {
+  const title = document.getElementById("read-title");
+  return (
+    readPhotoShown ||
+    critiqueInProgress ||
+    Boolean(title && title.textContent.trim())
+  );
+}
+
+function syncScreenGuides() {
+  const readEmpty = document.getElementById("read-empty");
+  const readBody = document.getElementById("read-body");
+  const reflectEmpty = document.getElementById("reflect-empty");
+  const reflectBody = document.getElementById("reflect-body");
+  const readyRead = hasReadContent();
+  if (readEmpty) readEmpty.hidden = readyRead;
+  if (readBody) readBody.hidden = !readyRead;
+  if (reflectEmpty) reflectEmpty.hidden = reflectPrepared;
+  if (reflectBody) reflectBody.hidden = !reflectPrepared;
+}
+
 function navigateToScreen(name) {
   if (name === "read" && readPhotoShown && activePreviewUrl()) {
     setReadPhotoPreview(activePreviewUrl());
   }
+  syncScreenGuides();
   showScreen(name);
 }
 
@@ -398,15 +449,18 @@ function clearReadData() {
   document.getElementById("read-skeleton").hidden = true;
   resetReadDropdowns();
   updateKeepButton();
+  syncScreenGuides();
 }
 
 function clearReflectData() {
+  reflectPrepared = false;
   userStars = 0;
   resetReflectionFields();
   clearCardPreview();
   cardPreviewLoaded = false;
   updateStarButtons();
   updateExportButton();
+  syncScreenGuides();
 }
 
 function clearReadAndReflectData() {
@@ -467,7 +521,7 @@ document.getElementById("file-input").addEventListener("change", async (e) => {
     await handleSelectedFile(file);
   } catch (err) {
     console.error(err);
-    alert("写真の読み込みに失敗しました。もう一度お試しください。");
+    showToast("写真の読み込みに失敗しました。もう一度お試しください。", "error");
   }
 });
 
@@ -488,18 +542,18 @@ dropZone.addEventListener("drop", async (e) => {
     await handleSelectedFile(file);
   } catch (err) {
     console.error(err);
-    alert("写真の読み込みに失敗しました。もう一度お試しください。");
+    showToast("写真の読み込みに失敗しました。もう一度お試しください。", "error");
   }
 });
 
 document.getElementById("btn-speak").addEventListener("click", () => {
   if (!sessionId) return;
   clearReadAndReflectData();
-  navigateToScreen("read");
   if (activePreviewUrl()) {
     setReadPhotoPreview(activePreviewUrl());
     readPhotoShown = true;
   }
+  navigateToScreen("read");
   startCritique();
 });
 
@@ -705,15 +759,26 @@ async function refreshCardPreview() {
     console.error(err);
     loading.hidden = true;
     cardPreviewLoaded = false;
+    showToast(err.message || "カードの生成に失敗しました。", "error");
   }
 }
 
 function prepareReflectScreen() {
+  reflectPrepared = true;
   const reflectNote = document.getElementById("reflect-user-note");
   if (!reflectNote.value.trim()) {
     reflectNote.value = document.getElementById("user-note").value || "";
   }
+  syncScreenGuides();
   refreshCardPreview();
+}
+
+function afterExportSuccess(files) {
+  const card = files?.card || "";
+  const note = files?.note || "";
+  const lines = ["書き出しました", card, note].filter(Boolean);
+  showToast(lines.join("\n"), "success");
+  navigateToScreen("choose");
 }
 
 function collectReflections() {
@@ -751,10 +816,10 @@ document.getElementById("btn-export").addEventListener("click", async () => {
       throw new Error(data.detail || "書き出しに失敗しました");
     }
     await refreshCardPreview();
-    alert(`書き出しました:\n${data.files.card}\n${data.files.note}`);
+    afterExportSuccess(data.files || {});
   } catch (err) {
     console.error(err);
-    alert(err.message || "書き出しに失敗しました。");
+    showToast(err.message || "書き出しに失敗しました。", "error");
   } finally {
     updateExportButton();
     btn.textContent = "Noteに書き出す";
@@ -780,4 +845,6 @@ function updateStarButtons() {
 
 updateStarButtons();
 bindReadDropdownGuards();
+syncScreenGuides();
 loadReflectItems();
+window.addEventListener("pagehide", releaseSessionOnPageHide);

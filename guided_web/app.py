@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -22,21 +23,55 @@ from guided_web.critique_runner import run_phase1, run_phase2
 from guided_web.file_picker import pick_image_file
 from guided_web.folder_picker import pick_folder
 from guided_web.parameter_display import build_parameter_display
+from guided_web.reflect_prompts import REFLECTION_GROUPS
 from guided_web.settings import (
     default_suggested_folder,
     get_save_folder,
     set_save_folder,
 )
 from guided_web.stock_export import export_guided_session, render_card_preview, critique_text_for_session
-from guided_web.session_cleanup import pop_session, remove_tree
+from guided_web.session_cleanup import (
+    bump_epoch,
+    critique_is_running,
+    ensure_session_lock,
+    is_current_epoch,
+    pop_session,
+    purge_orphan_temp,
+    remove_tree,
+    shutdown_sessions,
+)
 
 APP_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = APP_ROOT / "static"
 DEFAULT_PORT = int(os.getenv("GUIDED_WEB_PORT", "8765"))
 
-app = FastAPI(title="Lumina Notes Guided", version="0.2.0")
 _sessions: dict[str, dict] = {}
-_executor = ThreadPoolExecutor(max_workers=2)
+_executor: ThreadPoolExecutor | None = None
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """プロセス内で使い回し。lifespan 終了後のテスト再実行でも再生成する。"""
+    global _executor
+    if _executor is None or getattr(_executor, "_shutdown", False):
+        _executor = ThreadPoolExecutor(max_workers=2)
+    return _executor
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """起動時に孤児 temp を掃き、終了時（Ctrl+C）に全セッションを解放する。"""
+    global _executor
+    purge_orphan_temp(_sessions)
+    try:
+        yield
+    finally:
+        shutdown_sessions(_sessions)
+        if _executor is not None:
+            _executor.shutdown(wait=False, cancel_futures=True)
+            _executor = None
+
+
+app = FastAPI(title="Lumina Notes Guided", version="0.3.0", lifespan=lifespan)
 
 
 class CritiqueStartBody(BaseModel):
@@ -91,9 +126,15 @@ def _critique_public(sess: dict) -> dict[str, Any]:
     return out
 
 
-def _finish_phase2(session_id: str, lens: str, user_note: str, phase1_text: str) -> None:
+def _finish_phase2(
+    session_id: str,
+    lens: str,
+    user_note: str,
+    phase1_text: str,
+    epoch: int,
+) -> None:
     sess = _sessions.get(session_id)
-    if not sess:
+    if not sess or not is_current_epoch(sess, epoch):
         return
     try:
         full, parsed, sections = run_phase2(
@@ -104,17 +145,23 @@ def _finish_phase2(session_id: str, lens: str, user_note: str, phase1_text: str)
             user_note=user_note,
             session_id=session_id,
         )
-        sess["critique"].update(
-            {
-                "status": "complete",
-                "full_raw": full,
-                "full_parsed": parsed,
-                "sections": sections,
-            }
-        )
+        with ensure_session_lock(sess):
+            if not is_current_epoch(sess, epoch):
+                return
+            sess["critique"].update(
+                {
+                    "status": "complete",
+                    "full_raw": full,
+                    "full_parsed": parsed,
+                    "sections": sections,
+                }
+            )
     except Exception as e:
-        sess["critique"]["status"] = "error"
-        sess["critique"]["error"] = str(e)
+        with ensure_session_lock(sess):
+            if not is_current_epoch(sess, epoch):
+                return
+            sess["critique"]["status"] = "error"
+            sess["critique"]["error"] = str(e)
 
 
 @app.get("/api/health")
@@ -212,7 +259,7 @@ async def pick_photo() -> JSONResponse:
     loop = asyncio.get_running_loop()
     initial = get_save_folder() or default_suggested_folder()
     picked = await loop.run_in_executor(
-        _executor,
+        _get_executor(),
         lambda: pick_image_file(initial.parent if initial and initial.is_file() else initial),
     )
     if picked is None:
@@ -230,11 +277,21 @@ async def pick_photo() -> JSONResponse:
     return JSONResponse(_photo_session_response(session_id, session))
 
 
+def _release_session(session_id: str) -> JSONResponse:
+    """セッション解放。未存在でも 200（タブ閉じ・二重呼び出しに耐える）。"""
+    pop_session(_sessions, session_id)
+    return JSONResponse({"ok": True})
+
+
 @app.delete("/api/session/{session_id}")
 def delete_session(session_id: str) -> JSONResponse:
-    if pop_session(_sessions, session_id) is None:
-        raise HTTPException(status_code=404, detail="session not found")
-    return JSONResponse({"ok": True})
+    return _release_session(session_id)
+
+
+@app.post("/api/session/{session_id}/release")
+def release_session(session_id: str) -> JSONResponse:
+    """sendBeacon / keepalive 用。DELETE と同じ解放。"""
+    return _release_session(session_id)
 
 
 @app.post("/api/session/{session_id}/critique")
@@ -247,25 +304,29 @@ async def start_critique(
     if not sess:
         raise HTTPException(status_code=404, detail="session not found")
 
-    crit = sess.get("critique") or {}
-    if (
-        not body.force_restart
-        and crit.get("status") == "complete"
-        and crit.get("lens") == body.lens
-    ):
-        return JSONResponse(_critique_public(sess))
-
-    sess["critique"] = {
-        "status": "phase1_running",
-        "lens": body.lens,
-        "user_note": body.user_note,
-        "error": None,
-    }
+    lock = ensure_session_lock(sess)
+    with lock:
+        crit = sess.get("critique") or {}
+        if (
+            not body.force_restart
+            and crit.get("status") == "complete"
+            and crit.get("lens") == body.lens
+        ):
+            return JSONResponse(_critique_public(sess))
+        if critique_is_running(sess) and not body.force_restart:
+            return JSONResponse(_critique_public(sess), status_code=409)
+        epoch = bump_epoch(sess)
+        sess["critique"] = {
+            "status": "phase1_running",
+            "lens": body.lens,
+            "user_note": body.user_note,
+            "error": None,
+        }
 
     loop = asyncio.get_running_loop()
     try:
         phase1_text, phase1_parsed = await loop.run_in_executor(
-            _executor,
+            _get_executor(),
             lambda: run_phase1(
                 Path(sess["path"]),
                 sess["api_params"],
@@ -275,22 +336,34 @@ async def start_critique(
             ),
         )
     except Exception as e:
-        sess["critique"] = {
-            "status": "error",
-            "error": str(e),
-            "lens": body.lens,
-        }
-        return JSONResponse(_critique_public(sess), status_code=500)
+        with lock:
+            if is_current_epoch(sess, epoch) and session_id in _sessions:
+                sess["critique"] = {
+                    "status": "error",
+                    "error": str(e),
+                    "lens": body.lens,
+                }
+                return JSONResponse(_critique_public(sess), status_code=500)
+        current = _sessions.get(session_id)
+        if current:
+            return JSONResponse(_critique_public(current), status_code=409)
+        raise HTTPException(status_code=404, detail="session not found") from e
 
-    sess["critique"].update(
-        {
-            "status": "phase2_running",
-            "phase1_raw": phase1_text,
-            "phase1_parsed": phase1_parsed,
-        }
-    )
+    with lock:
+        if session_id not in _sessions or not is_current_epoch(sess, epoch):
+            current = _sessions.get(session_id)
+            if not current:
+                raise HTTPException(status_code=404, detail="session not found")
+            return JSONResponse(_critique_public(current), status_code=409)
+        sess["critique"].update(
+            {
+                "status": "phase2_running",
+                "phase1_raw": phase1_text,
+                "phase1_parsed": phase1_parsed,
+            }
+        )
     background_tasks.add_task(
-        _finish_phase2, session_id, body.lens, body.user_note, phase1_text
+        _finish_phase2, session_id, body.lens, body.user_note, phase1_text, epoch
     )
     return JSONResponse(_critique_public(sess))
 
@@ -302,19 +375,22 @@ async def retry_phase2(session_id: str, background_tasks: BackgroundTasks) -> JS
     if not sess:
         raise HTTPException(status_code=404, detail="session not found")
 
-    crit = sess.get("critique") or {}
-    if crit.get("status") == "complete":
-        return JSONResponse(_critique_public(sess))
-
-    phase1_text = crit.get("phase1_raw")
-    if not phase1_text:
-        raise HTTPException(status_code=400, detail="phase1 not available")
-
-    lens = crit.get("lens") or "self"
-    user_note = crit.get("user_note") or ""
-    sess["critique"]["status"] = "phase2_running"
-    sess["critique"]["error"] = None
-    background_tasks.add_task(_finish_phase2, session_id, lens, user_note, phase1_text)
+    lock = ensure_session_lock(sess)
+    with lock:
+        crit = sess.get("critique") or {}
+        if crit.get("status") == "complete":
+            return JSONResponse(_critique_public(sess))
+        if crit.get("status") == "phase2_running":
+            return JSONResponse(_critique_public(sess))
+        phase1_text = crit.get("phase1_raw")
+        if not phase1_text:
+            raise HTTPException(status_code=400, detail="phase1 not available")
+        lens = crit.get("lens") or "self"
+        user_note = crit.get("user_note") or ""
+        epoch = bump_epoch(sess)
+        sess["critique"]["status"] = "phase2_running"
+        sess["critique"]["error"] = None
+    background_tasks.add_task(_finish_phase2, session_id, lens, user_note, phase1_text, epoch)
     return JSONResponse(_critique_public(sess))
 
 
@@ -378,7 +454,7 @@ def save_folder_setting(body: SaveFolderBody) -> JSONResponse:
 async def pick_save_folder() -> JSONResponse:
     loop = asyncio.get_running_loop()
     initial = get_save_folder() or default_suggested_folder()
-    picked = await loop.run_in_executor(_executor, lambda: pick_folder(initial))
+    picked = await loop.run_in_executor(_get_executor(), lambda: pick_folder(initial))
     if picked is None:
         raise HTTPException(status_code=400, detail="folder not selected")
     resolved = set_save_folder(picked)
@@ -399,7 +475,7 @@ async def generate_card_preview(session_id: str, body: CardPreviewBody) -> JSONR
     loop = asyncio.get_running_loop()
     try:
         await loop.run_in_executor(
-            _executor,
+            _get_executor(),
             lambda: render_card_preview(
                 sess,
                 card_path,
@@ -440,7 +516,7 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
 
     loop = asyncio.get_running_loop()
     initial = get_save_folder() or default_suggested_folder()
-    save_root = await loop.run_in_executor(_executor, lambda: pick_folder(initial))
+    save_root = await loop.run_in_executor(_get_executor(), lambda: pick_folder(initial))
     if save_root is None:
         raise HTTPException(status_code=400, detail="保存先が選ばれませんでした")
 
@@ -450,7 +526,7 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
 
     try:
         files = await loop.run_in_executor(
-            _executor,
+            _get_executor(),
             lambda: export_guided_session(
                 sess,
                 save_dir=save_root,

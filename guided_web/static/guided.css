@@ -262,6 +262,75 @@ button.secondary { background: transparent; color: var(--navy); border: 1px soli
   color: var(--muted);
 }
 
+.card-preview-hint {
+  margin: 0.65rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.empty-guide {
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+  color: var(--muted);
+  background: #fff;
+  border-radius: 8px;
+}
+
+.empty-guide-lead {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font-size: 1.05rem;
+}
+
+.empty-guide p {
+  margin: 0 0 0.5rem;
+}
+
+.empty-guide p:last-child {
+  margin-bottom: 0;
+}
+
+.toast-region {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(92vw, 420px);
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--navy);
+  color: var(--ivory);
+  padding: 0.85rem 1.1rem;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(26, 35, 50, 0.22);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: auto;
+  white-space: pre-line;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-success {
+  border-left: 3px solid var(--gold);
+}
+
+.toast-error {
+  background: #3f2a2a;
+}
+
 .reflect-checklist legend {
   font-weight: 600;
 }
