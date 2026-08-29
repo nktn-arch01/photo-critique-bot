@@ -3589,6 +3589,14 @@ def test_guided_run_script_reports_boot_failure():
     assert ">(tee" not in text
 
 
+def test_offline_ci_installs_guided_web_deps():
+    from pathlib import Path
+
+    text = Path(".github/workflows/offline-tests.yml").read_text(encoding="utf-8")
+    for pkg in ("fastapi", "uvicorn", "python-multipart", "httpx"):
+        assert pkg in text, pkg
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -3687,6 +3695,7 @@ def run_all():
     test_guided_reflect_items_endpoint()
     test_guided_ui_uses_toast_empty_guides_and_export_navigation()
     test_guided_run_script_reports_boot_failure()
+    test_offline_ci_installs_guided_web_deps()
     print("test_offline_suite: OK")
 
 

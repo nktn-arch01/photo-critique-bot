@@ -21,10 +21,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libimage-exiftool-perl
 
-      - name: Install minimal test dependencies
+      - name: Install test dependencies
         run: |
           pip install --upgrade pip
-          pip install pillow line-bot-sdk openai
+          pip install pillow line-bot-sdk openai fastapi uvicorn python-multipart httpx
 
       - name: Run offline regression tests
         run: python test_offline_suite.py
