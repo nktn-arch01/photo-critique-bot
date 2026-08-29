@@ -528,6 +528,23 @@ def test_normalize_card_theme():
     assert normalize_card_theme(None) == CARD_THEME_DARK
 
 
+def test_line_card_theme_is_light_and_skips_user_settings():
+    """LINE は白カード固定。user_settings に LINE ID を書かない。"""
+    from pathlib import Path
+
+    from card_theme import CARD_THEME_LIGHT, LINE_CARD_THEME
+
+    assert LINE_CARD_THEME == CARD_THEME_LIGHT
+    main_src = Path("main.py").read_text(encoding="utf-8")
+    client_src = Path("supabase_client.py").read_text(encoding="utf-8")
+    assert "LINE_CARD_THEME" in main_src
+    assert "get_user_card_theme" not in main_src
+    assert "set_user_card_theme" not in main_src
+    assert "set_user_mode" not in main_src
+    assert "table(\"user_settings\")" not in client_src
+    assert "LINE_CARD_THEME" in client_src
+
+
 def test_create_critique_card_light_theme():
     """ライトテーマ: 背景白・タイトルが暗い色で描画される。"""
     td = Path(tempfile.mkdtemp())
@@ -2566,6 +2583,7 @@ def run_all():
     test_retention_purge_does_not_target_critique_events()
     test_line_db_omits_full_critique_text_by_default()
     test_normalize_card_theme()
+    test_line_card_theme_is_light_and_skips_user_settings()
     test_create_critique_card_layout()
     test_create_critique_card_light_theme()
     test_critique_summary_short_keeps_fixed_image_area()

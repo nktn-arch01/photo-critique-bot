@@ -10,6 +10,8 @@ from __future__ import annotations
 CARD_THEME_DARK = "dark"
 CARD_THEME_LIGHT = "light"
 DEFAULT_CARD_THEME = CARD_THEME_DARK
+# LINE は白カード固定。user_settings にユーザー別テーマを持たない。
+LINE_CARD_THEME = CARD_THEME_LIGHT
 VALID_CARD_THEMES = frozenset({CARD_THEME_DARK, CARD_THEME_LIGHT})
 
 # 表示名（GUI / LINE メッセージ用）

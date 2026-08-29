@@ -39,11 +39,11 @@
   ├── 4. 共通コア (generate_critique_card.py) ➔ カード画像描画（`card_theme`: `dark` / `light`）
   ├── 5. SupabaseManager (supabase_client.py)
   │      ├── Storage (critique-cards) へ PNG アップロード ➔ Public URL 取得
-  │      ├── DB (critique_logs / user_settings) へ ログ保存 & カード背景 (`dark`/`light`) 取得
+  │      ├── DB (critique_logs) へ ログ保存（LINE user ID は運用・30日削除）
   │      └── DB (`critique_events`) へ匿名の利用イベント（ハッシュ・スコア・反応。LINE ID なし）
   ├── 6. line_messaging.py ➔ Wave C: カード即時 push のあと対話【1】【2】【3】を3通（1リクエスト最大5通）
   ├── 7. LINE Messaging API ➔ 画像カード + テキスト Push 送信
-  └── 8. テキスト「背景」➔ QuickReply でライト/ダーク選択 ➔ `user_settings.card_theme` 保存
+  └── 8. カードは `LINE_CARD_THEME`（light）固定。user_settings は使わない
 
 [外部監視 (UptimeRobot)]
   └── 5分おき GET /health ➔ Render 無料枠サーバーのスリープ回避
@@ -126,7 +126,7 @@
 - `prompt_contracts.py`: **【プロンプト契約】** 審判語禁止・時間帯禁止・人物分岐のオフライン回帰正本（P2-1 Q2/Q3）。
 - `scripts/summarize_h3_deltas.py` / `scripts/summarize_user_reactions.py`: H3 差分・LINE 反応の集計（Q5。自動書き換えなし）。手順は `docs/P2_1_PROMPT_IMPROVEMENT_LOOP.md`。
 - `docs/P2_2_PUBLIC_UX_CHARTER.md`: **【公開 UX 憲章】** ブランドブック準拠の体験合意（Guided／Console／LINE、ローカル Web）。`docs/brand/LuminaNotes_BrandBook_02.pdf`。
-- `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`, 分析用 `critique_events`) および Storage (`critique-cards`)。`card_theme` と `user_reaction` を永続化。列追加 SQL: `supabase/add_card_theme.sql` / `supabase/add_user_reaction.sql` / `supabase/add_critique_events.sql`。
+- `supabase_client.py`: Supabase DB (`critique_logs`, 分析用 `critique_events`) および Storage (`critique-cards`)。`user_reaction` を永続化。`user_settings` は読まない。列追加 SQL: `supabase/add_user_reaction.sql` / `supabase/add_critique_events.sql`。
 - `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除（**`critique_events` は残す**）。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
 
 ---
@@ -171,7 +171,7 @@
 
 ### 規則 4b: カード背景テーマ識別子の統一 (`dark` / `light`)
 - カード背景は `card_theme.py` の `dark` / `light` のみを用いる（日本語ラベル「ダーク」「ライト」は表示・LINE文言用。永続化・API引数は英小文字識別子）。
-- デスクトップは GUI で実行前選択し `~/.photo_ai_config.json` の `card_theme` に保存。LINE は「背景」送信 → QuickReply → `user_settings.card_theme` に保存。描画は必ず `create_critique_card(..., theme=)` 経由。
+- デスクトップは GUI で実行前選択し `~/.photo_ai_config.json` の `card_theme` に保存。**LINE は `LINE_CARD_THEME`（light）固定**し、`user_settings` に保存しない。描画は必ず `create_critique_card(..., theme=)` 経由。
 
 ### 規則 5: 時間帯ラベル依存の脱却と「光・陰影具象描写」プロンプト原則
 - **撮影時刻の単一ソース**: `scanner.py` は EXIF **`DateTimeOriginal`（なければ SubSecDateTimeOriginal）のみ**を撮影時刻とする。`CreateDate` / `ModifyDate` / `FileModifyDate` は現像・書き出し時刻になり得るため採用しない（欠損時は `不明`）。

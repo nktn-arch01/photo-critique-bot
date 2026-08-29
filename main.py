@@ -13,7 +13,7 @@ from linebot.models import (
 
 from critique_engine import generate_critique_for_line
 from generate_critique_card import create_critique_card
-from card_theme import CARD_THEME_DARK, CARD_THEME_LIGHT, card_theme_label
+from card_theme import LINE_CARD_THEME
 from line_messaging import push_messages_in_batches, split_full_critique_for_line
 from line_reactions import (
     parse_reaction_label,
@@ -92,10 +92,9 @@ def process_image_and_reply(line_user_id: str, message_id: str):
         img_path = temp_dir / f"{message_id}{ext}"
         img_path.write_bytes(image_bytes)
 
-        user_theme = supabase_mgr.get_user_card_theme(line_user_id)
         print(
             f"[LINE] user={redact_line_user_id(line_user_id)} flow=card+dialogue "
-            f"theme={user_theme} image={mime} bytes={len(image_bytes)}",
+            f"theme={LINE_CARD_THEME} image={mime} bytes={len(image_bytes)}",
             flush=True,
         )
 
@@ -108,7 +107,7 @@ def process_image_and_reply(line_user_id: str, message_id: str):
             dop_info=dop_info,
             mode="compact",
         )
-        create_critique_card(img_path, phase1_cache, card_path, theme=user_theme)
+        create_critique_card(img_path, phase1_cache, card_path, theme=LINE_CARD_THEME)
 
         storage_path = f"{storage_folder_for_user(line_user_id)}/{message_id}_card.png"
         card_public_url = supabase_mgr.upload_card_image(
@@ -195,8 +194,8 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
             "⚙️【講評の送り方】\n\n"
             "現在は【カード＋対話】に統一しています。\n"
             "写真1枚ごとにカードを先に送り、続けて対話【1】〜【3】を送ります。\n"
-            "最後に「いいね／もう少し／いまいち」で印象を送れます。\n\n"
-            "カードの見た目は「背景」で変更できます。"
+            "最後に「いいね／もう少し／いまいち」で印象を送れます。\n"
+            "カードは白背景でお届けします。"
         )
         line_bot_api.reply_message(
             reply_token,
@@ -204,8 +203,6 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
         )
 
     elif text in ["設定:簡易版", "簡易版", "設定:詳細版", "詳細版"]:
-        # 互換: 旧コマンドは受け付けるが統合フローを案内
-        supabase_mgr.set_user_mode(line_user_id, "full")
         line_bot_api.reply_message(
             reply_token,
             TextSendMessage(
@@ -216,40 +213,11 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
             ),
         )
 
-    elif text in ["背景", "はいけい", "カード背景"]:
-        current_theme = supabase_mgr.get_user_card_theme(line_user_id)
-        theme_label = card_theme_label(current_theme)
-        msg_text = (
-            "🎨【カード背景設定】\n\n"
-            f"現在の設定：【{theme_label}】\n\n"
-            "変更したい背景を下のボタンから選択してください。"
-        )
-        quick_reply = QuickReply(
-            items=[
-                QuickReplyButton(action=MessageAction(label="⬜ ライト", text="背景:ライト")),
-                QuickReplyButton(action=MessageAction(label="⬛ ダーク", text="背景:ダーク")),
-            ]
-        )
-        line_bot_api.reply_message(
-            reply_token,
-            TextSendMessage(text=msg_text, quick_reply=quick_reply),
-        )
-
-    elif text in ["背景:ライト", "ライト"]:
-        supabase_mgr.set_user_card_theme(line_user_id, CARD_THEME_LIGHT)
+    elif text in ["背景", "はいけい", "カード背景", "背景:ライト", "ライト", "背景:ダーク", "ダーク"]:
         line_bot_api.reply_message(
             reply_token,
             TextSendMessage(
-                text="⬜ カード背景を【ライト】（白背景・黒文字）に変更しました。\n次回の写真送信から反映されます。"
-            ),
-        )
-
-    elif text in ["背景:ダーク", "ダーク"]:
-        supabase_mgr.set_user_card_theme(line_user_id, CARD_THEME_DARK)
-        line_bot_api.reply_message(
-            reply_token,
-            TextSendMessage(
-                text="⬛ カード背景を【ダーク】に変更しました。\n次回の写真送信から反映されます。"
+                text="⬜ LINE のカードは【ライト】（白背景・黒文字）に統一しています。設定の保存はありません。"
             ),
         )
 
@@ -259,8 +227,7 @@ def handle_text_message(reply_token: str, line_user_id: str, text: str):
             TextSendMessage(
                 text=(
                     "写真を送信いただくと、カードと対話【1】〜【3】を自動生成します📷\n"
-                    "・送り方の説明 → 「設定」\n"
-                    "・カード背景切替 → 「背景」"
+                    "・送り方の説明 → 「設定」"
                 )
             ),
         )
