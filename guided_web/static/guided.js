@@ -402,34 +402,41 @@ async function applyPhotoSession(data, previewFile) {
   sessionId = data.session_id;
   currentFileName = data.file_name || previewFile?.name;
   serverPreviewUrl = data.preview_url || null;
+  const previousLocal = localPreviewUrl;
   if (serverPreviewUrl) {
+    localPreviewUrl = null;
     setChoosePhotoPreview(serverPreviewUrl);
   } else if (previewFile) {
-    revokeLocalPreview();
     localPreviewUrl = URL.createObjectURL(previewFile);
     setChoosePhotoPreview(localPreviewUrl);
+  } else {
+    localPreviewUrl = null;
+    setChoosePhotoPreview(null);
+  }
+  if (previousLocal && previousLocal !== localPreviewUrl) {
+    URL.revokeObjectURL(previousLocal);
   }
   hideReadPhoto();
   renderParams(data);
   showScreen("choose");
 }
 
-async function handleSelectedFile(file) {
+async function adoptPhotoSession(data, previewFile) {
+  const previousId = sessionId;
   abandonInFlightCritique();
-  await releaseServerSession();
-  sessionId = null;
-  revokeLocalPreview();
-  localPreviewUrl = URL.createObjectURL(file);
-  setChoosePhotoPreview(localPreviewUrl);
-
-  try {
-    const data = await uploadPhoto(file);
-    await applyPhotoSession(data, file);
-  } catch (err) {
-    revokeLocalPreview();
-    setChoosePhotoPreview(null);
-    throw err;
+  await applyPhotoSession(data, previewFile);
+  if (previousId && previousId !== sessionId) {
+    try {
+      await fetch(`/api/session/${previousId}/release`, { method: "POST" });
+    } catch (err) {
+      console.warn("session cleanup failed", err);
+    }
   }
+}
+
+async function handleSelectedFile(file) {
+  const data = await uploadPhoto(file);
+  await adoptPhotoSession(data, file);
 }
 
 let nativePickInFlight = false;
@@ -442,12 +449,7 @@ async function handleNativePhotoPick() {
   try {
     const data = await pickPhotoNative();
     if (!data) return;
-    abandonInFlightCritique();
-    await releaseServerSession();
-    sessionId = null;
-    revokeLocalPreview();
-    localPreviewUrl = null;
-    await applyPhotoSession(data, null);
+    await adoptPhotoSession(data, null);
   } finally {
     nativePickInFlight = false;
     if (pickBtn) pickBtn.disabled = false;
@@ -643,6 +645,8 @@ document.getElementById("file-input").addEventListener("change", async (e) => {
   } catch (err) {
     console.error(err);
     showToast("写真の読み込みに失敗しました。もう一度お試しください。", "error");
+  } finally {
+    e.target.value = "";
   }
 });
 

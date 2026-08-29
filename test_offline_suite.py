@@ -2644,6 +2644,39 @@ def test_guided_upload_rejects_unreadable_image():
     assert res.json()["detail"] == "unreadable image"
 
 
+def test_guided_unreadable_upload_keeps_existing_session():
+    """壊れたファイルの upload は既存セッションを消さない（失敗時は差し替えない）。"""
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "ok.jpg"
+    Image.new("RGB", (80, 60), (12, 34, 56)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        ok = client.post("/api/session/photo", files={"file": ("ok.jpg", f, "image/jpeg")})
+    assert ok.status_code == 200
+    session_id = ok.json()["session_id"]
+    file_name = ok.json()["file_name"]
+
+    fake = td / "fake.jpg"
+    fake.write_text("not-a-jpeg", encoding="utf-8")
+    with fake.open("rb") as f:
+        bad = client.post("/api/session/photo", files={"file": ("fake.jpg", f, "image/jpeg")})
+    assert bad.status_code == 400
+    assert session_id in app_module._sessions
+    preview = client.get(f"/api/session/{session_id}/preview")
+    assert preview.status_code == 200
+    status = client.get(f"/api/session/{session_id}/critique")
+    assert status.status_code == 200
+    assert file_name == "ok.jpg"
+
+
 def test_guided_card_footer_metadata():
     import tempfile
     from pathlib import Path
@@ -3574,20 +3607,27 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "await abandonInFlightCritique" not in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=25" in html
-    assert "guided.css?v=25" in html
+    assert "guided.js?v=26" in html
+    assert "guided.css?v=26" in html
     assert "data.cancelled" in js
-    pick_fn = js.split("async function handleNativePhotoPick()")[1].split("async function ")[0]
-    assert pick_fn.index("pickPhotoNative") < pick_fn.index("abandonInFlightCritique")
-    assert pick_fn.index("abandonInFlightCritique") < pick_fn.index("releaseServerSession")
+    pick_fn = js.split("async function handleNativePhotoPick()")[1].split("function resetReflectionFields")[0]
+    assert pick_fn.index("pickPhotoNative") < pick_fn.index("adoptPhotoSession")
+    assert "releaseServerSession" not in pick_fn
+    assert "abandonInFlightCritique" not in pick_fn
     nav_fn = js.split("function navigateToScreen")[1].split("function ")[0]
     assert "abandonInFlightCritique" not in nav_fn
     assert "ensureCritiqueWatch" in nav_fn
     assert "function ensureCritiqueWatch" in js
     assert "function applyInterruptedCritiqueHint" in js
     assert "function critiqueWatchIsLive" in js
+    assert "async function adoptPhotoSession" in js
     selected_fn = js.split("async function handleSelectedFile")[1].split("async function ")[0]
-    assert selected_fn.index("abandonInFlightCritique") < selected_fn.index("releaseServerSession")
+    assert selected_fn.index("uploadPhoto") < selected_fn.index("adoptPhotoSession")
+    assert "releaseServerSession" not in selected_fn
+    adopt_fn = js.split("async function adoptPhotoSession")[1].split("async function ")[0]
+    assert "const previousId = sessionId" in adopt_fn
+    assert adopt_fn.index("abandonInFlightCritique") < adopt_fn.index("applyPhotoSession")
+    assert adopt_fn.index("applyPhotoSession") < adopt_fn.index("/release")
     export_fn = js.split("function afterExportSuccess")[1].split("function ")[0]
     assert "showToast" in export_fn
     assert "navigateToScreen" not in export_fn
@@ -3630,7 +3670,7 @@ def test_guided_index_html_is_not_cached():
     assert res.status_code == 200
     cache = (res.headers.get("cache-control") or "").lower()
     assert "no-store" in cache
-    assert "guided.js?v=25" in res.text
+    assert "guided.js?v=26" in res.text
     assert 'http-equiv="Cache-Control"' in res.text
 
 
@@ -3805,6 +3845,7 @@ def run_all():
     test_guided_parameter_display_rows()
     test_guided_upload_returns_parameter_display()
     test_guided_upload_rejects_unreadable_image()
+    test_guided_unreadable_upload_keeps_existing_session()
     test_guided_card_footer_metadata()
     test_guided_body_sections_split()
     test_guided_stock_export_writes_files()
