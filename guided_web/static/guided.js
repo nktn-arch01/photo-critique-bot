@@ -234,13 +234,14 @@ function syncScreenGuides() {
   if (reflectBody) reflectBody.hidden = !reflectPrepared;
 }
 
-function navigateToScreen(name) {
+function navigateToScreen(name, opts) {
+  const hydrate = !opts || opts.hydrate !== false;
   if (name === "read" && readPhotoShown && activePreviewUrl()) {
     setReadPhotoPreview(activePreviewUrl());
   }
   syncScreenGuides();
   showScreen(name);
-  if (name === "read") {
+  if (name === "read" && hydrate) {
     void ensureCritiqueWatch();
   }
 }
@@ -677,12 +678,15 @@ document.getElementById("btn-speak").addEventListener("click", () => {
     syncSpeakButton();
     return;
   }
+  stopCritiqueWatch();
   clearReadAndReflectData();
   if (activePreviewUrl()) {
     setReadPhotoPreview(activePreviewUrl());
     readPhotoShown = true;
   }
-  navigateToScreen("read");
+  critiqueInProgress = true;
+  setReadLoading(true);
+  navigateToScreen("read", { hydrate: false });
   startCritique();
 });
 

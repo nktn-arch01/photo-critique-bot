@@ -65,3 +65,11 @@ def keeps_photo(intent: UserIntent) -> bool:
 def may_call_critique_cancel(_intent: UserIntent) -> bool:
     """画面操作から /critique/cancel を呼んでよいか。常に不可。"""
     return False
+
+
+def hydrates_read_ui(intent: UserIntent) -> bool:
+    """読むへ移るとき、既存の講評を描き戻すか。
+
+    タブ移動は続きを見せる。言葉にするは前の世代を出さず、待ち表示だけ。
+    """
+    return intent is UserIntent.TAB_SWITCH

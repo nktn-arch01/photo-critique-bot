@@ -146,3 +146,4 @@ cd ~/photo-critique-bot && python3 test_offline_suite.py
 | 2026-08-29 | 壊れた写真の D&D が既存セッションを先に捨て、プレビューだけ消してパラメータが残っていた。成功時のみ差し替え |
 | 2026-08-29 | 「Guided web review todos」を一区切り。T13/T14 を部分対応に戻し、次会話の手順を `AGENTS.md` / `START_NEXT_CONVERSATION.md` に固定 |
 | 2026-08-29 | T13/T14 を状態機械で一本化。正本 `P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`。画面は cancel しない。noop / supersede / destroy |
+| 2026-08-29 | 「言葉にする」で読むへ移る前に前の講評表示を消す。タブ移動の描き戻しは維持 |

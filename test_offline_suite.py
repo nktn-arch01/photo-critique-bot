@@ -3608,8 +3608,8 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "activeCritiqueEpoch" in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=27" in html
-    assert "guided.css?v=27" in html
+    assert "guided.js?v=28" in html
+    assert "guided.css?v=28" in html
     assert "data.cancelled" in js
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("function resetReflectionFields")[0]
     assert pick_fn.index("pickPhotoNative") < pick_fn.index("adoptPhotoSession")
@@ -3618,6 +3618,7 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     nav_fn = js.split("function navigateToScreen")[1].split("function ")[0]
     assert "stopCritiqueWatch" not in nav_fn
     assert "/critique/cancel" not in nav_fn
+    assert "hydrate" in nav_fn
     assert "ensureCritiqueWatch" in nav_fn
     assert "function ensureCritiqueWatch" in js
     assert "function applyInterruptedCritiqueHint" in js
@@ -3639,6 +3640,16 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "navigateToScreen" in again_fn
     assert "stopCritiqueWatch" not in again_fn
     assert "/critique/cancel" not in again_fn
+    speak_click = js.split('getElementById("btn-speak").addEventListener')[1].split(
+        "async function startCritique"
+    )[0]
+    assert speak_click.index("clearReadAndReflectData") < speak_click.index("navigateToScreen")
+    assert speak_click.index("setReadLoading(true)") < speak_click.index("navigateToScreen")
+    assert "hydrate: false" in speak_click
+    assert "ensureCritiqueWatch" not in speak_click
+    tab_nav = js.split("forEach((btn) =>")[1].split('getElementById("btn-again")')[0]
+    assert "hydrate: false" not in tab_nav
+    assert "navigateToScreen(btn.dataset.screen)" in tab_nav
     speak_fn = js.split("async function startCritique")[1].split("async function applyCritiqueProgress")[0]
     assert "force_restart: true" in speak_fn
     assert "/critique/cancel" not in speak_fn
@@ -3688,7 +3699,7 @@ def test_guided_index_html_is_not_cached():
     assert res.status_code == 200
     cache = (res.headers.get("cache-control") or "").lower()
     assert "no-store" in cache
-    assert "guided.js?v=27" in res.text
+    assert "guided.js?v=28" in res.text
     assert 'http-equiv="Cache-Control"' in res.text
 
 
@@ -3803,6 +3814,7 @@ def test_guided_critique_lifecycle_intents_cover_every_operation():
         CritiqueEffect,
         UserIntent,
         effect_for,
+        hydrates_read_ui,
         keeps_photo,
         may_call_critique_cancel,
     )
@@ -3826,6 +3838,8 @@ def test_guided_critique_lifecycle_intents_cover_every_operation():
         assert effect_for(intent) is effect
         assert may_call_critique_cancel(intent) is False
         assert keeps_photo(intent) is (effect is not CritiqueEffect.DESTROY_SESSION)
+        assert hydrates_read_ui(intent) is (intent is UserIntent.TAB_SWITCH)
+    assert hydrates_read_ui(UserIntent.SPEAK) is False
 
 
 def test_guided_force_restart_supersedes_running_without_cancel():
