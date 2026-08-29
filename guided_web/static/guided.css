@@ -42,6 +42,12 @@ body {
 
 .screen { padding: 1.25rem; max-width: 720px; margin: 0 auto; }
 
+/* hidden 画面が display 指定に負けてクリックを奪わない */
+.screen[hidden],
+input[hidden] {
+  display: none !important;
+}
+
 .drop-zone {
   border: 2px dashed var(--muted);
   border-radius: 8px;

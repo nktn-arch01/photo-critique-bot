@@ -3198,10 +3198,18 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "function syncScreenGuides" in js
     assert "sendBeacon" in js
     assert "pagehide" in js
+    assert "beforeunload" in js
+    assert "function releaseSessionOnUnload" in js
+    assert "el.inert = !on" in js
+    assert "nativePickInFlight" in js
+    pick_fn = js.split("async function handleNativePhotoPick()")[1].split("async function ")[0]
+    assert pick_fn.indexOf("pickPhotoNative") < pick_fn.indexOf("releaseServerSession")
     assert ".toast-region" in css
     assert ".empty-guide" in css
     assert ".card-preview-hint" in css
     assert ".photo-preview[hidden]" in css
+    assert ".screen[hidden]" in css
+    assert "inert" in html
 
 
 def test_guided_run_script_reports_boot_failure():

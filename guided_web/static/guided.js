@@ -65,7 +65,8 @@ async function releaseServerSession() {
   }
 }
 
-function releaseSessionOnPageHide() {
+function releaseSessionOnUnload(event) {
+  if (event && event.type === "pagehide" && event.persisted) return;
   if (!sessionId) return;
   const id = sessionId;
   const url = `/api/session/${id}/release`;
@@ -73,7 +74,6 @@ function releaseSessionOnPageHide() {
   if (!sent) {
     fetch(url, { method: "POST", keepalive: true }).catch(() => {});
   }
-  sessionId = null;
 }
 
 const TOAST_MS = 4200;
@@ -113,14 +113,23 @@ let critiqueInProgress = false;
 let readPhotoShown = false;
 let reflectPrepared = false;
 
+function syncSpeakButton() {
+  const btn = document.getElementById("btn-speak");
+  if (btn) btn.disabled = !sessionId;
+}
+
 function showScreen(name) {
   Object.entries(screens).forEach(([key, el]) => {
-    el.hidden = key !== name;
-    el.classList.toggle("active", key === name);
+    if (!el) return;
+    const on = key === name;
+    el.hidden = !on;
+    el.inert = !on;
+    el.classList.toggle("active", on);
   });
   document.querySelectorAll(".screen-nav [data-screen]").forEach((el) => {
     el.classList.toggle("active", el.dataset.screen === name);
   });
+  syncSpeakButton();
 }
 
 function hasReadContent() {
@@ -253,7 +262,7 @@ function renderParams(data) {
   });
 
   wrap.hidden = false;
-  document.getElementById("btn-speak").disabled = false;
+  syncSpeakButton();
 }
 
 function buildParameterDisplayFallback(apiParameters, fileName) {
@@ -338,14 +347,25 @@ async function handleSelectedFile(file) {
   }
 }
 
+let nativePickInFlight = false;
+
 async function handleNativePhotoPick() {
-  await releaseServerSession();
-  sessionId = null;
-  const data = await pickPhotoNative();
-  if (!data) return;
-  revokeLocalPreview();
-  localPreviewUrl = null;
-  await applyPhotoSession(data, null);
+  if (nativePickInFlight) return;
+  nativePickInFlight = true;
+  const pickBtn = document.getElementById("pick-file");
+  if (pickBtn) pickBtn.disabled = true;
+  try {
+    const data = await pickPhotoNative();
+    if (!data) return;
+    await releaseServerSession();
+    sessionId = null;
+    revokeLocalPreview();
+    localPreviewUrl = null;
+    await applyPhotoSession(data, null);
+  } finally {
+    nativePickInFlight = false;
+    if (pickBtn) pickBtn.disabled = false;
+  }
 }
 
 function resetReflectionFields() {
@@ -506,11 +526,11 @@ async function clearAllSession() {
   hideReadPhoto();
   document.getElementById("params-preview").hidden = true;
   document.getElementById("params-preview-body").innerHTML = "";
-  document.getElementById("btn-speak").disabled = true;
   document.getElementById("file-input").value = "";
   document.getElementById("user-note").value = "";
   document.getElementById("lens-select").value = "self";
   clearReadAndReflectData();
+  syncSpeakButton();
   navigateToScreen("choose");
 }
 
@@ -561,7 +581,11 @@ dropZone.addEventListener("drop", async (e) => {
 });
 
 document.getElementById("btn-speak").addEventListener("click", () => {
-  if (!sessionId) return;
+  if (!sessionId) {
+    showToast("写真がありません。もう一度写真を選んでください。", "error");
+    syncSpeakButton();
+    return;
+  }
   clearReadAndReflectData();
   if (activePreviewUrl()) {
     setReadPhotoPreview(activePreviewUrl());
@@ -586,7 +610,15 @@ async function startCritique() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lens, user_note: userNote, force_restart: true }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 404) {
+      sessionId = null;
+      critiqueInProgress = false;
+      syncSpeakButton();
+      showToast("写真がありません。もう一度写真を選んでください。", "error");
+      navigateToScreen("choose");
+      return;
+    }
     if (!res.ok) {
       throw new Error(data.error || data.detail || "講評の開始に失敗しました");
     }
@@ -860,5 +892,7 @@ function updateStarButtons() {
 updateStarButtons();
 bindReadDropdownGuards();
 syncScreenGuides();
+syncSpeakButton();
 loadReflectItems();
-window.addEventListener("pagehide", releaseSessionOnPageHide);
+window.addEventListener("beforeunload", releaseSessionOnUnload);
+window.addEventListener("pagehide", releaseSessionOnUnload);

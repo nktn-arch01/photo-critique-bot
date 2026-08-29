@@ -72,7 +72,7 @@
 | T11 | 終了時（Ctrl+C）のクリーンアップ | [x] | FastAPI `lifespan` → `shutdown_sessions` |
 | T12 | クラッシュ時の一時ファイル残存 | [x] | 起動時 `purge_orphan_temp` |
 | T13 | 同一セッションへの同時リクエスト制御 | [x] | session lock + epoch。並行は 409 |
-| T14 | タブ閉じ／ポーリング中断後の整理 | [x] | `pagehide` + `sendBeacon` → `POST .../release` |
+| T14 | タブ閉じ／ポーリング中断後の整理 | [x] | `beforeunload` / `pagehide`（persisted は除外）。セッションIDは消さない。hidden 画面は `inert` |
 
 **主要モジュール:** `guided_web/app.py`, `guided_web/session_cleanup.py`, `guided_web/static/guided.js`
 
@@ -139,3 +139,4 @@ cd ~/photo-critique-bot && python3 test_offline_suite.py
 |------|------|
 | 2026-08-29 | 初版。レビュー報告以降の UI/UX・技術 T1–T14・プライバシー P1–P10 を正本化 |
 | 2026-08-29 | U13–U16 / T3 / T11–T14 を実装。トースト・空状態・終了時 temp 掃除・並行制御・タブ閉じ解放 |
+| 2026-08-29 | タブ往復後に選ぶボタンが死ぬ不具合。hidden 画面を inert、ピッカー確定前にセッションを捨てない |
