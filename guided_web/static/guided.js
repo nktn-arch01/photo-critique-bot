@@ -278,21 +278,59 @@ function readDropdownElements() {
   ];
 }
 
-function resetReadDropdowns() {
-  readDropdownElements().forEach((el) => {
-    if (!el) return;
+function setReadDropdownPending(el, pending) {
+  if (!el) return;
+  if (pending) {
     el.open = false;
     el.classList.add("read-group-pending");
-  });
+  } else {
+    el.classList.remove("read-group-pending");
+  }
+}
+
+function resetReadDropdowns() {
+  readDropdownElements().forEach((el) => setReadDropdownPending(el, true));
   updateKeepButton();
 }
 
-function activateReadDropdowns() {
-  readDropdownElements().forEach((el) => {
-    if (!el) return;
-    el.classList.remove("read-group-pending");
-  });
-  updateKeepButton();
+function hasScoresContent(data) {
+  const scores = data.phase1?.scores || {};
+  return Object.keys(scores).length > 0;
+}
+
+function hasSectionsContent(data, ids) {
+  return (data.sections || []).some(
+    (sec) => ids.includes(sec.id) && String(sec.text || "").trim(),
+  );
+}
+
+function nextPaint() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+async function activateDropdownsSequentially(data) {
+  const groups = [
+    {
+      el: document.getElementById("detail-scores"),
+      ready: () => hasScoresContent(data),
+    },
+    {
+      el: document.getElementById("detail-sections-123"),
+      ready: () => hasSectionsContent(data, ["1", "2", "3"]),
+    },
+    {
+      el: document.getElementById("detail-sections-4567"),
+      ready: () => hasSectionsContent(data, ["4", "5", "6", "7"]),
+    },
+  ];
+
+  for (const group of groups) {
+    if (!group.el || !group.el.classList.contains("read-group-pending")) continue;
+    if (!group.ready()) continue;
+    setReadDropdownPending(group.el, false);
+    updateKeepButton();
+    await nextPaint();
+  }
 }
 
 function updateKeepButton() {
@@ -367,11 +405,6 @@ function showReadPanelsPhase1() {
   document.getElementById("read-actions").hidden = false;
   document.getElementById("read-detail").hidden = false;
   updateKeepButton();
-}
-
-function showReadPanelsComplete() {
-  showReadPanelsPhase1();
-  activateReadDropdowns();
 }
 
 function clearAllSession() {
@@ -465,13 +498,11 @@ async function startCritique() {
     renderCritique(data);
     showReadPanelsPhase1();
     critiqueInProgress = false;
-    updateKeepButton();
+    await activateDropdownsSequentially(data);
 
     if (data.status === "phase2_running") {
       hint.hidden = false;
       await pollCritiqueComplete();
-    } else if (data.status === "complete") {
-      showReadPanelsComplete();
     }
   } catch (err) {
     console.error(err);
@@ -492,7 +523,7 @@ async function pollCritiqueComplete() {
     if (data.status === "complete") {
       renderCritique(data);
       hint.hidden = true;
-      showReadPanelsComplete();
+      await activateDropdownsSequentially(data);
       return;
     }
     if (data.status === "error") {
