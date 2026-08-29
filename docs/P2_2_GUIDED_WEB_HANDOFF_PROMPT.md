@@ -32,11 +32,16 @@ Guided Web（`guided_web/`）の**完成度を上げる**。レビュー報告�
 - 読む：Phase1 先行 + 3プルダウン順次アクティブ化、Phase2 再取得ボタン
 - 振り返る：★必須、カードプレビューは書き出し時のみ更新
 - Mac ネイティブ写真ピッカー、パラメータ表表示、LN 書き出し形式
+- トースト通知（`alert` なし）、カード「書き出しで更新」ヒント、タブ空状態ガイド
+- 書き出し成功後は選ぶへ戻る（構想 §3）
 
 ### 技術
-- `session_cleanup.py` + `DELETE /api/session/{id}`
+- `session_cleanup.py` + `DELETE /api/session/{id}` + `POST /api/session/{id}/release`
+- FastAPI `lifespan`: 起動時孤児掃除 / Ctrl+C で全セッション解放
+- 講評 epoch + lock（並行は 409）、`pagehide` + sendBeacon
 - `POST /api/session/{id}/critique/phase2/retry`
-- オフライン: `test_guided_session_delete_removes_temp_dir`, `test_guided_phase2_retry_restarts_background`
+- 起動失敗時は `scripts/run_guided_web.sh` がログを出して exit 1
+- オフライン: `test_guided_session_delete_removes_temp_dir`, `test_guided_phase2_retry_restarts_background`, `test_guided_purge_orphan_temp_keeps_live_sessions`, `test_guided_lifespan_purges_orphans_and_shutdown_sessions`
 
 ### プライバシー
 - `guided_privacy.py`：抽象パラメータのみ API、プロンプト安全チェック、監査ログ whitelist
@@ -44,23 +49,14 @@ Guided Web（`guided_web/`）の**完成度を上げる**。レビュー報告�
 
 ## 未対応 ToDo（優先順）
 
-`docs/P2_2_GUIDED_WEB_REVIEW_TODO.md` の §4 を参照。まず以下から:
-
-### UI/UX
-- [ ] **U14** `alert` → トースト等の非モーダル通知（写真読込失敗・書き出し成功/失敗）
-- [ ] **U13** カードプレビューに「書き出しで更新」ヒント
-- [ ] **U15** タブ先行遷移時の空状態ガイド（読む／振り返る）
-- [~] **U16** 書き出し成功後に選ぶへ遷移（構想 §3 遷移図との整合確認）
-
-### 技術（T1–T14）
-- [ ] **T11** Ctrl+C 終了時の temp クリーンアップ（shutdown フック）
-- [ ] **T12** クラッシュ時の孤児 `lumina_guided/` 対策
-- [ ] **T3** 起動失敗時の明確なエラー
-- [ ] **T13** 同一セッション並行リクエスト制御
-- [ ] **T14** タブ閉じ時のセッション整理
+`docs/P2_2_GUIDED_WEB_REVIEW_TODO.md` の §4 を参照。
 
 ### プライバシー（P1–P10）
 - [~] **P5** 永続セッションログ（任意・構想 §7.1 の `session.json` 相当）
+
+### その他（任意）
+- アップロードサイズ上限
+- オーナー Mac 確認の PASS 記入
 
 ## 作業ルール
 
@@ -73,9 +69,8 @@ Guided Web（`guided_web/`）の**完成度を上げる**。レビュー報告�
 ## 最初の一手
 
 1. `docs/P2_2_GUIDED_WEB_REVIEW_TODO.md` を読む
-2. **U14（トースト）** または **U13+U15（ヒント・空状態）** から着手（体験改善が早い）
-3. 続けて **T11–T12（終了・孤児 temp）** を `session_cleanup.py` と統合
-4. 完了した ToDo は正本ドキュメントの `[x]` を更新
+2. **P5**（任意の `session.json`）またはオーナー Mac 確認のフォロー
+3. 完了した ToDo は正本ドキュメントの `[x]` を更新
 
 成果物: 動くコード + テスト PASS + 更新された `P2_2_GUIDED_WEB_REVIEW_TODO.md` + Mac 確認手順
 ```
