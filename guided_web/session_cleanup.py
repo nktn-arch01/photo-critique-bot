@@ -44,9 +44,15 @@ def destroy_session_data(session_id: str, session: dict[str, Any]) -> None:
 
 
 def pop_session(sessions: dict[str, dict[str, Any]], session_id: str) -> dict[str, Any] | None:
-    """メモリ上のセッションを取り除き、ディスク上の一時ファイルも削除する。"""
+    """メモリ上のセッションを取り除き、ディスク上の一時ファイルも削除する。
+
+    destroy が正本。進行中の世代は epoch を進めてから外すので、
+    残っている Phase 2 が切り離した dict へ complete を書き戻さない。
+    """
     session = sessions.pop(session_id, None)
     if session is not None:
+        with ensure_session_lock(session):
+            bump_epoch(session)
         destroy_session_data(session_id, session)
     return session
 
@@ -135,11 +141,12 @@ def critique_is_running(session: dict[str, Any]) -> bool:
 
 
 def cancel_critique(session: dict[str, Any], epoch: int | None = None) -> int:
-    """進行中の講評を捨てる。写真セッションと完了済み講評は残す。
+    """世代を無効化する（画面操作の正本ではない）。
 
-    実行中だけ epoch を進め、遅延した Phase 2 の書き込みを無効化する。
+    ユーザー操作の正本は critique_lifecycle.effect_for。画面は cancel しない。
+    タブ移動・もう一度は noop、言葉にするは supersede、クリアは destroy。
+    この関数はテストと古いクライアント向けの世代無効化だけ。
     完了済みを idle に戻すと「この言葉を残す」のカードが壊れる。
-    epoch を渡したときは、その世代だけを無効化する（次の講評を誤って消さない）。
     """
     with ensure_session_lock(session):
         current = int(session.get("epoch") or 0)

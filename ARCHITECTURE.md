@@ -94,6 +94,7 @@
 - `phase1_jpeg.py`: Phase1 講評テキスト ↔ JPEG Description の橋渡し（スクリーニングカード・Lumina Review 共用）。
 - `screening_cards.py`: スクリーニング単位の Rating 3/4 向け Compact カード生成＋ Phase1 IPTC 書込。
 - `line_messaging.py`: Wave C 以降、LINE 対話は ## 【1./【2./【3. で3通分割（カードは別途 Image）。旧4分割は legacy フォールバック。
+- `guided_web/`: **【P2-2 Guided Web】** ローカル FastAPI + ブラウザ 3 画面（選ぶ／読む／振り返る）。講評ライフサイクル正本は `guided_web/critique_lifecycle.py` と [`docs/P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`](docs/P2_2_GUIDED_CRITIQUE_LIFECYCLE.md)。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM|XXYYYYMM` / イベント `YYYYMMDD_名前|XXYYYYMMDD_名前`。Works は `YYYYMM` のみ。規則外サブフォルダはイベントにしない。`is_screening_jpeg`（旧 `is_shortlist_jpeg` は alias）。
 - `shortlist_mechanical.py` / `screening_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。（`screening_*` は Wave 3 再エクスポート）
 - `shortlist_antenna.py` / `screening_antenna.py`: **【M2 アンテナ】** 5軸軽量 Vision＋バッチ内相対熱量。合格 Rating=2＋`[M2]`。★絶対ゲート禁止。

@@ -122,7 +122,7 @@ let activeCritiqueEpoch = null;
 let readPhotoShown = false;
 let reflectPrepared = false;
 
-function abandonInFlightCritique() {
+function stopCritiqueWatch() {
   critiqueGeneration += 1;
   if (critiqueAbort) {
     critiqueAbort.abort();
@@ -130,12 +130,11 @@ function abandonInFlightCritique() {
   }
   critiqueInProgress = false;
   setReadLoading(false);
-  const id = sessionId;
-  const epoch = activeCritiqueEpoch;
-  activeCritiqueEpoch = null;
-  if (!id) return;
-  const query = epoch == null ? "" : `?epoch=${encodeURIComponent(String(epoch))}`;
-  fetch(`/api/session/${id}/critique/cancel${query}`, { method: "POST" }).catch(() => {});
+}
+
+function endCritiqueWatch() {
+  critiqueAbort = null;
+  critiqueInProgress = false;
 }
 
 function critiqueWatchIsLive() {
@@ -165,7 +164,7 @@ async function ensureCritiqueWatch() {
     if (data.epoch != null) activeCritiqueEpoch = data.epoch;
     if (data.status === "complete") {
       await applyCritiqueProgress(data, critiqueGeneration);
-      critiqueInProgress = false;
+      endCritiqueWatch();
       resetPhase2Hint();
       updateKeepButton();
       return;
@@ -181,12 +180,13 @@ async function ensureCritiqueWatch() {
       if (data.status === "phase2_running") hint.hidden = false;
       await pollCritique(requestId, Boolean(data.phase1));
       if (requestId !== critiqueGeneration) return;
-      critiqueInProgress = false;
+      endCritiqueWatch();
       updateKeepButton();
       return;
     }
     if (data.status === "idle") {
-      applyInterruptedCritiqueHint();
+      endCritiqueWatch();
+      return;
     }
   } catch (err) {
     if (err && err.name === "AbortError") return;
@@ -423,7 +423,7 @@ async function applyPhotoSession(data, previewFile) {
 
 async function adoptPhotoSession(data, previewFile) {
   const previousId = sessionId;
-  abandonInFlightCritique();
+  stopCritiqueWatch();
   await applyPhotoSession(data, previewFile);
   if (previousId && previousId !== sessionId) {
     try {
@@ -605,7 +605,7 @@ function showReadPanelsPhase1() {
 }
 
 async function clearAllSession() {
-  abandonInFlightCritique();
+  stopCritiqueWatch();
   await releaseServerSession();
   sessionId = null;
   currentFileName = null;
@@ -714,7 +714,7 @@ async function startCritique() {
     if (res.status === 404) {
       sessionId = null;
       activeCritiqueEpoch = null;
-      critiqueInProgress = false;
+      endCritiqueWatch();
       syncSpeakButton();
       showToast("写真がありません。もう一度写真を選んでください。", "error");
       navigateToScreen("choose");
@@ -733,12 +733,12 @@ async function startCritique() {
       await pollCritique(requestId, Boolean(data.phase1));
     }
     if (requestId !== critiqueGeneration) return;
-    critiqueInProgress = false;
+    endCritiqueWatch();
     updateKeepButton();
   } catch (err) {
     if (err.name === "AbortError" || requestId !== critiqueGeneration) return;
     console.error(err);
-    critiqueInProgress = false;
+    endCritiqueWatch();
     updateKeepButton();
     const skeleton = document.getElementById("read-skeleton");
     skeleton.textContent = err.message || "言葉を読み取れませんでした。APIキーとネットワークを確認してください。";
@@ -766,6 +766,7 @@ async function pollCritique(requestId, shownPhase1) {
     if (data.epoch != null) activeCritiqueEpoch = data.epoch;
     if (data.status === "idle") {
       applyInterruptedCritiqueHint();
+      endCritiqueWatch();
       return;
     }
     if (data.phase1 && !shownPhase1) {

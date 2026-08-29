@@ -21,12 +21,13 @@
 ## ミッション（順序を守る）
 
 Guided Web（`guided_web/`、PR #21）を続ける。
-**最初にやることは見た目の磨きでも P5 でもない。**
+**講評ライフサイクル（T13/T14）は完了。** 正本: `docs/P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`。cancel 方針をひっくり返さない。
 
-1. 講評ライフサイクル（言葉にする／もう一度／タブ移動／クリア／書き出しの保存と Cancel）について、不正な状態を表せない設計を短く書く（規則1レビュー1）。
-2. 既存の epoch / cancel / inert / タブ離脱のパッチが互いに矛盾していないかを点検する。矛盾があれば対症療法を削って一本化する（レビュー2）。
-3. 再発を止めるオフラインテストを足してからコードを変える（レビュー3）。`python3 test_offline_suite.py` を必ず通す。
-4. 上記が安定してからだけ、任意の P5（永続 session.json）や見た目の依頼に進む。
+次は依頼されたものだけ:
+
+1. 任意の P5（永続 `session.json`）— 求められない限り着手しない
+2. 見た目の磨き — 求められない限り着手しない
+3. Mac チェックリストの PASS 記入はオーナー。3e / 3f / 4b / 4f Cancel / 5 は **未確認**
 
 Linux のブラウザで JPEG をコンソール注入したり `fetch` を差し替えたりしたことを、Mac のネイティブピッカー／Tk ダイアログ／Control+C の PASS にしないでください。
 未確認の経路は「未確認」と書き、オーナーを作業員にしないでください。
@@ -35,7 +36,8 @@ Linux のブラウザで JPEG をコンソール注入したり `fetch` を差�
 
 - 作業ルール: `AGENTS.md`
 - 次会話の始め方: `docs/START_NEXT_CONVERSATION.md`
-- ToDo 正本: `docs/P2_2_GUIDED_WEB_REVIEW_TODO.md`（T13/T14 は部分対応。チェックが [x] でもライフサイクルは未完了）
+- 講評ライフサイクル: `docs/P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`（noop / supersede / destroy。画面は `/critique/cancel` を呼ばない）
+- ToDo 正本: `docs/P2_2_GUIDED_WEB_REVIEW_TODO.md`
 - 構想: `docs/P2_2_WEB_APP_CONCEPT.md`
 - Mac 確認: `docs/P2_2_GUIDED_MAC_CHECKLIST.md`
 - 憲章: `docs/P2_2_PUBLIC_UX_CHARTER.md`
@@ -57,7 +59,7 @@ Linux のブラウザで JPEG をコンソール注入したり `fetch` を差�
 ## 2026-08-29 にやり直したこと（同じパッチを繰り返さない）
 
 タブ往復で選ぶボタンが死ぬ、講評途中の「もう一度」でフリーズ、書き出し Cancel で Tk abort、古いサーバが残る、Phase2 待ち中のタブ移動で cancel して固まる。
-原因は「キャンセルする／しない」を失敗のたびにひっくり返したこと。方針を文章で固定してから直す。
+原因は「キャンセルする／しない」を失敗のたびにひっくり返したこと。方針は `docs/P2_2_GUIDED_CRITIQUE_LIFECYCLE.md` に固定済み。cancel フラグを足さない。
 
 ## 成果物
 

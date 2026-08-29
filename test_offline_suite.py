@@ -3600,22 +3600,24 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "function releaseSessionOnUnload" in js
     assert "el.inert = !on" in js
     assert "nativePickInFlight" in js
-    assert "function abandonInFlightCritique" in js
+    assert "function stopCritiqueWatch" in js
+    assert "function endCritiqueWatch" in js
+    assert "function abandonInFlightCritique" not in js
     assert "AbortController" in js
-    assert "/critique/cancel" in js
+    assert "/critique/cancel" not in js
     assert "activeCritiqueEpoch" in js
-    assert "await abandonInFlightCritique" not in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=26" in html
-    assert "guided.css?v=26" in html
+    assert "guided.js?v=27" in html
+    assert "guided.css?v=27" in html
     assert "data.cancelled" in js
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("function resetReflectionFields")[0]
     assert pick_fn.index("pickPhotoNative") < pick_fn.index("adoptPhotoSession")
     assert "releaseServerSession" not in pick_fn
-    assert "abandonInFlightCritique" not in pick_fn
+    assert "stopCritiqueWatch" not in pick_fn
     nav_fn = js.split("function navigateToScreen")[1].split("function ")[0]
-    assert "abandonInFlightCritique" not in nav_fn
+    assert "stopCritiqueWatch" not in nav_fn
+    assert "/critique/cancel" not in nav_fn
     assert "ensureCritiqueWatch" in nav_fn
     assert "function ensureCritiqueWatch" in js
     assert "function applyInterruptedCritiqueHint" in js
@@ -3626,8 +3628,24 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "releaseServerSession" not in selected_fn
     adopt_fn = js.split("async function adoptPhotoSession")[1].split("async function ")[0]
     assert "const previousId = sessionId" in adopt_fn
-    assert adopt_fn.index("abandonInFlightCritique") < adopt_fn.index("applyPhotoSession")
+    assert adopt_fn.index("stopCritiqueWatch") < adopt_fn.index("applyPhotoSession")
     assert adopt_fn.index("applyPhotoSession") < adopt_fn.index("/release")
+    assert "/critique/cancel" not in adopt_fn
+    clear_fn = js.split("async function clearAllSession")[1].split("document.getElementById(\"pick-file\")")[0]
+    assert "stopCritiqueWatch" in clear_fn
+    assert "releaseServerSession" in clear_fn
+    assert "/critique/cancel" not in clear_fn
+    again_fn = js.split('getElementById("btn-again")')[1].split("getElementById(\"btn-keep\")")[0]
+    assert "navigateToScreen" in again_fn
+    assert "stopCritiqueWatch" not in again_fn
+    assert "/critique/cancel" not in again_fn
+    speak_fn = js.split("async function startCritique")[1].split("async function applyCritiqueProgress")[0]
+    assert "force_restart: true" in speak_fn
+    assert "/critique/cancel" not in speak_fn
+    unload_fn = js.split("function releaseSessionOnUnload")[1].split("const TOAST_MS")[0]
+    assert "event.persisted" in unload_fn
+    assert "/release" in unload_fn
+    assert "/critique/cancel" not in unload_fn
     export_fn = js.split("function afterExportSuccess")[1].split("function ")[0]
     assert "showToast" in export_fn
     assert "navigateToScreen" not in export_fn
@@ -3670,7 +3688,7 @@ def test_guided_index_html_is_not_cached():
     assert res.status_code == 200
     cache = (res.headers.get("cache-control") or "").lower()
     assert "no-store" in cache
-    assert "guided.js?v=26" in res.text
+    assert "guided.js?v=27" in res.text
     assert 'http-equiv="Cache-Control"' in res.text
 
 
@@ -3774,6 +3792,148 @@ def test_guided_export_cancel_is_not_an_error():
         )
     assert export_res.status_code == 200
     assert export_res.json()["cancelled"] is True
+    critique = client.get(f"/api/session/{session_id}/critique")
+    assert critique.status_code == 200
+    assert critique.json()["status"] == "complete"
+
+
+def test_guided_critique_lifecycle_intents_cover_every_operation():
+    """講評への効果は noop / supersede / destroy の3つだけ。cancel は操作に無い。"""
+    from guided_web.critique_lifecycle import (
+        CritiqueEffect,
+        UserIntent,
+        effect_for,
+        keeps_photo,
+        may_call_critique_cancel,
+    )
+
+    expected = {
+        UserIntent.TAB_SWITCH: CritiqueEffect.NOOP,
+        UserIntent.AGAIN: CritiqueEffect.NOOP,
+        UserIntent.PHOTO_PICK_CANCEL: CritiqueEffect.NOOP,
+        UserIntent.PHOTO_REPLACE_FAIL: CritiqueEffect.NOOP,
+        UserIntent.EXPORT_CANCEL: CritiqueEffect.NOOP,
+        UserIntent.EXPORT_SAVE: CritiqueEffect.NOOP,
+        UserIntent.PAGE_BFCACHE: CritiqueEffect.NOOP,
+        UserIntent.SPEAK: CritiqueEffect.SUPERSEDE,
+        UserIntent.PHASE2_RETRY: CritiqueEffect.SUPERSEDE,
+        UserIntent.CLEAR: CritiqueEffect.DESTROY_SESSION,
+        UserIntent.PHOTO_REPLACE_SUCCESS: CritiqueEffect.DESTROY_SESSION,
+        UserIntent.PAGE_UNLOAD: CritiqueEffect.DESTROY_SESSION,
+    }
+    assert set(UserIntent) == set(expected)
+    for intent, effect in expected.items():
+        assert effect_for(intent) is effect
+        assert may_call_critique_cancel(intent) is False
+        assert keeps_photo(intent) is (effect is not CritiqueEffect.DESTROY_SESSION)
+
+
+def test_guided_force_restart_supersedes_running_without_cancel():
+    """言葉にするは cancel→idle ではなく、同じセッションで epoch を進める。"""
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "supersede.jpg"
+    Image.new("RGB", (80, 60), (21, 22, 23)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("supersede.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 1
+    sess["critique"] = {"status": "phase1_running", "lens": "self"}
+    parsed = parse_critique_text(PHASE1_SAMPLE)
+    with patch("guided_web.app.run_phase1", return_value=(PHASE1_SAMPLE, parsed)), patch(
+        "guided_web.app.run_phase2", return_value=(PHASE1_SAMPLE, parsed, [])
+    ):
+        start_res = client.post(
+            f"/api/session/{session_id}/critique",
+            json={"lens": "self", "user_note": "", "force_restart": True},
+        )
+    assert start_res.status_code == 200
+    assert start_res.json()["status"] in {"phase1_running", "phase2_running", "complete"}
+    assert sess["epoch"] == 2
+    assert sess["critique"].get("status") != "idle"
+    assert session_id in app_module._sessions
+
+
+def test_guided_destroy_bumps_epoch_so_stale_phase2_cannot_complete():
+    """クリアは idle にせずセッションを捨て、古い epoch の書き込みを無効化する。"""
+    import asyncio
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.session_cleanup import is_current_epoch
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "destroy.jpg"
+    Image.new("RGB", (80, 60), (31, 32, 33)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("destroy.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 1
+    sess["critique"] = {"status": "phase2_running", "lens": "self", "error": None}
+    held = sess
+    del_res = client.delete(f"/api/session/{session_id}")
+    assert del_res.status_code == 200
+    assert session_id not in app_module._sessions
+    assert not is_current_epoch(held, 1)
+    assert client.get(f"/api/session/{session_id}/critique").status_code == 404
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        asyncio.run(app_module._finish_phase2(session_id, "self", "", PHASE1_SAMPLE, epoch=1))
+    mock_phase2.assert_not_called()
+    assert held["critique"]["status"] == "phase2_running"
+
+
+def test_guided_photo_pick_cancel_keeps_existing_session():
+    """ピッカー Cancel は今の写真を捨てない。"""
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "keep_pick.jpg"
+    Image.new("RGB", (80, 60), (41, 42, 43)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        ok = client.post("/api/session/photo", files={"file": ("keep_pick.jpg", f, "image/jpeg")})
+    session_id = ok.json()["session_id"]
+    with patch("guided_web.app.pick_image_file", return_value=None):
+        cancelled = client.post("/api/session/photo-pick")
+    assert cancelled.status_code == 400
+    assert session_id in app_module._sessions
+    assert client.get(f"/api/session/{session_id}/preview").status_code == 200
+
+
+def test_guided_choose_screen_is_not_inert_when_visible():
+    from pathlib import Path
+
+    html = Path("guided_web/static/index.html").read_text(encoding="utf-8")
+    choose = html.split('id="screen-choose"')[1].split("<main")[0]
+    read = html.split('id="screen-read"')[1].split("<main")[0]
+    reflect = html.split('id="screen-reflect"')[1].split("<div id=\"toast-region\"")[0]
+    assert "inert" not in choose.split(">")[0]
+    assert "inert" in read.split(">")[0]
+    assert "inert" in reflect.split(">")[0]
 
 
 def run_all():
@@ -3880,6 +4040,11 @@ def run_all():
     test_native_dialog_cancel_does_not_fall_through_to_tk()
     test_guided_folder_pick_cancel_skips_tk_on_mac()
     test_guided_export_cancel_is_not_an_error()
+    test_guided_critique_lifecycle_intents_cover_every_operation()
+    test_guided_force_restart_supersedes_running_without_cancel()
+    test_guided_destroy_bumps_epoch_so_stale_phase2_cannot_complete()
+    test_guided_photo_pick_cancel_keeps_existing_session()
+    test_guided_choose_screen_is_not_inert_when_visible()
     print("test_offline_suite: OK")
 
 
