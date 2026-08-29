@@ -74,7 +74,7 @@
 - `ai_vision.py`: Vision API アダプタ層。`openai` / `gemini` を環境変数・モデル名で差し替え可能。`system_prompt` で伴走者ロールを渡す。
 - `critique_engine.py`: 2段階分離生成のオーケストレーション。デスクトップは `generate_critique_openai`、LINE は `generate_critique_for_line`（本番は compact/full とも OpenAI）。`lens` 引数（既定 `self`）。`phase1_override` で JPEG 埋め込み Phase1 を注入可。
 - `card_theme.py`: カード背景テーマ（`dark` / `light`）の識別子・パレット・正規化の**単一ソース**。
-- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。Desktop / LINE 共通。全周 50px 余白、文字エリア固定高さ（下揃え・タイトル上分割線・CRITIQUE_SUMMARY 最大3行・右下 128×128 ロゴ枠）、写真領域も固定で縦横比維持のまま最大化。SCORES フォントは SUMMARY と同サイズ。カード上のスコアは★のみ（`(n/5)` は出さない。ログは星＋数字）。免責文は出さない。
+- `generate_critique_card.py`: Pillow による 1080×1350px 講評カード画像生成。`critique_parser` からデータを受け取り描画。`theme` 引数でライト/ダーク切替。Desktop / LINE 共通。全周 50px 余白。読み順は写真 → TITLE → SUMMARY → CRITIQUE_SUMMARY（全幅・主役の言葉）→ SCORES（小さく二次、右下ロゴ帯）。写真領域は文字帯を除いて最大化（縦横比維持）。カード上のスコアは★のみ（`(n/5)` は出さない。ログは星＋数字）。免責文は出さない。
 - `scanner.py`: **【中央メタデータ解析エンジン】** 撮影 EXIF（exiftool→PIL）と講評用メタの単一入口。**Rating / user_intent は JPEG 正**（`iptc_rating_io`）。`.dop` は空欄時フォールバックのみ（正規表現＋Lua）。
 - `fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf`: カード描画用確定日本語バイナリフォント (5.5MB)。
 - `docs/PHASE_A_CHECKLIST.md`: Lumina Notes 感性対話刷新の Phase A ゲート（v1 / v1.1 / 将来）。
@@ -83,6 +83,7 @@
 - `docs/IPTC_SYNC_VERIFICATION.md`: JPEG Rating/Description 検証。**ファイル側＋DxO／プレビュー一方向＋双方向 PASS（2026-08-11）。§0 運用確定。**
 - `docs/R1A_IMPLEMENTATION_BREAKDOWN.md`: R1′-A 実装タスク分解（T0–T10）。**T0–T10 完了**。
 - `docs/CURRENT_APP_MAP.md`: **【いまの全体図】** Wave A/B/C 後の入口・2タブ・JPEG Phase1・LINE／Desktop 契約の地図。
+- `AGENTS.md`: **【AI／Cloud Agent 作業ルール】** 3段階レビュー、新しい会話の始め方、Linux と Mac の確認の切り分け。
 - `docs/R1A_REMAINING_TODO.md`: **【やり残し ToDo】** ストレス低減／Lumina Notes UX／AI 質の未着手・延期項目。
 - `docs/R1A_DESKTOP_WALKTHROUGH_BACKLOG.md`: **【検討課題】** デスクトップ・ウォークスルー（コンセプト緊張・UX・潜在バグ）。P1/M1–M5/L1–L5 対応済み。UX Wave A 計画は `docs/R1A_UX_IMPROVEMENT_PLAN.md`。
 - `docs/R1A_UX_IMPROVEMENT_PLAN.md`: **【UX 改善計画】** 再レビュー後の Wave A/B/C（ストレス低減・Lumina Notes 語彙・AI 質）。
@@ -93,6 +94,7 @@
 - `phase1_jpeg.py`: Phase1 講評テキスト ↔ JPEG Description の橋渡し（スクリーニングカード・Lumina Review 共用）。
 - `screening_cards.py`: スクリーニング単位の Rating 3/4 向け Compact カード生成＋ Phase1 IPTC 書込。
 - `line_messaging.py`: Wave C 以降、LINE 対話は ## 【1./【2./【3. で3通分割（カードは別途 Image）。旧4分割は legacy フォールバック。
+- `guided_web/`: **【P2-2 Guided Web】** ローカル FastAPI + ブラウザ 3 画面（選ぶ／読む／振り返る）。講評ライフサイクル正本は `guided_web/critique_lifecycle.py` と [`docs/P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`](docs/P2_2_GUIDED_CRITIQUE_LIFECYCLE.md)。
 - `library_unit.py`: **【ライブラリ単位】** 月 `YYYYMM|XXYYYYMM` / イベント `YYYYMMDD_名前|XXYYYYMMDD_名前`。Works は `YYYYMM` のみ。規則外サブフォルダはイベントにしない。`is_screening_jpeg`（旧 `is_shortlist_jpeg` は alias）。
 - `shortlist_mechanical.py` / `screening_mechanical.py`: **【M1 機械選別】** ブレ／露出の足切り＋低速SS・開放・意図的アンダーの意図保護。Rating 0/1。閾値は `MechanicalConfig`。（`screening_*` は Wave 3 再エクスポート）
 - `shortlist_antenna.py` / `screening_antenna.py`: **【M2 アンテナ】** 5軸軽量 Vision＋バッチ内相対熱量。合格 Rating=2＋`[M2]`。★絶対ゲート禁止。
@@ -116,6 +118,7 @@
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。Wave 2 以降の公式名は `{ym}Luminaノート/カード/ログ`（旧「写真分析*」「評価カード」は読込フォールバック）。
 - `PhotoAICritique.command`: レガシー講評バッチのダブルクリック起動（起動時に Console へ誘導。Gatekeeper属性の自動解除機能付き）。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
+- `guided_web/`: **【P2-2 Guided Web】** ローカル FastAPI＋ブラウザ（選ぶ／読む／振り返る）。起動は `scripts/run_guided_web.sh` / `LuminaNotesGuided.command`。作業ルールは `AGENTS.md`。次会話は `docs/START_NEXT_CONVERSATION.md`。ToDo 正本は `docs/P2_2_GUIDED_WEB_REVIEW_TODO.md`。PR #21 の枝で開発中。
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)
 - `main.py`: FastAPI Web サーバー。LINE Webhook ハンドリング、BackgroundTasks、`/health`。カード＋対話【1〜3】のあと反応 Quick Reply。
@@ -123,6 +126,7 @@
 - `prompt_contracts.py`: **【プロンプト契約】** 審判語禁止・時間帯禁止・人物分岐のオフライン回帰正本（P2-1 Q2/Q3）。
 - `scripts/summarize_h3_deltas.py` / `scripts/summarize_user_reactions.py`: H3 差分・LINE 反応の集計（Q5。自動書き換えなし）。手順は `docs/P2_1_PROMPT_IMPROVEMENT_LOOP.md`。
 - `docs/P2_2_PUBLIC_UX_CHARTER.md`: **【公開 UX 憲章】** ブランドブック準拠の体験合意（Guided／Console／LINE、ローカル Web）。`docs/brand/LuminaNotes_BrandBook_02.pdf`。
+- `docs/P2_2_PHASE2_CARD.md`: **【P2-2 Phase 2】** カード読み順（言葉が先・★二次）と CRITIQUE_SUMMARY の2拍。
 - `supabase_client.py`: Supabase DB (`user_settings`, `critique_logs`) および Storage (`critique-cards`)。`card_theme` と `critique_logs.user_reaction` を永続化。列追加 SQL: `supabase/add_card_theme.sql` / `supabase/add_user_reaction.sql`。
 - `retention_purge.py`: **30 日超**の `critique_logs` 行と `critique-cards` オブジェクトを削除。GitHub Actions `Monthly retention purge` で毎月実行（Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）。
 
@@ -132,6 +136,7 @@
 
 ### 開発・運用スタイル規定
 - **開発・テスト時**: ターミナルからのコピペ一発実行（CLIテストや単体テストスクリプト）で動作確認を行う。
+- **Cloud Agent**: Linux VM のブラウザ通過を、Mac の Tk・写真ピッカー・Control+C の完了証明にしない（詳細は `AGENTS.md`）。長いやり直しスレッドは区切って新しい会話で再開する。Guided の状態バグでは Fast モデルを使わない。
 - **push 前（任意・推奨）**: API キー不要の `python3 test_offline_suite.py`（パーサー・処理済み判定・LINE 対話3分割・カード生成レイアウト）。GitHub Actions `Offline tests` ワークフローが同内容を main で自動実行。カード見た目を変える変更では、同スイートのカード自動チェック（サイズ 1080×1350・破損なし・主要文字/写真の描画）を必ず更新・通過させる（規則1レビュー3）。
 - **本番の手動確認**: デスクトップ GUI または LINE で代表1枚（簡易/詳細）— OpenAI 実呼び出しは CI では行わない。
 - **本番運用時（Desktop）**: `LuminaNotesConsole.command` をダブルクリックし、スクリーニング／Lumina Review を実行する。旧一括講評は `PhotoAICritique.command`（レガシー）。

@@ -76,6 +76,40 @@ NO_PERSON_FORBIDDEN_PHRASES: tuple[str, ...] = (
 # 人物なしでも許す「視線」表現
 NO_PERSON_ALLOWED_GAZE_PHRASE = "観る者の視線"
 
+# ---------------------------------------------------------------------------
+# Q4: CRITIQUE_SUMMARY は見所＋「もう一度見る／次のシャッター」（N-03 定型は禁止）
+# ---------------------------------------------------------------------------
+
+# Phase1 指示に残すこと（2拍）
+CRITIQUE_SUMMARY_REQUIRED_BEATS: tuple[str, ...] = (
+    "見所",
+    "もう一度見る",
+    "次のシャッター",
+)
+
+# 指示文に「使わない／固定しない」として残すこと（N-03 再発防止）
+CRITIQUE_SUMMARY_TEMPLATE_BAN_MUST_APPEAR: tuple[str, ...] = (
+    "たのではないでしょうか",
+    "あなたは〇〇に惹かれたのでは",
+    "みませんか",
+)
+
+# 出力側: 見所のあと、往復の開きがあること（いずれか）
+CRITIQUE_SUMMARY_OUTPUT_RETURN_ANY_OF: tuple[str, ...] = (
+    "もう一度",
+    "次に",
+    "次の",
+    "同じ",
+)
+
+# 出力側: この語尾だけで終わるのは N-03 定型
+CRITIQUE_SUMMARY_OUTPUT_FORBIDDEN_ENDINGS: tuple[str, ...] = (
+    "たのではないでしょうか。",
+    "たのではないでしょうか",
+    "みませんか。",
+    "みませんか？",
+)
+
 
 def assert_time_ban_aligned_with_scanner() -> None:
     """PHASE_OUTPUT_TIME_BAN が scanner 禁止語の部分集合であること。"""
@@ -184,6 +218,37 @@ def check_output_forbid_fix_in_body(critique: str) -> dict:
 
 
 _TITLE_WS = re.compile(r"\s+")
+
+
+def check_phase1_critique_summary_contract(phase1: str) -> list[str]:
+    """Q4: Phase1 指示が見所＋往復の2拍で、N-03 定型を禁止していること。"""
+    errors: list[str] = []
+    text = phase1 or ""
+    for stem in CRITIQUE_SUMMARY_REQUIRED_BEATS:
+        if stem not in text:
+            errors.append(f"Phase1 CRITIQUE_SUMMARY missing beat: {stem!r}")
+    for stem in CRITIQUE_SUMMARY_TEMPLATE_BAN_MUST_APPEAR:
+        if stem not in text:
+            errors.append(
+                f"Phase1 CRITIQUE_SUMMARY no longer bans template: {stem!r}"
+            )
+    return errors
+
+
+def check_output_critique_summary_beats(critique: str) -> dict:
+    """出力の CRITIQUE_SUMMARY が見所だけでなく往復の開きを持ち、定型語尾で終わらないこと。"""
+    p1 = parse_critique_text(critique.split("\n---\n", 1)[0], lens=DEFAULT_LENS)
+    summary = (p1.get("point_text") or "").strip()
+    return_hits = find_forbidden_stems(summary, CRITIQUE_SUMMARY_OUTPUT_RETURN_ANY_OF)
+    ending_hits = [
+        e for e in CRITIQUE_SUMMARY_OUTPUT_FORBIDDEN_ENDINGS if summary.endswith(e)
+    ]
+    return {
+        "pass": bool(summary) and bool(return_hits) and not ending_hits,
+        "summary": summary,
+        "return_hits": return_hits,
+        "ending_hits": ending_hits,
+    }
 
 
 def check_output_title_len(critique: str, *, max_len: int = 15) -> dict:

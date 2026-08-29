@@ -29,10 +29,14 @@ from generate_critique_card import (
     CARD_HEIGHT,
     CARD_MARGIN,
     CARD_WIDTH,
+    CRITIQUE_FONT_SIZE,
     LOGO_SIZE,
     LOGO_TEXT_GAP,
+    SCORE_FONT_SIZE,
     SCORE_ROW_HEIGHT,
+    SUMMARY_FONT_SIZE,
     create_critique_card,
+    plan_card_layout,
     _fixed_text_block_height,
 )
 from line_messaging import split_full_critique_for_line
@@ -48,7 +52,7 @@ CARD_SAMPLE = """
 ・物語の気配 (Signs of the Story)      : ★★★☆☆ (3/5)
 ・表現の意図 (Intent of Expression) : ★★★★★ (5/5)
 ・感性の兆し (Signs of Sensibility)   : ★★★★☆ (4/5)
-■CRITIQUE_SUMMARY: 境界のきらめきと線の陰影が、見所として立ち上がる。好奇心を誘う一枚です。
+■CRITIQUE_SUMMARY: 境界のきらめきと線の陰影が、見所として立ち上がる。次に同じ反射に出会ったら、割れ目のどちらを残すかだけ決めてみる。
 """
 
 PHASE1_SAMPLE = """
@@ -137,9 +141,13 @@ def test_self_lens_prompts():
     assert "花の佇まい" in p1  # 禁止例がプロンプトに残っていること
     assert "一文目" in p1
     assert "撮影日時" not in p1  # Phase1 に時計を渡さない（規則5）
-    # N-03: CRITIQUE_SUMMARY プロンプトを 20260808 版へ戻す
-    assert "効果的な見所を主体に、読者の好奇心を煽る文章" in p1
-    assert "あなたは〇〇に惹かれたのでは" not in p1
+    # Q4: 見所＋もう一度見る／次のシャッター。N-03 定型は禁止として残す
+    assert "見所" in p1
+    assert "もう一度見る" in p1
+    assert "次のシャッター" in p1
+    assert "たのではないでしょうか" in p1  # 禁止例として残っていること
+    assert "あなたは〇〇に惹かれたのでは" in p1  # 禁止例として残っていること
+    assert "効果的な見所を主体に、読者の好奇心を煽る文章" not in p1
     p2 = build_phase2_prompt(
         ctx, "■TITLE: t\n■SCORES:\n・眼差の輪郭 (Contours of the Eyes)  : ★★★☆☆ (3/5)"
     )
@@ -514,23 +522,26 @@ def test_critique_summary_short_keeps_fixed_image_area():
 def test_n01_no_disclaimer_on_card_and_lens():
     """N-01: 免責文はレンズ空・カードに「目盛り」文言を描かない。"""
     assert get_lens().score_disclaimer == ""
-    # 免責を描かなくなったぶん、文字ブロックはロゴ＋スコアだけで免責行分短い
-    # （以前は +28。厳密値より「免責行を含まない」ことだけ保証）
-    h = _fixed_text_block_height()
-    assert h == (
-        1
-        + 18  # title line
-        + 50
-        + 38
-        + 4
-        + 1
-        + 18  # score line
-        + 5 * SCORE_ROW_HEIGHT
-        + 12
-        + 1
-        + 18  # critique line
-        + LOGO_SIZE
-    )
+    layout = plan_card_layout()
+    assert layout.text_height == _fixed_text_block_height()
+    assert layout.text_height > LOGO_SIZE
+    # 免責行を高さに足していない（空なら DISCLAIMER 分が無い）
+    from generate_critique_card import DISCLAIMER_LINE_HEIGHT
+
+    with_disclaimer_extra = layout.text_height + DISCLAIMER_LINE_HEIGHT
+    assert _fixed_text_block_height() < with_disclaimer_extra
+
+
+def test_p2_2_card_words_before_stars():
+    """U1/Q1: 言葉が★より上・大きく、写真が文字帯より広い。"""
+    assert SCORE_FONT_SIZE < SUMMARY_FONT_SIZE
+    assert CRITIQUE_FONT_SIZE >= SUMMARY_FONT_SIZE
+    assert SCORE_FONT_SIZE < CRITIQUE_FONT_SIZE
+    layout = plan_card_layout()
+    assert layout.summary_y < layout.critique_y < layout.scores_y
+    assert layout.critique_max_w > layout.score_text_max_w
+    assert layout.img_max_h > layout.text_height
+    assert SCORE_ROW_HEIGHT < 36
 
 
 def test_n04_score_label_fits_before_stars():
@@ -2305,6 +2316,10 @@ def test_prompt_contracts_judge_vocab_and_time_ban_alignment():
     assert not errors, errors
     time_errors = check_phase1_time_ban_in_prompt(p1)
     assert not time_errors, time_errors
+    from prompt_contracts import check_phase1_critique_summary_contract
+
+    q4_errors = check_phase1_critique_summary_contract(p1)
+    assert not q4_errors, q4_errors
 
 
 def test_phase_d_offline_fixtures_person_and_time():
@@ -2327,6 +2342,13 @@ def test_phase_d_offline_fixtures_person_and_time():
     assert not check_output_time_ban(time_fail)["pass"]
     assert check_output_time_ban(person)["pass"]
     assert check_output_time_ban(no_ok)["pass"]
+
+    from prompt_contracts import check_output_critique_summary_beats
+
+    q4_ok = (root / "critique_summary_q4_pass.txt").read_text(encoding="utf-8")
+    q4_fail = (root / "critique_summary_template_fail.txt").read_text(encoding="utf-8")
+    assert check_output_critique_summary_beats(q4_ok)["pass"]
+    assert not check_output_critique_summary_beats(q4_fail)["pass"]
 
 
 def test_q5_summarize_h3_and_reactions_scripts():
@@ -2464,6 +2486,1502 @@ def test_dry_run_session_rejects_record_post_h3():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_guided_futei_band_tokyo_summer_day():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band
+
+    tz = ZoneInfo("Asia/Tokyo")
+    lat, lon = 35.68, 139.76
+    # 夏至付近の昼（ローカル正午付近）
+    noon = datetime(2026, 6, 21, 12, 0, 0, tzinfo=tz)
+    band = classify_futei_band(noon, lat, lon, tz)
+    assert band in {"正午（九）", "午後（八）", "午前（四）"}
+
+
+def test_guided_futei_band_night():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band
+
+    tz = ZoneInfo("Asia/Tokyo")
+    lat, lon = 35.68, 139.76
+    night = datetime(2026, 6, 21, 2, 0, 0, tzinfo=tz)
+    assert classify_futei_band(night, lat, lon, tz) == "夜"
+
+
+def test_guided_timezone_anchor_tokyo():
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import timezone_anchor
+
+    lat, lon, region = timezone_anchor(ZoneInfo("Asia/Tokyo"))
+    assert region == "東京"
+    assert 35.0 < lat < 36.0
+    assert 139.0 < lon < 140.0
+
+
+def test_guided_futei_band_without_gps_uses_timezone_anchor():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band, timezone_anchor
+
+    tz = ZoneInfo("Asia/Tokyo")
+    lat, lon, _ = timezone_anchor(tz)
+    noon = datetime(2026, 6, 21, 12, 0, 0, tzinfo=tz)
+    band = classify_futei_band(noon, lat, lon, tz)
+    assert band in {"正午（九）", "午後（八）", "午前（四）"}
+
+
+def test_guided_resolve_region_without_gps():
+    from zoneinfo import ZoneInfo
+
+    from guided_metadata import resolve_city_region
+
+    region = resolve_city_region(None, None, {}, geocode=False, tz=ZoneInfo("Asia/Tokyo"))
+    assert region == "東京"
+
+
+def test_guided_api_parameters_shape():
+    from guided_metadata import GuidedApiParameters, GuidedCameraSettings, GuidedImageInfo
+
+    p = GuidedApiParameters(
+        image=GuidedImageInfo(
+            image_id="abc",
+            size="100x100",
+            shot_at="2026-01-01T12:00:00+09:00",
+            timezone="Asia/Tokyo",
+            region="東京",
+            time_band="正午（九）",
+        ),
+        camera=GuidedCameraSettings(
+            focal_length="50mm",
+            aperture="f/2.8",
+            shutter_speed="1/125s",
+            iso="ISO 400",
+            mode="マニュアル",
+            exposure_compensation="+0.0 EV",
+        ),
+    )
+    d = p.to_dict()
+    assert d["image"]["image_id"] == "abc"
+    assert d["camera"]["shutter_speed"] == "1/125s"
+    assert "time_band" in d["image"]
+
+
+def test_guided_parameter_display_rows():
+    from guided_web.parameter_display import build_parameter_display
+
+    display = build_parameter_display(
+        {
+            "image": {
+                "size": "4032x3024",
+                "shot_at": "2026-06-21T12:00:00+09:00",
+                "timezone": "Asia/Tokyo",
+                "region": "東京",
+                "time_band": "正午（九）",
+            },
+            "camera": {
+                "focal_length": "50mm",
+                "aperture": "f/2.8",
+                "shutter_speed": "1/125s",
+                "iso": "ISO 400",
+                "mode": "マニュアル",
+                "exposure_compensation": "+0.0 EV",
+            },
+        },
+        file_name="sample.jpg",
+    )
+    assert display[0]["title"] == "画像情報"
+    assert display[1]["title"] == "カメラ設定"
+    assert display[0]["rows"][0] == {"key": "file_name", "label": "ファイル名", "value": "sample.jpg"}
+    assert display[0]["rows"][5]["label"] == "時間帯"
+    assert display[1]["rows"][0]["label"] == "焦点距離"
+
+
+def test_guided_upload_returns_parameter_display():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "params.jpg"
+    Image.new("RGB", (80, 60), (90, 100, 110)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("params.jpg", f, "image/jpeg")})
+    assert res.status_code == 200
+    data = res.json()
+    assert "parameter_display" in data
+    assert data["parameter_display"][0]["title"] == "画像情報"
+    assert any(row["label"] == "撮影日時" for row in data["parameter_display"][0]["rows"])
+    assert data["parameter_display"][0]["rows"][0]["label"] == "ファイル名"
+    assert data["parameter_display"][0]["rows"][0]["value"] == "params.jpg"
+
+
+def test_guided_photo_response_omits_identifying_local_fields():
+    """ブラウザ応答にフルパス・メタ抜粋・生 GPS を載せない。"""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "private.jpg"
+    Image.new("RGB", (80, 60), (1, 2, 3)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("private.jpg", f, "image/jpeg")})
+    assert res.status_code == 200
+    data = res.json()
+    assert "session_id" in data
+    assert "parameter_display" in data
+    assert "local_meta_preview" not in data
+    assert "original_path" not in data
+    assert "meta_block" not in data
+    blob = json.dumps(data)
+    assert "gps_lat" not in blob
+    assert "GPSLatitude" not in blob
+    sess = app_module._sessions[data["session_id"]]
+    assert "original_path" in sess
+    assert "meta_block" in sess
+
+
+def test_guided_upload_rejects_unreadable_image():
+    import tempfile
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    fake = td / "fake.jpg"
+    fake.write_text("not-a-jpeg", encoding="utf-8")
+    with fake.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("fake.jpg", f, "image/jpeg")})
+    assert res.status_code == 400
+    assert res.json()["detail"] == "unreadable image"
+
+
+def test_guided_unreadable_upload_keeps_existing_session():
+    """壊れたファイルの upload は既存セッションを消さない（失敗時は差し替えない）。"""
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "ok.jpg"
+    Image.new("RGB", (80, 60), (12, 34, 56)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        ok = client.post("/api/session/photo", files={"file": ("ok.jpg", f, "image/jpeg")})
+    assert ok.status_code == 200
+    session_id = ok.json()["session_id"]
+    file_name = ok.json()["file_name"]
+
+    fake = td / "fake.jpg"
+    fake.write_text("not-a-jpeg", encoding="utf-8")
+    with fake.open("rb") as f:
+        bad = client.post("/api/session/photo", files={"file": ("fake.jpg", f, "image/jpeg")})
+    assert bad.status_code == 400
+    assert session_id in app_module._sessions
+    preview = client.get(f"/api/session/{session_id}/preview")
+    assert preview.status_code == 200
+    status = client.get(f"/api/session/{session_id}/critique")
+    assert status.status_code == 200
+    assert file_name == "ok.jpg"
+
+
+def test_guided_card_footer_metadata():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+
+    from guided_web.guided_card import create_guided_card
+
+    td = Path(tempfile.mkdtemp(prefix="guided_card_"))
+    jpeg = td / "sample.jpg"
+    out = td / "card.png"
+    Image.new("RGB", (240, 180), (70, 80, 90)).save(jpeg, "JPEG")
+    create_guided_card(
+        jpeg,
+        PHASE1_SAMPLE,
+        out,
+        theme="dark",
+        user_note="静かな午後",
+        user_stars=3,
+        file_name="sample.jpg",
+    )
+    assert out.is_file()
+    with Image.open(out) as card:
+        assert card.size == (1080, 1350)
+
+
+def test_guided_body_sections_split():
+    from guided_web.body_sections import split_critique_sections
+
+    body = "【1. 第一印象】\n一行目\n【2. 情景描写】\n二行目"
+    secs = split_critique_sections(body)
+    assert len(secs) == 2
+    assert secs[1]["id"] == "2"
+
+
+def test_guided_stock_export_writes_files():
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+
+    from guided_web.stock_export import export_guided_session, export_output_names
+
+    td = Path(tempfile.mkdtemp(prefix="guided_export_"))
+    try:
+        jpeg = td / "sample.jpg"
+        Image.new("RGB", (200, 150), (80, 90, 100)).save(jpeg, "JPEG", quality=90)
+        session = {
+            "path": str(jpeg),
+            "preview_path": str(jpeg),
+            "original_filename": "sample.jpg",
+            "original_path": "/Users/me/Pictures/sample.jpg",
+            "meta_block": "=== EXIF ===\nテスト",
+            "api_params": {"image": {"image_id": "test123"}},
+            "critique": {
+                "lens": "self",
+                "phase1_raw": PHASE1_SAMPLE,
+            },
+        }
+        save_root = td / "stock"
+        save_root.mkdir()
+        assert export_output_names("sample.jpg") == ("sample_LN.png", "sample_LN.md")
+        files = export_guided_session(
+            session,
+            save_dir=save_root,
+            user_stars=4,
+            card_theme="light",
+            user_note="テスト一言",
+            reflections={
+                "noticed_see": {"checked": True, "text": "", "label": "写真を見て"},
+                "thought_scene": {"checked": True, "text": "", "label": "その時の情景"},
+            },
+        )
+        assert (save_root / "sample_LN.png").is_file()
+        assert (save_root / "sample_LN.md").is_file()
+        assert not (save_root / "photo.jpg").exists()
+        note_text = (save_root / "sample_LN.md").read_text(encoding="utf-8")
+        assert "=== 振り返り ===" in note_text
+        assert "オリジナルファイルのパス: /Users/me/Pictures/sample.jpg" in note_text
+        assert "★ 思い: 4/5" in note_text
+        assert "一言: テスト一言" in note_text
+        assert "振り返りメモ: 写真を見て, その時の情景" in note_text
+        assert "気づいたことがある" in note_text
+        assert "☑ 写真を見て" in note_text
+        assert "⬜ 言葉にして" in note_text
+        assert "☑ その時の情景" in note_text
+        reflect_pos = note_text.index("=== 振り返り ===")
+        path_pos = note_text.index("オリジナルファイルのパス:")
+        stars_pos = note_text.index("★ 思い:")
+        note_pos = note_text.index("一言:")
+        noticed_pos = note_text.index("気づいたことがある")
+        memo_pos = note_text.index("振り返りメモ:")
+        exported_pos = note_text.index("書き出し日時:")
+        assert reflect_pos < path_pos < stars_pos < note_pos < noticed_pos < memo_pos < exported_pos
+        assert files["card"].endswith("sample_LN.png")
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_format_reflections_block():
+    from guided_web.reflect_prompts import format_reflections_block
+
+    block = format_reflections_block(
+        {
+            "noticed_see": {"checked": True, "text": "", "label": "写真を見て"},
+            "noticed_words": {"checked": False, "text": "", "label": "言葉にして"},
+            "photo_book": {"checked": True, "text": "", "label": "フォトブックにしたい"},
+        }
+    )
+    assert "気づいたことがある" in block
+    assert "☑ 写真を見て" in block
+    assert "⬜ 言葉にして" in block
+    assert "☑ フォトブックにしたい" in block
+    assert "振り返りメモ" not in block
+
+
+def test_guided_privacy_prompts_exclude_identifying_metadata():
+    from guided_web.guided_privacy import (
+        GuidedCritiqueContext,
+        assert_prompt_is_privacy_safe,
+        build_guided_phase1_prompt,
+        build_guided_phase2_prompt,
+    )
+
+    api_params = {
+        "image": {
+            "image_id": "sess123",
+            "size": "4032x3024",
+            "shot_at": "2026-06-21T12:00:00+09:00",
+            "timezone": "Asia/Tokyo",
+            "region": "東京",
+            "time_band": "正午（九）",
+        },
+        "camera": {
+            "focal_length": "50mm",
+            "aperture": "f/2.8",
+            "shutter_speed": "1/250",
+            "iso": "400",
+            "mode": "マニュアル",
+            "exposure_compensation": "0EV",
+        },
+    }
+    ctx = GuidedCritiqueContext.from_api_params(api_params, user_note="静かな午後")
+    p1 = build_guided_phase1_prompt(ctx)
+    p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
+    assert "東京" in p1
+    assert "正午（九）" in p1
+    assert "静かな午後" in p2
+    assert "抽象パラメータ" in p1
+    assert_prompt_is_privacy_safe(p1)
+    assert_prompt_is_privacy_safe(p2)
+
+
+def test_guided_privacy_audit_whitelist():
+    import json
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import guided_web.guided_privacy as gp
+
+    td = Path(tempfile.mkdtemp(prefix="guided_privacy_"))
+    old_path = gp._AUDIT_PATH
+    try:
+        gp._AUDIT_PATH = td / "audit.jsonl"
+        api_params = {
+            "image": {
+                "image_id": "abc",
+                "size": "100x100",
+                "shot_at": "2026-01-01T12:00:00+09:00",
+                "timezone": "Asia/Tokyo",
+                "region": "東京",
+                "time_band": "夜",
+                "file_name": "secret.jpg",
+                "gps_lat": 35.68,
+            },
+            "camera": {
+                "focal_length": "35mm",
+                "aperture": "f/4",
+                "shutter_speed": "1/60",
+                "iso": "800",
+                "mode": "絞り優先",
+                "exposure_compensation": "-0.3EV",
+                "camera_model": "Secret Camera",
+            },
+        }
+        gp.record_api_audit(session_id="sess1", api_params=api_params, user_note="hi")
+        line = gp._AUDIT_PATH.read_text(encoding="utf-8").strip()
+        entry = json.loads(line)
+        audited = entry["api_parameters"]
+        assert "file_name" not in audited.get("image", {})
+        assert "gps_lat" not in audited.get("image", {})
+        assert "camera_model" not in audited.get("camera", {})
+        assert audited["image"]["region"] == "東京"
+        assert entry["user_note_sha256"]
+    finally:
+        gp._AUDIT_PATH = old_path
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_critique_runner_uses_api_params():
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from guided_web.critique_runner import run_phase1
+
+    captured: dict = {}
+
+    def fake_generate(image_path, api_params, **kwargs):
+        captured["api_params"] = api_params
+        captured["kwargs"] = kwargs
+        return "■TITLE: T\n■SUMMARY: S\n■SCORES:\n感性: ★★★☆☆ (3/5)\n■CRITIQUE_SUMMARY: テスト"
+
+    api_params = {
+        "image": {"image_id": "x", "region": "東京", "time_band": "夜"},
+        "camera": {"iso": "400"},
+    }
+    with patch("guided_web.critique_runner.generate_guided_critique", fake_generate):
+        run_phase1(Path("dummy.jpg"), api_params, lens="self", user_note="note", session_id="sid")
+    assert captured["api_params"] is api_params
+    assert captured["kwargs"]["session_id"] == "sid"
+    assert captured["kwargs"]["user_note"] == "note"
+
+
+def test_guided_selected_reflection_labels():
+    from guided_web.reflect_prompts import selected_reflection_labels
+
+    labels = selected_reflection_labels(
+        {
+            "noticed_see": {"checked": True, "text": "", "label": "写真を見て"},
+            "photo_keep": {"checked": True, "text": "アルバムに", "label": "手元に置いておきたい"},
+        }
+    )
+    assert labels == ["写真を見て", "アルバムに"]
+
+
+def test_guided_settings_save_folder_roundtrip():
+    import json
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import guided_web.settings as gs
+
+    td = Path(tempfile.mkdtemp(prefix="guided_settings_"))
+    old_path = gs._SETTINGS_PATH
+    try:
+        gs._SETTINGS_PATH = td / "guided_settings.json"
+        folder = td / "chosen"
+        folder.mkdir()
+        resolved = gs.set_save_folder(folder)
+        assert resolved == folder.resolve()
+        loaded = gs.get_save_folder()
+        assert loaded == folder.resolve()
+        data = json.loads(gs._SETTINGS_PATH.read_text(encoding="utf-8"))
+        assert data["save_folder"] == str(folder.resolve())
+        photos = td / "photos"
+        photos.mkdir()
+        export = td / "export"
+        export.mkdir()
+        gs.set_save_folder(export)
+        gs.set_photo_folder(photos)
+        assert gs.get_save_folder() == export.resolve()
+        assert gs.get_photo_folder() == photos.resolve()
+        data = json.loads(gs._SETTINGS_PATH.read_text(encoding="utf-8"))
+        assert data["save_folder"] == str(export.resolve())
+        assert data["photo_folder"] == str(photos.resolve())
+        tmp_session = td / "lumina_guided" / "sid"
+        tmp_session.mkdir(parents=True)
+        skipped = gs.remember_photo_source(tmp_session / "x.jpg")
+        assert skipped is None
+        assert gs.get_photo_folder() == photos.resolve()
+        remembered = gs.remember_photo_source(photos / "shot.jpg")
+        assert remembered == photos.resolve()
+    finally:
+        gs._SETTINGS_PATH = old_path
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_session_delete_removes_temp_dir():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.session_cleanup import guided_temp_root
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "cleanup.jpg"
+    Image.new("RGB", (80, 60), (90, 100, 110)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("cleanup.jpg", f, "image/jpeg")})
+    assert res.status_code == 200
+    session_id = res.json()["session_id"]
+    temp_dir = guided_temp_root() / session_id
+    assert temp_dir.is_dir()
+
+    del_res = client.delete(f"/api/session/{session_id}")
+    assert del_res.status_code == 200
+    assert del_res.json() == {"ok": True}
+    assert not temp_dir.exists()
+    assert client.get(f"/api/session/{session_id}/critique").status_code == 404
+
+
+def test_guided_phase2_retry_restarts_background():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "retry.jpg"
+    Image.new("RGB", (80, 60), (40, 50, 60)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("retry.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    app_module._sessions[session_id]["critique"] = {
+        "status": "error",
+        "error": "timeout",
+        "lens": "self",
+        "user_note": "note",
+        "phase1_raw": PHASE1_SAMPLE,
+        "phase1_parsed": parse_critique_text(PHASE1_SAMPLE),
+    }
+
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        mock_phase2.return_value = (
+            PHASE1_SAMPLE + PHASE2_SAMPLE,
+            parse_critique_text(PHASE2_SAMPLE),
+            [{"id": "1", "heading": "【1】", "text": "one"}],
+        )
+        retry_res = client.post(f"/api/session/{session_id}/critique/phase2/retry")
+    assert retry_res.status_code == 200
+    assert retry_res.json()["status"] == "phase2_running"
+    mock_phase2.assert_called_once()
+
+    crit = client.get(f"/api/session/{session_id}/critique").json()
+    assert crit["status"] == "complete"
+    assert crit["sections"]
+
+
+def test_guided_purge_orphan_temp_keeps_live_sessions():
+    import tempfile
+    from pathlib import Path
+
+    from guided_web.session_cleanup import purge_orphan_temp, remove_tree
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_guided_test_"))
+    live_dir = root / "live1"
+    live_dir.mkdir()
+    (live_dir / "keep.txt").write_text("keep", encoding="utf-8")
+    orphan = root / "orphan1"
+    orphan.mkdir()
+    (orphan / "gone.txt").write_text("gone", encoding="utf-8")
+    staging = root / "upload_abc"
+    staging.mkdir()
+    try:
+        sessions = {"live1": {"temp_dir": str(live_dir)}}
+        removed = purge_orphan_temp(sessions, root=root)
+        assert "orphan1" in removed
+        assert "upload_abc" in removed
+        assert "live1" not in removed
+        assert live_dir.is_dir()
+        assert not orphan.exists()
+        assert not staging.exists()
+    finally:
+        remove_tree(root)
+
+
+def test_guided_shutdown_sessions_removes_all():
+    import tempfile
+    from pathlib import Path
+
+    from guided_web.session_cleanup import remove_tree, shutdown_sessions
+
+    root = Path(tempfile.mkdtemp(prefix="lumina_guided_shut_"))
+    a = root / "a"
+    b = root / "b"
+    a.mkdir()
+    b.mkdir()
+    leftover = root / "upload_left"
+    leftover.mkdir()
+    sessions = {
+        "a": {"temp_dir": str(a)},
+        "b": {"temp_dir": str(b)},
+    }
+    try:
+        result = shutdown_sessions(sessions, root=root)
+        assert result["dropped"] == 2
+        assert "upload_left" in result["orphans"]
+        assert sessions == {}
+        assert not a.exists()
+        assert not b.exists()
+        assert not leftover.exists()
+    finally:
+        remove_tree(root)
+
+
+def test_guided_session_release_is_idempotent():
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    missing = "missing-session-id"
+    del_res = client.delete(f"/api/session/{missing}")
+    assert del_res.status_code == 200
+    assert del_res.json() == {"ok": True}
+    rel_res = client.post(f"/api/session/{missing}/release")
+    assert rel_res.status_code == 200
+    assert rel_res.json() == {"ok": True}
+
+
+def test_guided_lifespan_purges_orphans_and_shutdown_sessions():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.session_cleanup import guided_temp_root
+
+    root = guided_temp_root()
+    orphan = root / "orphan_lifespan_test"
+    orphan.mkdir(parents=True, exist_ok=True)
+    (orphan / "junk.txt").write_text("x", encoding="utf-8")
+
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "life.jpg"
+    Image.new("RGB", (80, 60), (20, 30, 40)).save(jpeg, "JPEG")
+    session_id = None
+    temp_dir = None
+    with TestClient(app_module.app) as client:
+        assert not orphan.exists()
+        with jpeg.open("rb") as f:
+            res = client.post("/api/session/photo", files={"file": ("life.jpg", f, "image/jpeg")})
+        assert res.status_code == 200
+        session_id = res.json()["session_id"]
+        temp_dir = root / session_id
+        assert temp_dir.is_dir()
+        assert client.get("/api/health").json()["status"] == "ok"
+
+    assert session_id not in app_module._sessions
+    assert not temp_dir.exists()
+
+
+def test_guided_critique_rejects_parallel_without_restart():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "lock.jpg"
+    Image.new("RGB", (80, 60), (11, 22, 33)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("lock.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    app_module._sessions[session_id]["critique"] = {
+        "status": "phase1_running",
+        "lens": "self",
+    }
+    with patch("guided_web.app.run_phase1") as mock_phase1:
+        locked = client.post(
+            f"/api/session/{session_id}/critique",
+            json={"lens": "self", "force_restart": False},
+        )
+    assert locked.status_code == 409
+    assert locked.json()["status"] == "phase1_running"
+    mock_phase1.assert_not_called()
+
+
+def test_guided_phase2_ignores_stale_epoch():
+    import asyncio
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "epoch.jpg"
+    Image.new("RGB", (80, 60), (50, 60, 70)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("epoch.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 2
+    sess["critique"] = {"status": "phase2_running", "lens": "self", "error": None}
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        asyncio.run(app_module._finish_phase2(session_id, "self", "", PHASE1_SAMPLE, epoch=1))
+    mock_phase2.assert_not_called()
+    assert sess["critique"]["status"] == "phase2_running"
+
+
+def test_guided_cancel_critique_keeps_photo_and_discards_stale_phase2():
+    import asyncio
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "cancel.jpg"
+    Image.new("RGB", (80, 60), (15, 25, 35)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("cancel.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 1
+    sess["critique"] = {
+        "status": "phase1_running",
+        "lens": "self",
+        "user_note": "note",
+        "phase1_raw": PHASE1_SAMPLE,
+    }
+
+    cancel_res = client.post(f"/api/session/{session_id}/critique/cancel")
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "idle"
+    assert sess["epoch"] == 2
+    assert client.get(f"/api/session/{session_id}/preview").status_code == 200
+
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        asyncio.run(app_module._finish_phase2(session_id, "self", "note", PHASE1_SAMPLE, epoch=1))
+    mock_phase2.assert_not_called()
+    assert sess["critique"]["status"] == "idle"
+
+
+def test_guided_cancel_complete_critique_is_noop():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "keep.jpg"
+    Image.new("RGB", (80, 60), (40, 50, 60)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("keep.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    parsed = parse_critique_text(PHASE1_SAMPLE)
+    sess["epoch"] = 4
+    sess["critique"] = {
+        "status": "complete",
+        "lens": "self",
+        "user_note": "keep me",
+        "phase1_raw": PHASE1_SAMPLE,
+        "phase1_parsed": parsed,
+        "full_raw": PHASE1_SAMPLE,
+        "full_parsed": parsed,
+        "sections": [],
+    }
+    cancel_res = client.post(f"/api/session/{session_id}/critique/cancel")
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "complete"
+    assert sess["epoch"] == 4
+    assert sess["critique"]["phase1_raw"] == PHASE1_SAMPLE
+
+
+def test_guided_cancel_then_force_restart_starts_fresh():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "restart.jpg"
+    Image.new("RGB", (80, 60), (9, 10, 11)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("restart.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 1
+    sess["critique"] = {"status": "phase1_running", "lens": "self"}
+    assert client.post(f"/api/session/{session_id}/critique/cancel").json()["status"] == "idle"
+
+    parsed = parse_critique_text(PHASE1_SAMPLE)
+    with patch("guided_web.app.run_phase1", return_value=(PHASE1_SAMPLE, parsed)), patch(
+        "guided_web.app.run_phase2", return_value=(PHASE1_SAMPLE, parsed, [])
+    ):
+        start_res = client.post(
+            f"/api/session/{session_id}/critique",
+            json={"lens": "self", "user_note": "", "force_restart": True},
+        )
+    assert start_res.status_code == 200
+    assert start_res.json()["status"] in {"phase1_running", "phase2_running", "complete"}
+    assert sess["epoch"] == 3
+
+
+def test_guided_photo_pick_uses_ui_executor_while_critique_runs():
+    """講評中でも写真選択が AI 実行器を待たない。"""
+    import threading
+    import time
+    from concurrent.futures import wait as wait_futures
+    from unittest.mock import patch
+
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    started = threading.Semaphore(0)
+    release = threading.Event()
+
+    def blocking_worker():
+        started.release()
+        release.wait(timeout=8)
+
+    critique_exec = app_module._get_critique_executor()
+    futures = [critique_exec.submit(blocking_worker) for _ in range(2)]
+    assert started.acquire(timeout=2)
+    assert started.acquire(timeout=2)
+
+    picked_called = {"n": 0}
+
+    def fake_pick(_initial):
+        picked_called["n"] += 1
+        return None
+
+    client = TestClient(app_module.app)
+    result = {}
+
+    def do_pick():
+        t0 = time.monotonic()
+        with patch("guided_web.app.pick_image_file", side_effect=fake_pick):
+            result["res"] = client.post("/api/session/photo-pick")
+        result["elapsed"] = time.monotonic() - t0
+
+    try:
+        t = threading.Thread(target=do_pick)
+        t.start()
+        t.join(timeout=2.5)
+        assert not t.is_alive()
+        assert result["res"].status_code == 400
+        assert picked_called["n"] == 1
+        assert result["elapsed"] < 2.0, result["elapsed"]
+    finally:
+        release.set()
+        wait_futures(futures, timeout=3)
+
+
+def test_guided_ui_and_critique_executors_are_separate():
+    from guided_web import app as app_module
+
+    ui = app_module._get_ui_executor()
+    ai = app_module._get_critique_executor()
+    assert ui is not ai
+    assert ui._thread_name_prefix != ai._thread_name_prefix
+
+
+def test_guided_photo_pick_opens_photo_folder_not_export_folder():
+    import shutil
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    import guided_web.settings as gs
+
+    td = Path(tempfile.mkdtemp(prefix="guided_folders_"))
+    photos = td / "camera_roll"
+    export = td / "notes_out"
+    photos.mkdir()
+    export.mkdir()
+    old_path = gs._SETTINGS_PATH
+    captured = {}
+
+    def fake_pick(initial):
+        captured["initial"] = Path(initial) if initial else None
+        return None
+
+    try:
+        gs._SETTINGS_PATH = td / "guided_settings.json"
+        gs.set_photo_folder(photos)
+        gs.set_save_folder(export)
+        client = TestClient(app_module.app)
+        with patch("guided_web.app.pick_image_file", side_effect=fake_pick):
+            res = client.post("/api/session/photo-pick")
+        assert res.status_code == 400
+        assert captured["initial"] == photos.resolve()
+        assert captured["initial"] != export.resolve()
+    finally:
+        gs._SETTINGS_PATH = old_path
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_guided_stale_cancel_does_not_kill_newer_critique():
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "stale.jpg"
+    Image.new("RGB", (80, 60), (3, 4, 5)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("stale.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 6
+    sess["critique"] = {"status": "phase1_running", "lens": "self"}
+    stale = client.post(f"/api/session/{session_id}/critique/cancel?epoch=5")
+    assert stale.status_code == 200
+    assert stale.json()["status"] == "phase1_running"
+    assert sess["epoch"] == 6
+    current = client.post(f"/api/session/{session_id}/critique/cancel?epoch=6")
+    assert current.json()["status"] == "idle"
+    assert sess["epoch"] == 7
+
+
+def test_guided_live_cancel_and_clear_during_slow_phase1():
+    """講評 POST が Phase1 を待たないので、待ち中のキャンセルとクリアがすぐ終わる。"""
+    import socket
+    import threading
+    import time
+    from pathlib import Path
+    from unittest.mock import patch
+
+    import httpx
+    import uvicorn
+    from PIL import Image
+
+    from guided_web import app as app_module
+
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    phase1_entered = threading.Event()
+    phase1_release = threading.Event()
+
+    def slow_phase1(*_args, **_kwargs):
+        phase1_entered.set()
+        phase1_release.wait(timeout=10)
+        raise RuntimeError("slow fixture")
+
+    config = uvicorn.Config(
+        app_module.app,
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    base = f"http://127.0.0.1:{port}"
+    jpeg = Path("/tmp/guided_web_test/live.jpg")
+    jpeg.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (64, 48), (12, 34, 56)).save(jpeg, "JPEG")
+
+    with patch("guided_web.app.shutdown_sessions", return_value={"dropped": 0, "orphans": []}), patch(
+        "guided_web.app._shutdown_executors", lambda: None
+    ), patch("guided_web.app.run_phase1", side_effect=slow_phase1), patch(
+        "guided_web.app.run_phase2", side_effect=AssertionError("phase2 should not run")
+    ):
+        thread.start()
+        try:
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                try:
+                    httpx.get(f"{base}/api/health", timeout=0.3).raise_for_status()
+                    break
+                except Exception:
+                    time.sleep(0.05)
+            else:
+                raise AssertionError("uvicorn did not start")
+
+            with httpx.Client(base_url=base, timeout=5.0) as client:
+                up = client.post("/api/session/photo", files={"file": ("live.jpg", jpeg.read_bytes(), "image/jpeg")})
+                assert up.status_code == 200
+                sid = up.json()["session_id"]
+                t0 = time.monotonic()
+                start = client.post(
+                    f"/api/session/{sid}/critique",
+                    json={"lens": "self", "user_note": "", "force_restart": True},
+                )
+                start_elapsed = time.monotonic() - t0
+                assert start.status_code == 200, start.text
+                assert start.json()["status"] == "phase1_running"
+                assert start_elapsed < 1.5, start_elapsed
+                epoch = start.json()["epoch"]
+                assert phase1_entered.wait(timeout=3)
+                t1 = time.monotonic()
+                cancel = client.post(f"/api/session/{sid}/critique/cancel", params={"epoch": epoch})
+                assert cancel.status_code == 200
+                assert cancel.json()["status"] == "idle"
+                rel = client.post(f"/api/session/{sid}/release")
+                assert rel.status_code == 200
+                up2 = client.post(
+                    "/api/session/photo",
+                    files={"file": ("live2.jpg", jpeg.read_bytes(), "image/jpeg")},
+                )
+                assert up2.status_code == 200
+                sid2 = up2.json()["session_id"]
+                start2 = client.post(
+                    f"/api/session/{sid2}/critique",
+                    json={"lens": "self", "user_note": "", "force_restart": True},
+                )
+                assert start2.status_code == 200
+                assert start2.json()["status"] == "phase1_running"
+                assert time.monotonic() - t1 < 2.0
+                client.post(
+                    f"/api/session/{sid2}/critique/cancel",
+                    params={"epoch": start2.json()["epoch"]},
+                )
+        finally:
+            phase1_release.set()
+            server.should_exit = True
+            thread.join(timeout=4)
+
+
+def test_guided_phase2_retry_skips_when_already_running():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "running.jpg"
+    Image.new("RGB", (80, 60), (8, 9, 10)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("running.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    app_module._sessions[session_id]["critique"] = {
+        "status": "phase2_running",
+        "lens": "self",
+        "phase1_raw": PHASE1_SAMPLE,
+        "phase1_parsed": parse_critique_text(PHASE1_SAMPLE),
+    }
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        retry_res = client.post(f"/api/session/{session_id}/critique/phase2/retry")
+    assert retry_res.status_code == 200
+    assert retry_res.json()["status"] == "phase2_running"
+    mock_phase2.assert_not_called()
+
+
+def test_guided_reflect_items_endpoint():
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.reflect_prompts import REFLECTION_GROUPS
+
+    client = TestClient(app_module.app)
+    res = client.get("/api/reflect-items")
+    assert res.status_code == 200
+    groups = res.json()["groups"]
+    assert [g["id"] for g in groups] == ["noticed", "thought", "photo"]
+    assert groups[0]["column"] == "left"
+    assert groups[1]["column"] == "left"
+    assert groups[2]["column"] == "right"
+    assert any(item["label"] == "写真を見て" for item in groups[0]["items"])
+    assert [g["column"] for g in REFLECTION_GROUPS] == ["left", "left", "right"]
+    left_labels = [g["label"] for g in groups if g["column"] == "left"]
+    right_labels = [g["label"] for g in groups if g["column"] == "right"]
+    assert left_labels == ["気づいたことがある", "ふと思ったことは"]
+    assert right_labels == ["この写真を"]
+
+
+def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
+    from pathlib import Path
+
+    html = Path("guided_web/static/index.html").read_text(encoding="utf-8")
+    js = Path("guided_web/static/guided.js").read_text(encoding="utf-8")
+    css = Path("guided_web/static/guided.css").read_text(encoding="utf-8")
+    assert 'id="toast-region"' in html
+    assert 'id="read-empty"' in html
+    assert 'id="reflect-empty"' in html
+    assert 'id="card-preview-hint"' in html
+    assert "alert(" not in js
+    assert "function showToast" in js
+    assert "function afterExportSuccess" in js
+    assert "function syncScreenGuides" in js
+    assert "sendBeacon" in js
+    assert "pagehide" in js
+    assert "beforeunload" in js
+    assert "function releaseSessionOnUnload" in js
+    assert "el.inert = !on" in js
+    assert "nativePickInFlight" in js
+    assert "function stopCritiqueWatch" in js
+    assert "function endCritiqueWatch" in js
+    assert "function abandonInFlightCritique" not in js
+    assert "AbortController" in js
+    assert "/critique/cancel" not in js
+    assert "activeCritiqueEpoch" in js
+    assert "pendingCritiqueCancel" not in js
+    assert "function pollCritique" in js
+    assert "guided.js?v=28" in html
+    assert "guided.css?v=28" in html
+    assert "data.cancelled" in js
+    pick_fn = js.split("async function handleNativePhotoPick()")[1].split("function resetReflectionFields")[0]
+    assert pick_fn.index("pickPhotoNative") < pick_fn.index("adoptPhotoSession")
+    assert "releaseServerSession" not in pick_fn
+    assert "stopCritiqueWatch" not in pick_fn
+    nav_fn = js.split("function navigateToScreen")[1].split("function ")[0]
+    assert "stopCritiqueWatch" not in nav_fn
+    assert "/critique/cancel" not in nav_fn
+    assert "hydrate" in nav_fn
+    assert "ensureCritiqueWatch" in nav_fn
+    assert "function ensureCritiqueWatch" in js
+    assert "function applyInterruptedCritiqueHint" in js
+    assert "function critiqueWatchIsLive" in js
+    assert "async function adoptPhotoSession" in js
+    selected_fn = js.split("async function handleSelectedFile")[1].split("async function ")[0]
+    assert selected_fn.index("uploadPhoto") < selected_fn.index("adoptPhotoSession")
+    assert "releaseServerSession" not in selected_fn
+    adopt_fn = js.split("async function adoptPhotoSession")[1].split("async function ")[0]
+    assert "const previousId = sessionId" in adopt_fn
+    assert adopt_fn.index("stopCritiqueWatch") < adopt_fn.index("applyPhotoSession")
+    assert adopt_fn.index("applyPhotoSession") < adopt_fn.index("/release")
+    assert "/critique/cancel" not in adopt_fn
+    clear_fn = js.split("async function clearAllSession")[1].split("document.getElementById(\"pick-file\")")[0]
+    assert "stopCritiqueWatch" in clear_fn
+    assert "releaseServerSession" in clear_fn
+    assert "/critique/cancel" not in clear_fn
+    again_fn = js.split('getElementById("btn-again")')[1].split("getElementById(\"btn-keep\")")[0]
+    assert "navigateToScreen" in again_fn
+    assert "stopCritiqueWatch" not in again_fn
+    assert "/critique/cancel" not in again_fn
+    speak_click = js.split('getElementById("btn-speak").addEventListener')[1].split(
+        "async function startCritique"
+    )[0]
+    assert speak_click.index("clearReadAndReflectData") < speak_click.index("navigateToScreen")
+    assert speak_click.index("setReadLoading(true)") < speak_click.index("navigateToScreen")
+    assert "hydrate: false" in speak_click
+    assert "ensureCritiqueWatch" not in speak_click
+    tab_nav = js.split("forEach((btn) =>")[1].split('getElementById("btn-again")')[0]
+    assert "hydrate: false" not in tab_nav
+    assert "navigateToScreen(btn.dataset.screen)" in tab_nav
+    speak_fn = js.split("async function startCritique")[1].split("async function applyCritiqueProgress")[0]
+    assert "force_restart: true" in speak_fn
+    assert "/critique/cancel" not in speak_fn
+    unload_fn = js.split("function releaseSessionOnUnload")[1].split("const TOAST_MS")[0]
+    assert "event.persisted" in unload_fn
+    assert "/release" in unload_fn
+    assert "/critique/cancel" not in unload_fn
+    export_fn = js.split("function afterExportSuccess")[1].split("function ")[0]
+    assert "showToast" in export_fn
+    assert "navigateToScreen" not in export_fn
+    assert "reflect-checklist-column-left" in js
+    assert "reflect-checklist-column-right" in js
+    assert "group.column === \"right\"" in js
+    assert ".toast-region" in css
+    assert ".empty-guide" in css
+    assert ".card-preview-hint" in css
+    assert "[hidden]" in css
+    assert "display: none !important" in css
+    assert "inert" in html
+    assert ".reflect-checklist-column" in css
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in css
+    assert "repeat(2, minmax(0, 1fr))" not in css
+
+
+def test_guided_run_script_reports_boot_failure():
+    from pathlib import Path
+
+    text = Path("scripts/run_guided_web.sh").read_text(encoding="utf-8")
+    assert "エラー: サーバの起動に失敗しました。" in text
+    assert "python3 -m guided_web.app" in text
+    assert "listening_pids" in text
+    assert "lsof" in text
+    assert "起動確認タイムアウト" in text
+    assert "前のサーバを止めて、最新のプログラムで起動し直します…" in text
+    assert "すでに起動中です" not in text
+    assert "サーバを起動します（終了は Control+C）…" in text
+    assert ">(tee" not in text
+
+
+def test_guided_index_html_is_not_cached():
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    res = client.get("/")
+    assert res.status_code == 200
+    cache = (res.headers.get("cache-control") or "").lower()
+    assert "no-store" in cache
+    assert "guided.js?v=28" in res.text
+    assert 'http-equiv="Cache-Control"' in res.text
+
+
+def test_offline_ci_installs_guided_web_deps():
+    from pathlib import Path
+
+    text = Path(".github/workflows/offline-tests.yml").read_text(encoding="utf-8")
+    for pkg in ("fastapi", "uvicorn", "python-multipart", "httpx"):
+        assert pkg in text, pkg
+
+
+def test_native_dialog_cancel_does_not_fall_through_to_tk():
+    """Mac で osascript をキャンセルしたら Tk を起動しない（プロセス abort 防止）。"""
+    import subprocess
+    from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from guided_web.native_dialog import DialogResult, DialogStatus, interpret_osascript, pick_mac_then_optional_tk
+
+    cancelled = interpret_osascript(SimpleNamespace(returncode=1, stdout=""))
+    assert cancelled.status is DialogStatus.CANCELLED
+    picked = interpret_osascript(SimpleNamespace(returncode=0, stdout="/Users/me/Notes\n"))
+    assert picked.status is DialogStatus.PICKED
+    assert picked.path == Path("/Users/me/Notes")
+    missing = interpret_osascript(error=FileNotFoundError("osascript"))
+    assert missing.status is DialogStatus.UNAVAILABLE
+    timed = interpret_osascript(error=subprocess.TimeoutExpired(cmd="osascript", timeout=1))
+    assert timed.status is DialogStatus.CANCELLED
+
+    tk_called = {"n": 0}
+
+    def fake_tk(_initial):
+        tk_called["n"] += 1
+        return Path("/tmp/tk")
+
+    with patch("guided_web.native_dialog.platform.system", return_value="Darwin"):
+        out = pick_mac_then_optional_tk(
+            lambda _i: DialogResult(DialogStatus.CANCELLED),
+            fake_tk,
+            None,
+        )
+    assert out is None
+    assert tk_called["n"] == 0
+
+    with patch("guided_web.native_dialog.platform.system", return_value="Darwin"):
+        out = pick_mac_then_optional_tk(
+            lambda _i: DialogResult(DialogStatus.UNAVAILABLE),
+            fake_tk,
+            None,
+        )
+    assert out == Path("/tmp/tk")
+    assert tk_called["n"] == 1
+
+
+def test_guided_folder_pick_cancel_skips_tk_on_mac():
+    from unittest.mock import patch
+
+    from guided_web import folder_picker as fp
+    from guided_web.native_dialog import DialogResult, DialogStatus
+
+    tk_called = {"n": 0}
+
+    def boom_tk(_initial):
+        tk_called["n"] += 1
+        raise AssertionError("Tk must not run after Mac cancel")
+
+    with patch("guided_web.native_dialog.platform.system", return_value="Darwin"), patch.object(
+        fp, "_pick_folder_mac", return_value=DialogResult(DialogStatus.CANCELLED)
+    ), patch.object(fp, "_pick_folder_tk", side_effect=boom_tk):
+        assert fp.pick_folder() is None
+    assert tk_called["n"] == 0
+
+
+def test_guided_export_cancel_is_not_an_error():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "export.jpg"
+    Image.new("RGB", (80, 60), (1, 2, 3)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("export.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    app_module._sessions[session_id]["critique"] = {
+        "status": "complete",
+        "lens": "self",
+        "phase1_raw": PHASE1_SAMPLE,
+    }
+    with patch("guided_web.app.pick_folder", return_value=None):
+        export_res = client.post(
+            f"/api/session/{session_id}/export",
+            json={"user_stars": 3, "card_theme": "dark", "user_note": "", "reflections": {}},
+        )
+    assert export_res.status_code == 200
+    assert export_res.json()["cancelled"] is True
+    critique = client.get(f"/api/session/{session_id}/critique")
+    assert critique.status_code == 200
+    assert critique.json()["status"] == "complete"
+
+
+def test_guided_critique_lifecycle_intents_cover_every_operation():
+    """講評への効果は noop / supersede / destroy の3つだけ。cancel は操作に無い。"""
+    from guided_web.critique_lifecycle import (
+        CritiqueEffect,
+        UserIntent,
+        effect_for,
+        hydrates_read_ui,
+        keeps_photo,
+        may_call_critique_cancel,
+    )
+
+    expected = {
+        UserIntent.TAB_SWITCH: CritiqueEffect.NOOP,
+        UserIntent.AGAIN: CritiqueEffect.NOOP,
+        UserIntent.PHOTO_PICK_CANCEL: CritiqueEffect.NOOP,
+        UserIntent.PHOTO_REPLACE_FAIL: CritiqueEffect.NOOP,
+        UserIntent.EXPORT_CANCEL: CritiqueEffect.NOOP,
+        UserIntent.EXPORT_SAVE: CritiqueEffect.NOOP,
+        UserIntent.PAGE_BFCACHE: CritiqueEffect.NOOP,
+        UserIntent.SPEAK: CritiqueEffect.SUPERSEDE,
+        UserIntent.PHASE2_RETRY: CritiqueEffect.SUPERSEDE,
+        UserIntent.CLEAR: CritiqueEffect.DESTROY_SESSION,
+        UserIntent.PHOTO_REPLACE_SUCCESS: CritiqueEffect.DESTROY_SESSION,
+        UserIntent.PAGE_UNLOAD: CritiqueEffect.DESTROY_SESSION,
+    }
+    assert set(UserIntent) == set(expected)
+    for intent, effect in expected.items():
+        assert effect_for(intent) is effect
+        assert may_call_critique_cancel(intent) is False
+        assert keeps_photo(intent) is (effect is not CritiqueEffect.DESTROY_SESSION)
+        assert hydrates_read_ui(intent) is (intent is UserIntent.TAB_SWITCH)
+    assert hydrates_read_ui(UserIntent.SPEAK) is False
+
+
+def test_guided_force_restart_supersedes_running_without_cancel():
+    """言葉にするは cancel→idle ではなく、同じセッションで epoch を進める。"""
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "supersede.jpg"
+    Image.new("RGB", (80, 60), (21, 22, 23)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("supersede.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 1
+    sess["critique"] = {"status": "phase1_running", "lens": "self"}
+    parsed = parse_critique_text(PHASE1_SAMPLE)
+    with patch("guided_web.app.run_phase1", return_value=(PHASE1_SAMPLE, parsed)), patch(
+        "guided_web.app.run_phase2", return_value=(PHASE1_SAMPLE, parsed, [])
+    ):
+        start_res = client.post(
+            f"/api/session/{session_id}/critique",
+            json={"lens": "self", "user_note": "", "force_restart": True},
+        )
+    assert start_res.status_code == 200
+    assert start_res.json()["status"] in {"phase1_running", "phase2_running", "complete"}
+    assert sess["epoch"] == 2
+    assert sess["critique"].get("status") != "idle"
+    assert session_id in app_module._sessions
+
+
+def test_guided_destroy_bumps_epoch_so_stale_phase2_cannot_complete():
+    """クリアは idle にせずセッションを捨て、古い epoch の書き込みを無効化する。"""
+    import asyncio
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.session_cleanup import is_current_epoch
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "destroy.jpg"
+    Image.new("RGB", (80, 60), (31, 32, 33)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        res = client.post("/api/session/photo", files={"file": ("destroy.jpg", f, "image/jpeg")})
+    session_id = res.json()["session_id"]
+    sess = app_module._sessions[session_id]
+    sess["epoch"] = 1
+    sess["critique"] = {"status": "phase2_running", "lens": "self", "error": None}
+    held = sess
+    del_res = client.delete(f"/api/session/{session_id}")
+    assert del_res.status_code == 200
+    assert session_id not in app_module._sessions
+    assert not is_current_epoch(held, 1)
+    assert client.get(f"/api/session/{session_id}/critique").status_code == 404
+    with patch("guided_web.app.run_phase2") as mock_phase2:
+        asyncio.run(app_module._finish_phase2(session_id, "self", "", PHASE1_SAMPLE, epoch=1))
+    mock_phase2.assert_not_called()
+    assert held["critique"]["status"] == "phase2_running"
+
+
+def test_guided_photo_pick_cancel_keeps_existing_session():
+    """ピッカー Cancel は今の写真を捨てない。"""
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "keep_pick.jpg"
+    Image.new("RGB", (80, 60), (41, 42, 43)).save(jpeg, "JPEG")
+    with jpeg.open("rb") as f:
+        ok = client.post("/api/session/photo", files={"file": ("keep_pick.jpg", f, "image/jpeg")})
+    session_id = ok.json()["session_id"]
+    with patch("guided_web.app.pick_image_file", return_value=None):
+        cancelled = client.post("/api/session/photo-pick")
+    assert cancelled.status_code == 400
+    assert session_id in app_module._sessions
+    assert client.get(f"/api/session/{session_id}/preview").status_code == 200
+
+
+def test_guided_choose_screen_is_not_inert_when_visible():
+    from pathlib import Path
+
+    html = Path("guided_web/static/index.html").read_text(encoding="utf-8")
+    choose = html.split('id="screen-choose"')[1].split("<main")[0]
+    read = html.split('id="screen-read"')[1].split("<main")[0]
+    reflect = html.split('id="screen-reflect"')[1].split("<div id=\"toast-region\"")[0]
+    assert "inert" not in choose.split(">")[0]
+    assert "inert" in read.split(">")[0]
+    assert "inert" in reflect.split(">")[0]
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -2520,8 +4038,60 @@ def run_all():
     test_low_priority_works_subdir_hint()
     test_works_review_selection_summarizes_sooc_skipped()
     test_antenna_prompt_avoids_judge_vocabulary()
+    test_console_ui_copy_phase1_labels()
+    test_prompt_contracts_judge_vocab_and_time_ban_alignment()
+    test_phase_d_offline_fixtures_person_and_time()
+    test_q5_summarize_h3_and_reactions_scripts()
+    test_p2_2_card_words_before_stars()
     test_low_priority_prompt_pick_skips_sentinel_nashi()
     test_dry_run_session_rejects_record_post_h3()
+    test_guided_futei_band_tokyo_summer_day()
+    test_guided_futei_band_night()
+    test_guided_api_parameters_shape()
+    test_guided_parameter_display_rows()
+    test_guided_upload_returns_parameter_display()
+    test_guided_photo_response_omits_identifying_local_fields()
+    test_guided_upload_rejects_unreadable_image()
+    test_guided_unreadable_upload_keeps_existing_session()
+    test_guided_card_footer_metadata()
+    test_guided_body_sections_split()
+    test_guided_stock_export_writes_files()
+    test_guided_format_reflections_block()
+    test_guided_privacy_prompts_exclude_identifying_metadata()
+    test_guided_privacy_audit_whitelist()
+    test_guided_critique_runner_uses_api_params()
+    test_guided_selected_reflection_labels()
+    test_guided_settings_save_folder_roundtrip()
+    test_guided_session_delete_removes_temp_dir()
+    test_guided_phase2_retry_restarts_background()
+    test_guided_purge_orphan_temp_keeps_live_sessions()
+    test_guided_shutdown_sessions_removes_all()
+    test_guided_session_release_is_idempotent()
+    test_guided_lifespan_purges_orphans_and_shutdown_sessions()
+    test_guided_critique_rejects_parallel_without_restart()
+    test_guided_phase2_ignores_stale_epoch()
+    test_guided_cancel_critique_keeps_photo_and_discards_stale_phase2()
+    test_guided_cancel_complete_critique_is_noop()
+    test_guided_cancel_then_force_restart_starts_fresh()
+    test_guided_photo_pick_uses_ui_executor_while_critique_runs()
+    test_guided_ui_and_critique_executors_are_separate()
+    test_guided_photo_pick_opens_photo_folder_not_export_folder()
+    test_guided_stale_cancel_does_not_kill_newer_critique()
+    test_guided_live_cancel_and_clear_during_slow_phase1()
+    test_guided_phase2_retry_skips_when_already_running()
+    test_guided_reflect_items_endpoint()
+    test_guided_ui_uses_toast_empty_guides_and_export_navigation()
+    test_guided_run_script_reports_boot_failure()
+    test_guided_index_html_is_not_cached()
+    test_offline_ci_installs_guided_web_deps()
+    test_native_dialog_cancel_does_not_fall_through_to_tk()
+    test_guided_folder_pick_cancel_skips_tk_on_mac()
+    test_guided_export_cancel_is_not_an_error()
+    test_guided_critique_lifecycle_intents_cover_every_operation()
+    test_guided_force_restart_supersedes_running_without_cancel()
+    test_guided_destroy_bumps_epoch_so_stale_phase2_cannot_complete()
+    test_guided_photo_pick_cancel_keeps_existing_session()
+    test_guided_choose_screen_is_not_inert_when_visible()
     print("test_offline_suite: OK")
 
 

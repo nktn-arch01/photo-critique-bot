@@ -163,9 +163,9 @@ flowchart TB
 | Phase | 内容 | ToDo ID |
 |-------|------|---------|
 | 0 | 本憲章（本ドキュメント） | — |
-| 1 | 言葉と操作作法（U4 / S3 / Q7）を用語＋Console 先行 | copy-wave |
-| 2 | カード主役化（U1 / Q1）＋ CRITIQUE_SUMMARY の問い寄せ（Q4） | card-wave |
-| 3 | Guided UI 情報設計（5画面以内・導きすぎない） | ia-wire |
+| 1 | 言葉と操作作法（U4 / S3 / Q7）を用語＋Console 先行 | **DONE** |
+| 2 | カード主役化（U1 / Q1）＋ CRITIQUE_SUMMARY の問い寄せ（Q4） | **DONE** — [`P2_2_PHASE2_CARD.md`](P2_2_PHASE2_CARD.md) |
+| 3 | Guided UI 情報設計（導きすぎない） | [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) — **オーナー確認中** |
 | 4 | ローカル FastAPI＋ブラウザの技術スパイク | tech-spike |
 | 5 | Guided MVP＋Mac チェックリスト | guided-mvp |
 
@@ -190,3 +190,4 @@ flowchart TB
 | 日付 | 内容 |
 |------|------|
 | 2026-08-13 | 初版。ブランドブック 02 とオーナー合意（公開β相手・一文・表面・ローカル Web・実装順）を固定 |
+| 2026-08-14 | Phase 2 完了（カード読み順・Q4 2拍）。詳細は [`P2_2_PHASE2_CARD.md`](P2_2_PHASE2_CARD.md) |

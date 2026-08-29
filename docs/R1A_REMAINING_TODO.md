@@ -52,11 +52,11 @@
 
 | ID | 内容 | メモ |
 |----|------|------|
-| **N1（新規）** | 開発 UI から公開向け洗練 UI へ（ローカル FastAPI＋ブラウザ） | 親テーマ。憲章 §3–4 |
+| **N1（新規）** | 開発 UI から公開向け洗練 UI へ（ローカル FastAPI＋ブラウザ） | PR #21 でスパイク中。続きは [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md) |
 | U4 | 表層の評価語彙を対話語彙へ | **DONE（Console）** — `console_ui_copy.py`。Guided は後続 |
-| Q4 | CRITIQUE_SUMMARY を「次の撮影への問い」寄りに | Phase 2 |
-| U1 | カードで要約／問い上位・★二次（旧 C1） | Phase 2 |
-| Q1 | カード描画で ★ を下げ要約を主役に | Phase 2 |
+| Q4 | CRITIQUE_SUMMARY を「次の撮影への問い」寄りに | **DONE（Phase 2）** — 見所＋もう一度見る／次のシャッター。N-03 定型は禁止 |
+| U1 | カードで要約／問い上位・★二次（旧 C1） | **DONE（Phase 2）** — 読み順 TITLE→SUMMARY→CRITIQUE_SUMMARY→★ |
+| Q1 | カード描画で ★ を下げ要約を主役に | **DONE（Phase 2）** — ★ 20px、言葉 26–28px。手順は [`P2_2_PHASE2_CARD.md`](P2_2_PHASE2_CARD.md) |
 | Q7 | M2「相対熱量」をユーザー向け一言で | **DONE（Console）** — 「見返す」説明に包含 |
 | S3 | ヘルプ／完了文の言い回し磨き（W5 後回し分） | **DONE（Console）** |
 
@@ -91,8 +91,8 @@
 | テーマ | 残っている ID |
 |--------|----------------|
 | ストレス低減 | S8（S1/S5/S6/S7 完了。S2 不要／S4 完了） |
-| Lumina Notes UX | U1, U4, N1（U2 完了。U3/U5/U6/U7 不要） |
-| AI フィードバック質 | Q1, Q4, Q6, Q7（Q2/Q3/Q5 のオフライン基盤は完了） |
+| Lumina Notes UX | N1（U1/U2/U4 完了。U3/U5/U6/U7 不要） |
+| AI フィードバック質 | Q6（Q1–Q5/Q7 のオフライン基盤または Phase 2 は完了） |
 
 ---
 
@@ -119,3 +119,6 @@
 | 2026-08-13 | P1（S1/S6/S7/U2/S5）＋N2 実装完了を反映 |
 | 2026-08-13 | P2-1: Q2/Q3/Q5 オフライン基盤（契約・fixture・集計）を完了 |
 | 2026-08-13 | P2-2: 公開 UX 憲章を合意（ブランドブック 02・一文・表面・ローカル Web） |
+| 2026-08-13 | P2-2 Phase 1: Console 言葉（U4/S3/Q7） |
+| 2026-08-14 | P2-2 Phase 2: カード主役化（U1/Q1）＋ CRITIQUE_SUMMARY 2拍（Q4） |
+| 2026-08-29 | N1 Guided Web は PR #21。長い Cloud Agent は一区切り。続きは START_NEXT_CONVERSATION.md |

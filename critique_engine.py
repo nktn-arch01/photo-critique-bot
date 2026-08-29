@@ -2,6 +2,7 @@
 
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from ai_vision import (
@@ -27,6 +28,7 @@ __all__ = [
     "generate_critique_openai",
     "generate_critique_gemini",
     "generate_critique_for_line",
+    "generate_critique_with_prompts",
     "get_openai_client",
 ]
 
@@ -43,11 +45,19 @@ def _run_two_phase_generation(
     backoff_factor: float,
     lens: str,
     phase1_override: str | None = None,
+    build_phase1_prompt_fn: Callable[[], str] | None = None,
+    build_phase2_prompt_fn: Callable[[str], str] | None = None,
+    system_role_override: str | None = None,
 ) -> str:
     lens_id = normalize_lens(lens)
-    ctx = CritiquePromptContext.from_metadata(metadata, dop_info)
-    system_role = get_system_role(lens_id)
-    prompt_phase1 = build_phase1_prompt(ctx, lens=lens_id)
+    if build_phase1_prompt_fn:
+        prompt_phase1 = build_phase1_prompt_fn()
+        system_role = system_role_override or get_system_role(lens_id)
+        ctx = None
+    else:
+        ctx = CritiquePromptContext.from_metadata(metadata, dop_info)
+        system_role = get_system_role(lens_id)
+        prompt_phase1 = build_phase1_prompt(ctx, lens=lens_id)
 
     # Phase1 はカードの軸になるため温度を下げ、compact/full 間の揺れを抑える
     phase1_temperature = 0.35
@@ -96,7 +106,10 @@ def _run_two_phase_generation(
     if mode != "full":
         return phase1_output
 
-    prompt_phase2 = build_phase2_prompt(ctx, phase1_output, lens=lens_id)
+    if build_phase2_prompt_fn:
+        prompt_phase2 = build_phase2_prompt_fn(phase1_output)
+    else:
+        prompt_phase2 = build_phase2_prompt(ctx, phase1_output, lens=lens_id)
     phase2_output = ""
     for attempt in range(1, max_retries + 1):
         try:
@@ -131,6 +144,38 @@ def _run_two_phase_generation(
             time.sleep(backoff_factor ** attempt)
 
     return f"{phase1_output}\n\n---\n\n{phase2_output}"
+
+
+def generate_critique_with_prompts(
+    image_path: Path,
+    *,
+    build_phase1: Callable[[], str],
+    build_phase2: Callable[[str], str],
+    mode: str = "compact",
+    model: str = DEFAULT_OPENAI_MODEL,
+    max_retries: int = 3,
+    backoff_factor: float = 2.0,
+    provider: VisionProvider = "openai",
+    lens: str = DEFAULT_LENS,
+    phase1_override: str | None = None,
+    system_role: str | None = None,
+) -> str:
+    """カスタムプロンプトビルダーで講評を生成（Guided Web 等）。"""
+    return _run_two_phase_generation(
+        image_path,
+        provider=provider,
+        model=model,
+        mode=mode,
+        metadata={},
+        dop_info={},
+        max_retries=max_retries,
+        backoff_factor=backoff_factor,
+        lens=lens,
+        phase1_override=phase1_override,
+        build_phase1_prompt_fn=build_phase1,
+        build_phase2_prompt_fn=build_phase2,
+        system_role_override=system_role,
+    )
 
 
 def generate_critique(
