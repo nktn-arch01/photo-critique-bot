@@ -110,7 +110,7 @@
 
 1. **P5** — 永続セッションログ（`session.json` 等）（任意）
 2. **T4 延長** — アップロードサイズ上限（任意）
-3. Mac チェックリストのオーナー PASS 記入（3e / 3f / 4b / 5 は Mac 未確認）
+3. Mac チェックリスト：オーナー 0–5 と 4i PASS（2026-08-29）。フォルダ選択 Cancel（4f の Cancel）は未確認のまま
 
 ---
 
@@ -147,3 +147,4 @@ cd ~/photo-critique-bot && python3 test_offline_suite.py
 | 2026-08-29 | 「Guided web review todos」を一区切り。T13/T14 を部分対応に戻し、次会話の手順を `AGENTS.md` / `START_NEXT_CONVERSATION.md` に固定 |
 | 2026-08-29 | T13/T14 を状態機械で一本化。正本 `P2_2_GUIDED_CRITIQUE_LIFECYCLE.md`。画面は cancel しない。noop / supersede / destroy |
 | 2026-08-29 | 「言葉にする」で読むへ移る前に前の講評表示を消す。タブ移動の描き戻しは維持 |
+| 2026-08-29 | オーナー Mac：チェック 0–5 と 4i PASS |
