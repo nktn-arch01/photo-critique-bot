@@ -152,7 +152,7 @@ flowchart TB
 
 ### 5.1 起動方式（確定）
 
-アプリ一式は **PC 内の1フォルダ**に置く（例: `~/photo-critique-bot/`）。`LuminaNotesGuided.app` を **アプリケーションフォルダへコピーしない**（中のプログラムを探すため）。
+アプリ一式は **PC 内の1フォルダ**に置く（例: `~/photo-critique-bot/`）。日常の入口は **アプリケーションフォルダの `LuminaNotesGuided.app`**（`bash scripts/install_guided_app.sh` で置く）。プログラム本体はリポジトリのまま。置き場は `~/.lumina_notes/guided_root`。
 
 **起動手順（Mac）:** [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) — 全操作コピペ一発・PASS/FAIL 付き
 
@@ -160,7 +160,8 @@ flowchart TB
 
 | ファイル | 役割 |
 |----------|------|
-| **`LuminaNotesGuided.app`** | Finder 用の入口。中身は `scripts/run_guided_app.sh`。Dock には出ない |
+| **`LuminaNotesGuided.app`** | Finder / アプリケーションフォルダ用の入口。中身は `scripts/run_guided_app.sh`。Dock には出ない |
+| **`scripts/install_guided_app.sh`** | アプリケーションフォルダへ入口を置く。置き場を覚える |
 | **`scripts/run_guided_app.sh`** | 依存確認・サーバ起動・画面を開く（**.app 用本体**） |
 | **`scripts/run_guided_web.sh`** | 同じサーバをターミナル前面で起動（保険） |
 | **`LuminaNotesGuided.command`** | 保険のダブルクリック起動 |
@@ -168,7 +169,7 @@ flowchart TB
 
 **起動の流れ（確定）:**
 
-1. ユーザーが **`photo-critique-bot` フォルダ内の `LuminaNotesGuided.app`** を開く  
+1. ユーザーが **アプリケーション** の `Lumina Notes Guided` を開く（初回は `install_guided_app.sh`）  
 2. Python が `127.0.0.1` で待ち受け  
 3. 選ぶ画面が開く（既定のブラウザ）。画面の「終了」、またはタブ／ブラウザを閉じるとサーバも止まる  
 

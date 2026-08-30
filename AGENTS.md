@@ -67,6 +67,6 @@ Guided の講評ライフサイクル（言葉にする／もう一度／タブ�
 ## テスト
 
 - オフライン必須: `python3 test_offline_suite.py`
-- Guided 起動（Mac）: Finder でリポジトリ内の `LuminaNotesGuided.app`（保険: `bash scripts/run_guided_web.sh`）
+- Guided 起動（Mac）: アプリケーションの `Lumina Notes Guided`（初回は `bash scripts/install_guided_app.sh`。保険: リポジトリ内 `.app` / `bash scripts/run_guided_web.sh`）
 - Console 日常: `LuminaNotesConsole.command`
 - OpenAI 実呼び出しは CI では行わない

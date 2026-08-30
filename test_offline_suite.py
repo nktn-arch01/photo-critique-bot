@@ -4201,7 +4201,13 @@ def test_guided_app_opens_page_like_command_without_webkit():
     assert "notes.lumina.guided" in plist
     assert "NSAllowsLocalNetworking" in plist
     assert "run_guided_app.sh" in launcher
-    assert "アプリケーションフォルダへコピー" in launcher
+    assert "guided_root.sh" in launcher
+    assert "guided_root_resolve" in launcher
+    assert "アプリケーションフォルダへコピーすると動きません" not in launcher
+    assert Path("LuminaNotesGuided.app/Contents/Resources/guided_root.sh").is_file()
+    install = Path("scripts/install_guided_app.sh").read_text(encoding="utf-8")
+    assert "GUIDED_APPLICATIONS_DIR" in install
+    assert "guided_root_save" in install
     assert "guided_python.sh" in script
     assert "guided_web.desktop_window" in script
     assert "--server-only" not in script
@@ -4401,6 +4407,74 @@ def test_guided_detach_only_for_darwin_app_launcher():
         assert should_detach() is True
 
 
+def test_guided_root_resolve_remembers_repo_and_apps_copy():
+    import os
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    resolver = Path("LuminaNotesGuided.app/Contents/Resources/guided_root.sh").resolve()
+    with tempfile.TemporaryDirectory() as raw:
+        tmp = Path(raw)
+        repo = tmp / "photo-critique-bot"
+        (repo / "scripts").mkdir(parents=True)
+        (repo / "guided_web").mkdir()
+        (repo / "scripts" / "run_guided_app.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (repo / "guided_web" / "desktop_window.py").write_text("# root marker\n", encoding="utf-8")
+        cfg = tmp / "guided_root"
+        env = {**os.environ, "GUIDED_ROOT_FILE": str(cfg), "GUIDED_APP_ROOT": ""}
+        env.pop("GUIDED_APP_ROOT", None)
+        script = f"""
+set -euo pipefail
+unset GUIDED_APP_ROOT
+source {resolver}
+guided_root_config="{cfg}"
+guided_root_resolve "{repo}"
+test "$GUIDED_APP_ROOT" = "{repo}"
+test "$(cat "{cfg}")" = "{repo}"
+unset GUIDED_APP_ROOT
+guided_root_resolve "{tmp}/Applications"
+test "$GUIDED_APP_ROOT" = "{repo}"
+"""
+        result = subprocess.run(
+            ["bash", "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+
+
+def test_guided_install_app_copies_to_applications_dir():
+    import os
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as raw:
+        dest_dir = Path(raw) / "Applications"
+        cfg = Path(raw) / "guided_root"
+        env = {
+            **os.environ,
+            "GUIDED_APPLICATIONS_DIR": str(dest_dir),
+            "GUIDED_ROOT_FILE": str(cfg),
+        }
+        result = subprocess.run(
+            ["bash", "scripts/install_guided_app.sh"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+        copied = dest_dir / "LuminaNotesGuided.app"
+        assert (copied / "Contents" / "MacOS" / "LuminaNotesGuided").is_file()
+        assert (copied / "Contents" / "Resources" / "guided_root.sh").is_file()
+        assert Path(cfg.read_text(encoding="utf-8").strip()).is_dir()
+        assert (Path(cfg.read_text(encoding="utf-8").strip()) / "scripts" / "run_guided_app.sh").is_file()
+
+
 def test_guided_python_wrapper_runs_current_interpreter():
     import subprocess
 
@@ -4583,6 +4657,8 @@ def run_all():
     test_guided_api_heartbeat_and_unload_do_not_kill_process()
     test_guided_tab_close_stops_local_server()
     test_guided_detach_only_for_darwin_app_launcher()
+    test_guided_root_resolve_remembers_repo_and_apps_copy()
+    test_guided_install_app_copies_to_applications_dir()
     test_guided_python_wrapper_runs_current_interpreter()
     test_guided_open_page_uses_system_open()
     test_guided_wait_until_quit_returns_when_server_stops()

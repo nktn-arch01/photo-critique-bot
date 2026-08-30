@@ -1,18 +1,26 @@
 #!/bin/bash
 # LuminaNotesGuided.app の入口。ターミナルは出さない。
-# この .app はリポジトリ（photo-critique-bot）フォルダの中で開く。
+# リポジトリ内でもアプリケーションフォルダでも同じ。プログラム置き場は ~/.lumina_notes/guided_root。
 # Finder 起動は Terminal/.command と違い .zshrc を読まないので、ログイン殻で本体を呼ぶ。
 export PATH="/Library/Frameworks/Python.framework/Versions/Current/bin:/usr/local/bin:/opt/homebrew/bin:${HOME}/.pyenv/shims:${PATH}"
 export PYTHONUNBUFFERED=1
 
 APP_BIN="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "${APP_BIN}/../../.." && pwd)"
+THIS_APP="$(cd "${APP_BIN}/../.." && pwd)"
+# shellcheck source=../Resources/guided_root.sh
+source "${APP_BIN}/../Resources/guided_root.sh"
+
+BUNDLE_PARENT="$(cd "${THIS_APP}/.." && pwd)"
+if ! guided_root_resolve "$BUNDLE_PARENT"; then
+  osascript -e 'display dialog "プログラムのフォルダ（photo-critique-bot）が見つかりません。ターミナルで bash scripts/install_guided_app.sh を実行してから、アプリケーションの Lumina Notes Guided を開いてください。" buttons {"OK"} default button 1 with title "Lumina Notes Guided"' >/dev/null 2>&1 || true
+  exit 1
+fi
+ROOT="$GUIDED_APP_ROOT"
 export GUIDED_APP_ROOT="$ROOT"
 export GUIDED_APP_LOGIN=1
 
-if [[ ! -f "${ROOT}/scripts/run_guided_app.sh" ]]; then
-  osascript -e 'display dialog "LuminaNotesGuided.app は photo-critique-bot フォルダの中で開いてください。アプリケーションフォルダへコピーすると動きません。" buttons {"OK"} default button 1 with title "Lumina Notes Guided"' >/dev/null 2>&1 || true
-  exit 1
+if guided_root_should_handoff "$THIS_APP" "$ROOT"; then
+  exec "${ROOT}/LuminaNotesGuided.app/Contents/MacOS/LuminaNotesGuided"
 fi
 
 cd "$ROOT" || exit 1
@@ -24,6 +32,7 @@ LOG="${HOME}/.lumina_notes/guided-app.log"
 {
   echo "=== Lumina Notes Guided.app $(date) ==="
   echo "ROOT=${ROOT}"
+  echo "THIS_APP=${THIS_APP}"
   echo "PATH=${PATH}"
 } >>"${LOG}"
 
@@ -32,7 +41,6 @@ osascript -e 'display notification "起動しています。数秒待ってく�
 exec >>"${LOG}" 2>&1
 export ZSH_DISABLE_COMPFIX=true
 if command -v zsh >/dev/null 2>&1; then
-  # 対話モードにしない（確認プロンプトで止まるのを防ぐ）。.zprofile / .zshrc は明示的に読む。
   exec zsh -lc 'source "$HOME/.zprofile" >/dev/null 2>&1 || true; source "$HOME/.zshrc" >/dev/null 2>&1 || true; cd "$GUIDED_APP_ROOT" && exec bash "$GUIDED_APP_ROOT/scripts/run_guided_app.sh"'
 fi
 exec bash "${ROOT}/scripts/run_guided_app.sh"

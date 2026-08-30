@@ -22,7 +22,7 @@ Wave C で決まった核:
 | 入口 | 役割 | 状態 |
 |------|------|------|
 | `LuminaNotesConsole.command` | **日常の本番 UI**（スクリーニング＋Lumina Review） | 正式 |
-| `LuminaNotesGuided.app` | **Guided 日常**（選ぶ／読む／振り返る。リポジトリ内。保険は `.command`） | PR #21 |
+| `LuminaNotesGuided.app` | **Guided 日常**（選ぶ／読む／振り返る。アプリケーションフォルダ可。保険はリポジトリ内 `.app` / `.command`） | PR #21 |
 | `PhotoAICritique.command` | 旧・一括講評 GUI（起動時に Console へ誘導） | レガシー |
 | LINE Bot（Render / `main.py`） | 写真1枚 → カード＋対話【1〜3】→ 反応 QR | 本番チャネル |
 

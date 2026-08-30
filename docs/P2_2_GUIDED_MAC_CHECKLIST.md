@@ -25,7 +25,7 @@ git reset --hard origin/cursor/p2-2-web-concept-f193
 git log -1 --oneline
 ```
 
-最後の行に `stop the server when the Guided tab closes` と出ていれば OK。
+最後の行に `install Guided.app into Applications` と出ていれば OK。
 
 | # | 結果 |
 |---|------|
@@ -35,7 +35,7 @@ git log -1 --oneline
 
 1. すでに動いている **`LuminaNotesGuided.command` のターミナルは Control+C で止める**  
 2. Finder で `photo-critique-bot` フォルダを開く  
-3. **`LuminaNotesGuided.app`** をダブルクリック（**アプリケーションフォルダへコピーしない**）  
+3. **`LuminaNotesGuided.app`** をダブルクリック  
    - 「開発元未確認」と出たら、そのアイコンを **右クリック → 開く**  
 4. 画面右上に「起動しています」と出ることがあります。**初回は十数秒かかることがあります**  
 5. ターミナルは出ない。そのあと **選ぶ** 画面がブラウザで開く  
@@ -77,6 +77,27 @@ Dock に **Lumina Notes Guided** は出ません。これは不具合ではな�
 | # | 結果 |
 |---|------|
 | A4 | PASS（2026-08-30）タブを閉じたあと、もう一度開ける |
+
+### A5 — アプリケーションフォルダから開く
+
+プログラム本体はいままでどおり `photo-critique-bot` フォルダです。入口だけアプリケーションに置きます。
+
+A0 のあとに、ターミナルへ次を貼って Enter。
+
+```bash
+cd ~/photo-critique-bot
+bash scripts/install_guided_app.sh
+```
+
+1. Finder で **アプリケーション** を開く  
+2. **Lumina Notes Guided** をダブルクリック（「開発元未確認」なら右クリック → 開く）  
+3. **選ぶ** がブラウザで開く。ターミナルは出ない  
+
+コードを取り直したあと（A0）は、同じ `install_guided_app.sh` をもう一度実行すると入口が最新になります。
+
+| # | 結果 |
+|---|------|
+| A5 | PASS / FAIL |
 
 ### A3 — 演算中だけスリープしない（任意）
 
