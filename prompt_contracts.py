@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Iterable
 
 from critique_parser import parse_critique_text
@@ -53,6 +54,43 @@ PHASE_OUTPUT_TIME_BAN: tuple[str, ...] = (
     "黄昏",
     "早朝",
 )
+
+# 朝夕逆転（東なのに夕／西なのに朝）。時間帯禁止と重ねてよい。
+EVENING_REVERSAL_STEMS: tuple[str, ...] = (
+    "夕暮れ",
+    "夕刻",
+    "夕方",
+    "夕日",
+    "夕焼け",
+    "夕映え",
+    "夕景",
+    "黄昏",
+)
+MORNING_REVERSAL_STEMS: tuple[str, ...] = (
+    "朝日",
+    "早朝",
+)
+
+# Guided が Phase1/Phase2 を差し戻すときの一文。既存 max_retries の中で使う。
+# 単語の置換では夕の物語が残るので、観察そのものを書き直させる。
+# Phase1 に【1】〜【7】や構図批評を混ぜない（カードはキャッチのまま）。
+EAST_WEST_REWRITE_NOTE_PHASE1 = (
+    "【再生成】直前のカード文は光の方位の事実と食い違っています。"
+    "■TITLE・■SUMMARY・■CRITIQUE_SUMMARY だけを書き直す。【1】〜【7】は出さない。"
+    "SUMMARY はキャッチコピーのまま。構図の批評や撮影の助言・テクニックは書かない。"
+    "単語だけ言い換えて夕（または朝）の物語を残してはいけない。"
+    "『夕暮れ』『夕方』『夕刻』『夕景』『夕映え』『朝日』『早朝』を使わない。"
+    "東の空／一日の前半なら、一日の終わりや西の空の光としては書かない。"
+)
+EAST_WEST_REWRITE_NOTE_PHASE2 = (
+    "【再生成】直前の本文は光の方位の事実と食い違っています。"
+    "【1】〜【7】の観察を光の方位の事実に合わせて書き直す。"
+    "単語だけ言い換えて夕（または朝）の物語を残してはいけない。"
+    "『夕暮れ』『夕方』『夕刻』『夕景』『夕映え』『朝日』『早朝』を書かない。"
+    "東の空／一日の前半なら、一日の終わりや西の空の光としては書かない。"
+)
+# テスト・単一 note 経路の既定（Phase1 用。本文の仕事をカードに混ぜない）。
+EAST_WEST_REWRITE_NOTE = EAST_WEST_REWRITE_NOTE_PHASE1
 
 # Phase1 プロンプト追加分（「夜の」など）
 PHASE1_EXTRA_TIME_BAN: tuple[str, ...] = ("夜の",)
@@ -177,6 +215,65 @@ def check_output_time_ban(critique: str) -> dict:
     ban = tuple(PHASE_OUTPUT_TIME_BAN) + tuple(PHASE1_EXTRA_TIME_BAN)
     hits = find_forbidden_stems(text, ban)
     return {"pass": not hits, "hits": hits}
+
+
+def infer_light_side(light_hint: str) -> str | None:
+    """光ヒントから東側（一日の前半）／西側（一日の後半）を読む。否定の『西の空の光ではない』は西に数えない。"""
+    hint = light_hint or ""
+    east = "東の空から" in hint or "一日の前半" in hint
+    west = "西の空から" in hint or "一日の後半" in hint
+    if east and not west:
+        return "east"
+    if west and not east:
+        return "west"
+    return None
+
+
+def _text_for_east_west_check(critique: str) -> str:
+    """カード欄（TITLE/SUMMARY/CRITIQUE_SUMMARY）と本文を同じ契約で見る。"""
+    parsed = parse_critique_text(critique, lens=DEFAULT_LENS)
+    return "\n".join(
+        [
+            parsed.get("title") or "",
+            parsed.get("summary") or "",
+            parsed.get("point_text") or "",
+            parsed.get("body") or "",
+            critique or "",
+        ]
+    )
+
+
+def check_output_east_west_reversal(critique: str, light_hint: str) -> dict:
+    """東の事実なのに夕の語、西の事実なのに朝の語があれば FAIL（カードも本文も、混在も逆転）。"""
+    side = infer_light_side(light_hint)
+    text = _text_for_east_west_check(critique)
+    if side is None:
+        return {"pass": True, "side": None, "hits": [], "detail": "no east/west fact"}
+    stems = EVENING_REVERSAL_STEMS if side == "east" else MORNING_REVERSAL_STEMS
+    hits = find_forbidden_stems(text, stems)
+    excerpts: list[str] = []
+    for stem in hits:
+        idx = text.find(stem)
+        if idx >= 0:
+            start = max(0, idx - 12)
+            excerpts.append(text[start : idx + len(stem) + 12].replace("\n", " "))
+    return {
+        "pass": not hits,
+        "side": side,
+        "hits": hits,
+        "excerpts": excerpts,
+    }
+
+
+def east_west_phase_accept(light_hint: str) -> Callable[[str], bool] | None:
+    """方位事実があるときだけ受理関数を返す。南寄りの高い光などでは None。"""
+    if infer_light_side(light_hint) is None:
+        return None
+
+    def accept(text: str) -> bool:
+        return bool(check_output_east_west_reversal(text, light_hint)["pass"])
+
+    return accept
 
 
 def check_output_person_present(critique: str) -> dict:

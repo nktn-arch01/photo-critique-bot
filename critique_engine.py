@@ -24,6 +24,7 @@ from critique_prompts import (
 
 # デスクトップ等からの後方互換
 __all__ = [
+    "CritiqueContractError",
     "generate_critique",
     "generate_critique_openai",
     "generate_critique_gemini",
@@ -31,6 +32,10 @@ __all__ = [
     "generate_critique_with_prompts",
     "get_openai_client",
 ]
+
+
+class CritiqueContractError(ValueError):
+    """モデル出力がカード構造または光の方位の契約を満たさない。通信障害ではない。"""
 
 
 def _run_two_phase_generation(
@@ -48,6 +53,11 @@ def _run_two_phase_generation(
     build_phase1_prompt_fn: Callable[[], str] | None = None,
     build_phase2_prompt_fn: Callable[[str], str] | None = None,
     system_role_override: str | None = None,
+    phase1_temperature: float | None = None,
+    phase_accept: Callable[[str], bool] | None = None,
+    phase_retry_note: str | None = None,
+    phase1_retry_note: str | None = None,
+    phase2_retry_note: str | None = None,
 ) -> str:
     lens_id = normalize_lens(lens)
     if build_phase1_prompt_fn:
@@ -60,8 +70,24 @@ def _run_two_phase_generation(
         prompt_phase1 = build_phase1_prompt(ctx, lens=lens_id)
 
     # Phase1 はカードの軸になるため温度を下げ、compact/full 間の揺れを抑える
-    phase1_temperature = 0.35
+    phase1_temperature = 0.35 if phase1_temperature is None else phase1_temperature
     phase2_temperature = 0.7
+
+    def _retry_note_for(phase: int) -> str | None:
+        if phase == 1:
+            return phase1_retry_note if phase1_retry_note is not None else phase_retry_note
+        return phase2_retry_note if phase2_retry_note is not None else phase_retry_note
+
+    def _prompt_for_attempt(base: str, attempt: int, phase: int) -> str:
+        note = _retry_note_for(phase)
+        if attempt == 1 or not note:
+            return base
+        return f"{base}\n\n{note}"
+
+    def _accepts(content: str) -> bool:
+        if phase_accept is None:
+            return True
+        return bool(phase_accept(content))
 
     phase1_output = ""
     if phase1_override and phase1_override.strip():
@@ -75,27 +101,40 @@ def _run_two_phase_generation(
                 content = complete_with_image(
                     provider,
                     image_path,
-                    prompt_phase1,
+                    _prompt_for_attempt(prompt_phase1, attempt, 1),
                     model=model,
                     max_tokens=800,
                     temperature=phase1_temperature,
                     system_prompt=system_role,
                 )
                 parsed_check = parse_critique_text(content, lens=lens_id)
-                if parsed_check["has_valid_phase1"] and "申し訳ありません" not in content:
+                structure_ok = (
+                    parsed_check["has_valid_phase1"] and "申し訳ありません" not in content
+                )
+                accept_ok = _accepts(content)
+                if structure_ok and accept_ok:
                     phase1_output = content
                     break
 
                 print(
                     f"[Phase1 retry {attempt}/{max_retries}] provider={provider} "
-                    f"valid={parsed_check['has_valid_phase1']} preview={content[:200]!r}",
+                    f"valid={parsed_check['has_valid_phase1']} accept={accept_ok} "
+                    f"preview={content[:200]!r}",
                     flush=True,
                 )
 
                 if attempt < max_retries:
-                    time.sleep(backoff_factor ** attempt)
-                else:
-                    raise ValueError("Phase 1 API出力に必須構造が含まれませんでした。")
+                    # モデル文面の差し戻し。通信の指数バックオフは掛けない。
+                    continue
+                if not structure_ok:
+                    raise CritiqueContractError(
+                        "Phase 1 出力に必須構造（TITLE/SCORES）が含まれませんでした。"
+                    )
+                raise CritiqueContractError(
+                    "Phase 1 出力が光の方位の事実と食い違っています。"
+                )
+            except CritiqueContractError:
+                raise
             except Exception as e:
                 if is_quota_or_rate_limit_error(e):
                     raise
@@ -116,26 +155,31 @@ def _run_two_phase_generation(
             content = complete_with_image(
                 provider,
                 image_path,
-                prompt_phase2,
+                _prompt_for_attempt(prompt_phase2, attempt, 2),
                 model=model,
                 max_tokens=2500,
                 temperature=phase2_temperature,
                 system_prompt=system_role,
             )
-            if is_valid_phase2_content(content):
+            structure_ok = is_valid_phase2_content(content)
+            accept_ok = _accepts(content)
+            if structure_ok and accept_ok:
                 phase2_output = content
                 break
 
             print(
                 f"[Phase2 retry {attempt}/{max_retries}] provider={provider} "
-                f"valid=False preview={content[:200]!r}",
+                f"valid={structure_ok} accept={accept_ok} preview={content[:200]!r}",
                 flush=True,
             )
 
             if attempt < max_retries:
-                time.sleep(backoff_factor ** attempt)
-            else:
-                raise ValueError("Phase 2 API出力に本文構造が含まれませんでした。")
+                continue
+            if not structure_ok:
+                raise CritiqueContractError("Phase 2 出力に本文構造が含まれませんでした。")
+            raise CritiqueContractError("Phase 2 出力が光の方位の事実と食い違っています。")
+        except CritiqueContractError:
+            raise
         except Exception as e:
             if is_quota_or_rate_limit_error(e):
                 raise
@@ -159,6 +203,11 @@ def generate_critique_with_prompts(
     lens: str = DEFAULT_LENS,
     phase1_override: str | None = None,
     system_role: str | None = None,
+    phase1_temperature: float | None = None,
+    phase_accept: Callable[[str], bool] | None = None,
+    phase_retry_note: str | None = None,
+    phase1_retry_note: str | None = None,
+    phase2_retry_note: str | None = None,
 ) -> str:
     """カスタムプロンプトビルダーで講評を生成（Guided Web 等）。"""
     return _run_two_phase_generation(
@@ -175,6 +224,11 @@ def generate_critique_with_prompts(
         build_phase1_prompt_fn=build_phase1,
         build_phase2_prompt_fn=build_phase2,
         system_role_override=system_role,
+        phase1_temperature=phase1_temperature,
+        phase_accept=phase_accept,
+        phase_retry_note=phase_retry_note,
+        phase1_retry_note=phase1_retry_note,
+        phase2_retry_note=phase2_retry_note,
     )
 
 

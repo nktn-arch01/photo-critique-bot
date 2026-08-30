@@ -20,6 +20,11 @@ eval/phase_d/images/*
 !eval/phase_d/images/.gitkeep
 eval/phase_d/out/
 
+# Prompt eval cache / live reports (keep fixtures)
+eval/prompt_eval/cache/
+eval/prompt_eval/out/
+eval/prompt_eval/images/*
+
 # IPTC sync: generated JPEGs ignored via *.jpg; keep committed result JSON if present
 !eval/iptc_sync/roundtrip_result.json
 !eval/iptc_sync/dxo_prepare_result.json

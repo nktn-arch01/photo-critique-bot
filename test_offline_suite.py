@@ -4,6 +4,8 @@ push 前: python3 test_offline_suite.py
 """
 
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 
 from PIL import Image
@@ -2322,6 +2324,328 @@ def test_prompt_contracts_judge_vocab_and_time_ban_alignment():
     assert not q4_errors, q4_errors
 
 
+def test_east_west_reversal_fixtures():
+    from prompt_contracts import check_output_east_west_reversal
+
+    root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
+    east_hint = (
+        "東の空からの低い自然光（一日の前半。"
+        "ガラスのオレンジや青い空があっても西の空の光ではない）"
+    )
+    west_hint = (
+        "西の空からの低い自然光（一日の後半。"
+        "ガラスのオレンジや青い空があっても東の空の光ではない）"
+    )
+    ok = (root / "east_pass_phase1.txt").read_text(encoding="utf-8")
+    mixed = (root / "east_fail_mix_dusk.txt").read_text(encoding="utf-8")
+    card = (root / "east_fail_card_dusk.txt").read_text(encoding="utf-8")
+    body = (root / "east_fail_body_coexist.txt").read_text(encoding="utf-8")
+    assert check_output_east_west_reversal(ok, east_hint)["pass"]
+    mixed_check = check_output_east_west_reversal(mixed, east_hint)
+    assert not mixed_check["pass"]
+    assert "夕暮れ" in mixed_check["hits"]
+    card_check = check_output_east_west_reversal(card, east_hint)
+    assert not card_check["pass"]
+    assert "夕暮れ" in card_check["hits"]
+    body_check = check_output_east_west_reversal(body, east_hint)
+    assert not body_check["pass"]
+    assert "夕暮れ" in body_check["hits"]
+    dawn_on_west = "■TITLE: 朝日の静けさ\n■SUMMARY: 早朝の街\n■SCORES:\n・眼差の輪郭 (Contours of the Eyes): ★★★☆☆ (3/5)\n■CRITIQUE_SUMMARY: 西の空の話。"
+    west_check = check_output_east_west_reversal(dawn_on_west, west_hint)
+    assert not west_check["pass"]
+    assert "朝日" in west_check["hits"] or "早朝" in west_check["hits"]
+
+
+def test_light_prompt_variant_default_strips_twilight_names():
+    from guided_web.guided_privacy import GuidedCritiqueContext, build_guided_phase1_prompt
+    from guided_web.light_prompt_variants import DEFAULT_VARIANT, extra_phase1_rules, present_light_hint
+
+    raw = (
+        "東の空からの低い自然光（一日の前半・ブルーアワー相当。"
+        "ガラスのオレンジや青い空があっても西の空の光ではない）"
+    )
+    shown = present_light_hint(raw, DEFAULT_VARIANT)
+    assert "ブルーアワー" not in shown
+    assert "東の空から" in shown
+    extra = extra_phase1_rules(DEFAULT_VARIANT)
+    assert "CRITIQUE_SUMMARY" in extra
+    assert "夕暮れ" in extra
+    assert "キャッチコピー" in extra
+    assert "構図の批評" in extra
+    ctx = GuidedCritiqueContext.from_api_params(
+        {
+            "image": {
+                "image_id": "x",
+                "size": "1x1",
+                "shot_at": "2025-11-12T05:45:22+09:00",
+                "timezone": "Asia/Tokyo",
+                "region": "東京",
+                "time_band": "夜明け（六）",
+                "light_hint": raw,
+            },
+            "camera": {},
+        }
+    )
+    p1 = build_guided_phase1_prompt(ctx)
+    assert "ブルーアワー" not in p1
+    assert "CRITIQUE_SUMMARY" in p1
+    p1_old = build_guided_phase1_prompt(ctx, variant="azimuth_fact")
+    assert "ブルーアワー" in p1_old
+
+
+def test_phase1_rejects_after_retries_still_dusk():
+    """差し戻し後も夕暮れなら出さない。単語置換で夕の物語を残さない。"""
+    from unittest.mock import patch
+
+    from critique_engine import generate_critique_with_prompts
+    from prompt_contracts import EAST_WEST_REWRITE_NOTE, check_output_east_west_reversal
+
+    root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
+    dusk = (root / "east_fail_card_dusk.txt").read_text(encoding="utf-8")
+    east_hint = (
+        "東の空からの低い自然光（一日の前半。"
+        "ガラスのオレンジや青い空があっても西の空の光ではない）"
+    )
+    calls = {"n": 0}
+
+    def fake_complete(_provider, _image_path, prompt, **_kwargs):
+        calls["n"] += 1
+        return dusk
+
+    with patch("critique_engine.complete_with_image", fake_complete), patch(
+        "critique_engine.time.sleep"
+    ) as sleep_mock:
+        try:
+            generate_critique_with_prompts(
+                Path("dummy.jpg"),
+                build_phase1=lambda: "phase1-base",
+                build_phase2=lambda _p1: "phase2-base",
+                mode="compact",
+                max_retries=3,
+                phase_accept=lambda t: check_output_east_west_reversal(t, east_hint)["pass"],
+                phase_retry_note=EAST_WEST_REWRITE_NOTE,
+            )
+        except ValueError as exc:
+            from critique_engine import CritiqueContractError
+
+            assert isinstance(exc, CritiqueContractError)
+            assert "光の方位" in str(exc)
+        else:
+            raise AssertionError("dusk card must not be accepted after retries")
+    assert calls["n"] == 3
+    assert sleep_mock.call_count == 0
+
+
+def test_phase1_accept_retries_card_dusk_then_passes():
+    """カード SUMMARY の夕暮れは構造OKでも受理せず、既存 max_retries で差し戻す。"""
+    from unittest.mock import patch
+
+    from critique_engine import generate_critique_with_prompts
+    from prompt_contracts import EAST_WEST_REWRITE_NOTE, check_output_east_west_reversal
+
+    root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
+    dusk = (root / "east_fail_card_dusk.txt").read_text(encoding="utf-8")
+    ok = (root / "east_pass_phase1.txt").read_text(encoding="utf-8")
+    east_hint = (
+        "東の空からの低い自然光（一日の前半。"
+        "ガラスのオレンジや青い空があっても西の空の光ではない）"
+    )
+    calls = {"n": 0, "prompts": []}
+
+    def fake_complete(_provider, _image_path, prompt, **_kwargs):
+        calls["n"] += 1
+        calls["prompts"].append(prompt)
+        return dusk if calls["n"] == 1 else ok
+
+    with patch("critique_engine.complete_with_image", fake_complete), patch(
+        "critique_engine.time.sleep"
+    ) as sleep_mock:
+        text = generate_critique_with_prompts(
+            Path("dummy.jpg"),
+            build_phase1=lambda: "phase1-base",
+            build_phase2=lambda _p1: "phase2-base",
+            mode="compact",
+            max_retries=3,
+            phase_accept=lambda t: check_output_east_west_reversal(t, east_hint)["pass"],
+            phase_retry_note=EAST_WEST_REWRITE_NOTE,
+        )
+    assert calls["n"] == 2
+    assert "夕暮れ" not in text
+    assert "phase1-base" == calls["prompts"][0]
+    assert EAST_WEST_REWRITE_NOTE in calls["prompts"][1]
+    assert sleep_mock.call_count == 0
+
+
+def test_phase2_accept_retries_body_coexist_then_passes():
+    """【1】の夕暮れと東の空の共存も、同じ受理条件で差し戻す。"""
+    from unittest.mock import patch
+
+    from critique_engine import generate_critique_with_prompts
+    from prompt_contracts import EAST_WEST_REWRITE_NOTE, check_output_east_west_reversal
+
+    root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
+    phase1 = (root / "east_pass_phase1.txt").read_text(encoding="utf-8")
+    dusk_body = (root / "east_fail_body_coexist.txt").read_text(encoding="utf-8")
+    # 本文だけ渡す（Phase2 出力は【1】から）
+    dusk_body = dusk_body.split("\n---\n", 1)[-1].strip()
+    ok_body = (
+        "## 【1. 情景・空気感とストーリー性】\n"
+        "東の空からの低い自然光が、港の輪郭を浮かび上がらせる。\n"
+    )
+    east_hint = (
+        "東の空からの低い自然光（一日の前半。"
+        "ガラスのオレンジや青い空があっても西の空の光ではない）"
+    )
+    calls = {"n": 0, "prompts": []}
+
+    def fake_complete(_provider, _image_path, prompt, **_kwargs):
+        calls["n"] += 1
+        calls["prompts"].append(prompt)
+        if "phase1-base" in prompt.split("【再生成】")[0]:
+            return phase1
+        return dusk_body if "【再生成】" not in prompt else ok_body
+
+    with patch("critique_engine.complete_with_image", fake_complete), patch(
+        "critique_engine.time.sleep"
+    ) as sleep_mock:
+        text = generate_critique_with_prompts(
+            Path("dummy.jpg"),
+            build_phase1=lambda: "phase1-base",
+            build_phase2=lambda _p1: "phase2-base",
+            mode="full",
+            max_retries=3,
+            phase_accept=lambda t: check_output_east_west_reversal(t, east_hint)["pass"],
+            phase_retry_note=EAST_WEST_REWRITE_NOTE,
+        )
+    assert "夕暮れ" not in text
+    assert "東の空からの低い自然光" in text
+    assert any("【再生成】" in p for p in calls["prompts"])
+    assert sleep_mock.call_count == 0
+
+
+def test_generate_guided_critique_wires_east_west_accept():
+    from unittest.mock import patch
+
+    from guided_web.guided_privacy import generate_guided_critique
+    from prompt_contracts import EAST_WEST_REWRITE_NOTE_PHASE1, EAST_WEST_REWRITE_NOTE_PHASE2
+
+    root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
+    dusk = (root / "east_fail_card_dusk.txt").read_text(encoding="utf-8")
+    ok = (root / "east_pass_phase1.txt").read_text(encoding="utf-8")
+    captured: dict = {}
+
+    def fake_generate(*_args, **kwargs):
+        captured.update(kwargs)
+        return ok
+
+    east_params = {
+        "image": {
+            "image_id": "p7101577",
+            "size": "1x1",
+            "shot_at": "2026-07-10T04:02:39+09:00",
+            "timezone": "Asia/Tokyo",
+            "region": "東京",
+            "time_band": "夜明け（六）",
+            "light_hint": (
+                "東の空からの低い自然光（一日の前半。"
+                "ガラスのオレンジや青い空があっても西の空の光ではない）"
+            ),
+        },
+        "camera": {},
+    }
+    with patch("critique_engine.generate_critique_with_prompts", fake_generate):
+        generate_guided_critique(Path("dummy.jpg"), east_params)
+    accept = captured.get("phase_accept")
+    assert accept is not None
+    assert accept(dusk) is False
+    assert accept(ok) is True
+    assert captured.get("phase1_retry_note") == EAST_WEST_REWRITE_NOTE_PHASE1
+    assert captured.get("phase2_retry_note") == EAST_WEST_REWRITE_NOTE_PHASE2
+    assert "【1】〜【7】は出さない" in (captured.get("phase1_retry_note") or "")
+    assert "構図の批評" in (captured.get("phase1_retry_note") or "")
+    assert captured.get("phase_retry_note") in (None, "")
+    assert "phase_repair" not in captured or captured.get("phase_repair") is None
+
+    south_params = {
+        "image": {
+            "image_id": "noon",
+            "size": "1x1",
+            "shot_at": "2026-07-10T12:00:00+09:00",
+            "timezone": "Asia/Tokyo",
+            "region": "東京",
+            "time_band": "昼",
+            "light_hint": "南寄りの高い自然光",
+        },
+        "camera": {},
+    }
+    captured.clear()
+    with patch("critique_engine.generate_critique_with_prompts", fake_generate):
+        generate_guided_critique(Path("dummy.jpg"), south_params)
+    assert captured.get("phase_accept") is None
+    assert captured.get("phase_retry_note") is None
+    assert captured.get("phase_repair") is None
+
+
+def test_owner_critique_error_does_not_say_api_conditions():
+    from critique_engine import CritiqueContractError
+    from guided_web.critique_errors import OWNER_AZIMUTH, OWNER_BUSY, OWNER_RETRY, owner_critique_error
+
+    azimuth = owner_critique_error(
+        CritiqueContractError("Phase 1 出力が光の方位の事実と食い違っています。")
+    )
+    assert azimuth == OWNER_AZIMUTH
+    assert "API" not in azimuth
+    busy = owner_critique_error(RuntimeError("Error code: 429 - Rate limit exceeded"))
+    assert busy == OWNER_BUSY
+    generic = owner_critique_error(RuntimeError("connection reset"))
+    assert generic == OWNER_RETRY
+    assert "API" not in generic
+    missing = owner_critique_error(RuntimeError("OpenAI APIキーが見つかりません。"))
+    assert "openai_api_key" in missing
+
+
+def test_phase1_transport_error_still_backs_off():
+    from unittest.mock import patch
+
+    from critique_engine import generate_critique_with_prompts
+
+    root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
+    ok = (root / "east_pass_phase1.txt").read_text(encoding="utf-8")
+    calls = {"n": 0}
+
+    def fake_complete(_provider, _image_path, _prompt, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("connection reset")
+        return ok
+
+    with patch("critique_engine.complete_with_image", fake_complete), patch(
+        "critique_engine.time.sleep"
+    ) as sleep_mock:
+        text = generate_critique_with_prompts(
+            Path("dummy.jpg"),
+            build_phase1=lambda: "phase1-base",
+            build_phase2=lambda _p1: "phase2-base",
+            mode="compact",
+            max_retries=3,
+        )
+    assert "東の空" in text
+    assert sleep_mock.call_count == 1
+
+
+def test_prompt_eval_offline_script():
+    result = subprocess.run(
+        [sys.executable, "scripts/prompt_eval.py"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parent,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "fixture_east_pass" in result.stdout
+    assert "PASS" in result.stdout
+
+
 def test_phase_d_offline_fixtures_person_and_time():
     """Q3: 画像不要 fixture で人物分岐・時間帯禁止の再発を防ぐ。"""
     from prompt_contracts import (
@@ -2536,6 +2860,169 @@ def test_guided_futei_band_without_gps_uses_timezone_anchor():
     assert band in {"正午（九）", "午後（八）", "午前（四）"}
 
 
+def test_guided_solar_clock_tokyo_not_akashi():
+    """太陽時を日本時間と見なさない。東京の日出は明石より早い。"""
+    from datetime import date
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import solar_sun_times
+
+    tz = ZoneInfo("Asia/Tokyo")
+    day = date(2025, 11, 12)
+    tokyo = solar_sun_times(day, 35.6812, 139.7671, tz)
+    akashi = solar_sun_times(day, 34.65, 135.0, tz)
+    assert tokyo is not None and akashi is not None
+    delta_min = (akashi.sunrise - tokyo.sunrise).total_seconds() / 60
+    assert 12 <= delta_min <= 25, delta_min
+    assert tokyo.sunrise.hour == 6
+    assert 8 <= tokyo.sunrise.minute <= 20
+
+
+def test_guided_p02_dawn_is_east_blue_hour_not_night():
+    """P02: 2025-11-12 05:45 横浜／東京代表は夜ではなく夜明け＋東のブルーアワー。"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band, classify_light_hint
+    from scanner import TIME_ZONE_FACT_BANNED_STEMS
+
+    tz = ZoneInfo("Asia/Tokyo")
+    shot = datetime(2025, 11, 12, 5, 45, 22, tzinfo=tz)
+    for lat, lon in ((35.457, 139.632), (35.6812, 139.7671)):
+        band = classify_futei_band(shot, lat, lon, tz)
+        hint = classify_light_hint(shot, lat, lon, tz)
+        assert band == "夜明け（六）", band
+        assert "東の空" in hint
+        assert "一日の前半" in hint
+        assert "ブルーアワー" in hint
+        assert "西の空の光ではない" in hint
+        assert "一日の後半" not in hint
+        for stem in TIME_ZONE_FACT_BANNED_STEMS:
+            assert stem not in hint, (stem, hint)
+
+
+def test_guided_light_hint_evening_is_west_not_east():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_light_hint
+    from scanner import TIME_ZONE_FACT_BANNED_STEMS
+
+    tz = ZoneInfo("Asia/Tokyo")
+    lat, lon = 35.6812, 139.7671
+    eve = datetime(2025, 11, 12, 16, 20, 0, tzinfo=tz)
+    hint = classify_light_hint(eve, lat, lon, tz)
+    assert "西の空" in hint
+    assert "一日の後半" in hint
+    assert "東の空の光ではない" in hint
+    assert "一日の前半" not in hint
+    for stem in TIME_ZONE_FACT_BANNED_STEMS:
+        assert stem not in hint, (stem, hint)
+
+
+def test_guided_light_hint_deep_night_has_no_banned_stems():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band, classify_light_hint
+    from scanner import TIME_ZONE_FACT_BANNED_STEMS
+
+    tz = ZoneInfo("Asia/Tokyo")
+    night = datetime(2026, 6, 21, 2, 0, 0, tzinfo=tz)
+    lat, lon = 35.68, 139.76
+    assert classify_futei_band(night, lat, lon, tz) == "夜"
+    hint = classify_light_hint(night, lat, lon, tz)
+    assert "地平線" in hint
+    for stem in TIME_ZONE_FACT_BANNED_STEMS:
+        assert stem not in hint, (stem, hint)
+
+
+def test_guided_prompts_use_light_hint_not_futei_label():
+    from guided_web.guided_privacy import (
+        GuidedCritiqueContext,
+        build_guided_phase1_prompt,
+        build_guided_phase2_prompt,
+    )
+
+    api_params = {
+        "image": {
+            "image_id": "p02",
+            "size": "7728x5152",
+            "shot_at": "2025-11-12T05:45:22+09:00",
+            "timezone": "Asia/Tokyo",
+            "region": "東京",
+            "time_band": "夕暮れ（六）",
+            "light_hint": "東の空からの低い自然光（一日の前半・ブルーアワー相当。ガラスのオレンジや青い空があっても西の空の光ではない）",
+        },
+        "camera": {
+            "focal_length": "23mm",
+            "aperture": "f/5.6",
+            "shutter_speed": "1/34s",
+            "iso": "ISO 5000",
+            "mode": "絞り優先",
+            "exposure_compensation": "-1.7 EV",
+        },
+    }
+    ctx = GuidedCritiqueContext.from_api_params(api_params)
+    p1 = build_guided_phase1_prompt(ctx)
+    p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
+    for text in (p1, p2):
+        assert "東の空からの低い自然光" in text
+        assert "一日の前半" in text
+        assert "覆さない" in text
+        assert "光の方位（事実）" in text
+        assert "夕暮れ（六）" not in text
+        assert "時間帯:" not in text
+        assert "画面の光が手掛かりと食い違うときは画面を優先" not in text
+
+
+def test_guided_phase1_prompt_keeps_card_slots_not_phase2_technique():
+    """SUMMARY はキャッチ。構図批評・撮影設定は Phase1 に載せない。"""
+    from guided_web.guided_privacy import (
+        GuidedCritiqueContext,
+        build_guided_phase1_prompt,
+        build_guided_phase2_prompt,
+    )
+    from prompt_contracts import EAST_WEST_REWRITE_NOTE_PHASE1, check_phase1_critique_summary_contract
+
+    api_params = {
+        "image": {
+            "image_id": "p02",
+            "size": "7728x5152",
+            "shot_at": "2025-11-12T05:45:22+09:00",
+            "timezone": "Asia/Tokyo",
+            "region": "東京",
+            "time_band": "夜明け（六）",
+            "light_hint": "東の空からの低い自然光（一日の前半）",
+        },
+        "camera": {
+            "focal_length": "23mm",
+            "aperture": "f/5.6",
+            "shutter_speed": "1/34s",
+            "iso": "ISO 5000",
+            "mode": "絞り優先",
+            "exposure_compensation": "-1.7 EV",
+        },
+    }
+    ctx = GuidedCritiqueContext.from_api_params(api_params)
+    p1 = build_guided_phase1_prompt(ctx)
+    p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
+    assert "撮影設定:" not in p1
+    assert "撮影設定:" in p2
+    assert "キャッチコピー" in p1
+    assert "構図の批評" in p1
+    assert "専門的な技術的表現" in p1
+    assert "構図の心理学" not in p1
+    assert "構図の心理学" in p2
+    assert "【2. 視線誘導と構成の美学】" not in p1
+    assert "【2. 視線誘導と構成の美学】" in p2
+    assert "本文文章は一切出力しない" in p1
+    assert "【1】〜【7】は出さない" in EAST_WEST_REWRITE_NOTE_PHASE1
+    assert "構図の批評" in EAST_WEST_REWRITE_NOTE_PHASE1
+    q4 = check_phase1_critique_summary_contract(p1)
+    assert not q4, q4
+
+
 def test_guided_resolve_region_without_gps():
     from zoneinfo import ZoneInfo
 
@@ -2556,6 +3043,7 @@ def test_guided_api_parameters_shape():
             timezone="Asia/Tokyo",
             region="東京",
             time_band="正午（九）",
+            light_hint="南寄りの高い自然光",
         ),
         camera=GuidedCameraSettings(
             focal_length="50mm",
@@ -2570,6 +3058,7 @@ def test_guided_api_parameters_shape():
     assert d["image"]["image_id"] == "abc"
     assert d["camera"]["shutter_speed"] == "1/125s"
     assert "time_band" in d["image"]
+    assert d["image"]["light_hint"] == "南寄りの高い自然光"
 
 
 def test_guided_parameter_display_rows():
@@ -2842,6 +3331,7 @@ def test_guided_privacy_prompts_exclude_identifying_metadata():
             "timezone": "Asia/Tokyo",
             "region": "東京",
             "time_band": "正午（九）",
+            "light_hint": "南寄りの高い自然光",
         },
         "camera": {
             "focal_length": "50mm",
@@ -2856,7 +3346,12 @@ def test_guided_privacy_prompts_exclude_identifying_metadata():
     p1 = build_guided_phase1_prompt(ctx)
     p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
     assert "東京" in p1
-    assert "正午（九）" in p1
+    assert "南寄りの高い自然光" in p1
+    assert "光の方位（事実）" in p1
+    assert "覆さない" in p1
+    assert "正午（九）" not in p1
+    assert "正午（九）" not in p2
+    assert "時間帯:" not in p1
     assert "静かな午後" in p2
     assert "抽象パラメータ" in p1
     assert_prompt_is_privacy_safe(p1)
@@ -3640,8 +4135,10 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "activeCritiqueEpoch" in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=30" in html
-    assert "guided.css?v=30" in html
+    assert "guided.js?v=31" in html
+    assert "guided.css?v=31" in html
+    assert "APIキーとネットワークを確認してください" not in js
+    assert "「もう一度」を押してください" in js
     assert 'id="btn-quit"' in html
     assert "終了" in html
     assert "function announceScreenLeaving" in js
@@ -3747,7 +4244,7 @@ def test_guided_index_html_is_not_cached():
     assert res.status_code == 200
     cache = (res.headers.get("cache-control") or "").lower()
     assert "no-store" in cache
-    assert "guided.js?v=30" in res.text
+    assert "guided.js?v=31" in res.text
     assert 'http-equiv="Cache-Control"' in res.text
 
 
@@ -4592,6 +5089,15 @@ def run_all():
     test_antenna_prompt_avoids_judge_vocabulary()
     test_console_ui_copy_phase1_labels()
     test_prompt_contracts_judge_vocab_and_time_ban_alignment()
+    test_east_west_reversal_fixtures()
+    test_light_prompt_variant_default_strips_twilight_names()
+    test_phase1_accept_retries_card_dusk_then_passes()
+    test_phase1_rejects_after_retries_still_dusk()
+    test_phase2_accept_retries_body_coexist_then_passes()
+    test_generate_guided_critique_wires_east_west_accept()
+    test_owner_critique_error_does_not_say_api_conditions()
+    test_phase1_transport_error_still_backs_off()
+    test_prompt_eval_offline_script()
     test_phase_d_offline_fixtures_person_and_time()
     test_q5_summarize_h3_and_reactions_scripts()
     test_p2_2_card_words_before_stars()
@@ -4599,6 +5105,15 @@ def run_all():
     test_dry_run_session_rejects_record_post_h3()
     test_guided_futei_band_tokyo_summer_day()
     test_guided_futei_band_night()
+    test_guided_timezone_anchor_tokyo()
+    test_guided_futei_band_without_gps_uses_timezone_anchor()
+    test_guided_solar_clock_tokyo_not_akashi()
+    test_guided_p02_dawn_is_east_blue_hour_not_night()
+    test_guided_light_hint_evening_is_west_not_east()
+    test_guided_light_hint_deep_night_has_no_banned_stems()
+    test_guided_prompts_use_light_hint_not_futei_label()
+    test_guided_phase1_prompt_keeps_card_slots_not_phase2_technique()
+    test_guided_resolve_region_without_gps()
     test_guided_api_parameters_shape()
     test_guided_parameter_display_rows()
     test_guided_upload_returns_parameter_display()

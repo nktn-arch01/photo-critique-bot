@@ -773,7 +773,7 @@ async function startCritique() {
     endCritiqueWatch();
     updateKeepButton();
     const skeleton = document.getElementById("read-skeleton");
-    skeleton.textContent = err.message || "言葉を読み取れませんでした。APIキーとネットワークを確認してください。";
+    skeleton.textContent = err.message || "言葉を読み取れませんでした。「もう一度」を押してください。";
     setReadLoading(true);
   }
 }
@@ -819,7 +819,7 @@ async function pollCritique(requestId, shownPhase1) {
         setPhase2RetryVisible(true);
         return;
       }
-      throw new Error(data.error || "言葉を読み取れませんでした。APIキーとネットワークを確認してください。");
+      throw new Error(data.error || "言葉を読み取れませんでした。「もう一度」を押してください。");
     }
     if (data.status === "phase2_running" && shownPhase1) {
       hint.hidden = false;
