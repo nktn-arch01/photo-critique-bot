@@ -17,6 +17,7 @@ from typing import Any
 from ai_vision import DEFAULT_OPENAI_MODEL
 from critique_lens import CritiqueLens, get_lens, normalize_lens
 from critique_prompts import PROMPT_MISSING, _scores_format_block, _scores_meaning_block, get_system_role, sanitize_str
+from light_context import LIGHT_HINT_USAGE_RULE, format_place_and_light_facts
 
 _AUDIT_PATH = Path.home() / ".lumina_notes" / "guided_api_audit.jsonl"
 
@@ -105,12 +106,17 @@ def api_parameters_for_audit(api_params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _environment_block(ctx: GuidedCritiqueContext) -> str:
+def _environment_block(ctx: GuidedCritiqueContext, *, phase: int) -> str:
+    """抽象パラメータ。Phase1 は撮影日時を渡さない（規則5）。time_band 生ラベルは出さない。"""
+    facts = format_place_and_light_facts(
+        timezone=ctx.timezone,
+        region=ctx.region,
+        time_band=ctx.time_band,
+        shot_at=ctx.shot_at,
+        include_shot_at=(phase == 2),
+    )
     return f"""【撮影環境（抽象パラメータのみ）】
-- 撮影日時: {ctx.shot_at}
-- タイムゾーン: {ctx.timezone}
-- 地域（都市レベル）: {ctx.region}
-- 時間帯: {ctx.time_band}
+{facts}
 - 画像サイズ: {ctx.size}
 - 撮影設定: 絞り {ctx.aperture} | SS {ctx.shutter_speed} | ISO {ctx.iso} | 焦点距離 {ctx.focal_length} | 露出モード {ctx.mode} | 露出補正 {ctx.exposure_compensation}
 - 撮影者の一言: {ctx.user_intent}"""
@@ -130,11 +136,11 @@ def build_guided_phase1_prompt(
     L = _resolve_lens(lens)
     return f"""与えられた写真を観察し、カード画像生成に必要な以下の4項目（TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY）のみを即座に作成してください。
 
-{_environment_block(ctx)}
+{_environment_block(ctx, phase=1)}
 
 【講評作成の絶対ルール】
 1. {L.score_definition_rule}
-2. 時間帯ラベルの厳禁: 『朝日』『夕日』『夕焼け』『夕暮れ』『夕映え』『夕景』『夜景』『黄昏』『夜の』『早朝』などの直接的な時間帯を示す単語・ラベルの使用は【一切厳禁】です。画面が暗く見えても時計の時間帯を推測して書かないでください。光の角度・質感・明暗・グラデーションだけを描写してください。
+2. 時間帯ラベルの厳禁: 『朝日』『夕日』『夕焼け』『夕暮れ』『夕映え』『夕景』『夜景』『黄昏』『夜の』『早朝』などの直接的な時間帯を示す単語・ラベルの使用は【一切厳禁】です。画面が暗く見えても時計の時間帯を推測して書かないでください。光の角度・質感・明暗・グラデーションだけを描写してください。{LIGHT_HINT_USAGE_RULE}
 3. 人物の扱い（分岐・厳守）:
    - **判定**: まず画面に「人の姿」（顔・体・手・シルエット）があるかを確認する。看板のキャラクター絵は人物に数えない。
    - **人の姿がある**: 光や空間の話だけで終えるな。■CRITIQUE_SUMMARY の一文目は、写っているその人の「視線」「しぐさ」「佇まい」（または「佇む姿」）のいずれかで始めよ。
@@ -165,12 +171,12 @@ def build_guided_phase2_prompt(
 【事前確定の観察結果・要約】
 {phase1_output}
 
-{_environment_block(ctx)}
+{_environment_block(ctx, phase=2)}
 
 【講評作成の絶対ルール】
 1. 【撮影意図への回答】: 撮影者の一言（「{ctx.user_intent}」）に触れ、写真への結びつきを述べてください（一言が「なし」のときは画面観察を主にしてください）。
 2. 【脱テンプレート化】: 安易な定型フレーズは使用厳禁です。各写真固有の観察から書いてください。
-3. 【光と陰影】: 時間帯ラベル（{ctx.time_band}）は背景知識です。『朝日』『夕日』『夜景』等の単語は厳禁。光の角度・明暗・グラデーションで描写してください。
+3. 【光と陰影】: {LIGHT_HINT_USAGE_RULE} 光の角度・明暗・グラデーションで描写してください。
 4. 【物語としての人物】: 人の姿がある場合のみしぐさ・視線・佇まいを用いる。ない場合は人物語を仮定しない。
 5. 【構図の心理学】: 配置・余白・光のリズムを分析する。
 6. 【曖昧さの肯定】: 技術的欠陥として切り捨てない。

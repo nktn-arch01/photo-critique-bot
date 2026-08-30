@@ -155,7 +155,7 @@ def test_self_lens_prompts():
     assert "ステップアップ・アドバイス" not in p2
     assert "曖昧さの肯定" in p2
     assert "DateTimeOriginal" in p2
-    assert "時計帯ヒント" in p2
+    assert "光の手掛かり" in p2
     # Wave A5: 審判語を避け、観察／対話の語彙へ
     assert "基本評価" not in p2
     assert "確定評価の維持" not in p2
@@ -165,6 +165,27 @@ def test_self_lens_prompts():
     assert "★スナップショット" in p1
 
 
+def test_line_phase2_uses_clock_fact_as_light_hint():
+    ctx = CritiquePromptContext.from_metadata(
+        {
+            "camera_model": "TestCam",
+            "lens_model": "TestLens",
+            "date_time": "2025-11-12 05:45:22",
+            "time_zone_fact": "04-07時帯（低角度の自然光が起きやすい）",
+        },
+        {},
+    )
+    p1 = build_phase1_prompt(ctx)
+    p2 = build_phase2_prompt(ctx, "■TITLE: t")
+    assert "撮影日時" not in p1
+    assert "04-07時帯" not in p1
+    assert "04-07時帯" in p2
+    assert "光の手掛かり" in p2
+    from light_context import LIGHT_HINT_USAGE_RULE
+
+    assert LIGHT_HINT_USAGE_RULE in p2
+
+
 def test_time_zone_fact_labels_avoid_banned_stems():
     import datetime as _dt
 
@@ -172,6 +193,48 @@ def test_time_zone_fact_labels_avoid_banned_stems():
         label = _determine_time_zone_fact(_dt.datetime(2025, 1, 1, hour, 0, 0))
         for stem in TIME_ZONE_FACT_BANNED_STEMS:
             assert stem not in label, f"hour={hour} label={label!r} contains {stem!r}"
+
+
+def test_light_context_physics_map_avoids_banned_stems():
+    import datetime as _dt
+
+    from light_context import (
+        assert_physics_map_complete,
+        format_place_and_light_facts,
+        light_physics_hint,
+    )
+
+    assert_physics_map_complete()
+    dusk = light_physics_hint("夕暮れ（六）")
+    night = light_physics_hint("夜")
+    noon = light_physics_hint("正午（九）")
+    assert "夕暮れ" not in dusk
+    assert night != "夜"
+    assert "太陽高度が高め" in noon
+    clock = _determine_time_zone_fact(_dt.datetime(2025, 1, 1, 5, 0, 0))
+    assert "04-07時帯" in light_physics_hint(None, fallback_clock_fact=clock)
+    facts = format_place_and_light_facts(
+        timezone="Asia/Tokyo",
+        region="東京",
+        time_band="夕暮れ（六）",
+        shot_at="2026-06-21T18:40:00+09:00",
+        include_shot_at=False,
+    )
+    assert "東京" in facts
+    assert "Asia/Tokyo" in facts
+    assert "夕暮れ（六）" not in facts
+    assert "撮影日時" not in facts
+    facts2 = format_place_and_light_facts(
+        timezone="Asia/Tokyo",
+        region="東京",
+        time_band="夜",
+        shot_at="2026-06-21T02:00:00+09:00",
+        include_shot_at=True,
+    )
+    assert "撮影日時" in facts2
+    fact_line = [line for line in facts2.splitlines() if line.startswith("- 光の手掛かり")][0]
+    assert "夜" not in fact_line
+    assert "人工光" in fact_line
 
 
 def test_datetime_prefers_original_not_modify():
@@ -2856,11 +2919,56 @@ def test_guided_privacy_prompts_exclude_identifying_metadata():
     p1 = build_guided_phase1_prompt(ctx)
     p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
     assert "東京" in p1
-    assert "正午（九）" in p1
+    assert "Asia/Tokyo" in p1
+    assert "太陽高度が高め" in p1
+    assert "正午（九）" not in p1
+    assert "撮影日時" not in p1
+    assert "2026-06-21T12:00:00+09:00" in p2
     assert "静かな午後" in p2
     assert "抽象パラメータ" in p1
+    from light_context import LIGHT_HINT_USAGE_RULE
+    from prompt_contracts import check_phase1_time_ban_in_prompt
+
+    assert LIGHT_HINT_USAGE_RULE in p1
+    assert LIGHT_HINT_USAGE_RULE in p2
+    assert not check_phase1_time_ban_in_prompt(p1)
     assert_prompt_is_privacy_safe(p1)
     assert_prompt_is_privacy_safe(p2)
+
+
+def test_guided_prompts_translate_dusk_and_night_bands():
+    from guided_web.guided_privacy import (
+        GuidedCritiqueContext,
+        build_guided_phase1_prompt,
+        build_guided_phase2_prompt,
+    )
+
+    def _ctx(band: str) -> GuidedCritiqueContext:
+        return GuidedCritiqueContext.from_api_params(
+            {
+                "image": {
+                    "image_id": "x",
+                    "size": "100x100",
+                    "shot_at": "2026-01-01T18:50:00+09:00",
+                    "timezone": "Asia/Tokyo",
+                    "region": "東京",
+                    "time_band": band,
+                },
+                "camera": {},
+            }
+        )
+
+    dusk_p1 = build_guided_phase1_prompt(_ctx("夕暮れ（六）"))
+    dusk_p2 = build_guided_phase2_prompt(_ctx("夕暮れ（六）"), "■TITLE: t")
+    night_p1 = build_guided_phase1_prompt(_ctx("夜"))
+    for blob in (dusk_p1, dusk_p2):
+        assert "夕暮れ（六）" not in blob
+        assert "日没前後" in blob
+        assert "東京" in blob
+    assert "時間帯: 夜" not in night_p1
+    assert "人工光" in night_p1
+    fact_line = [ln for ln in night_p1.splitlines() if ln.startswith("- 光の手掛かり")][0]
+    assert "夜" not in fact_line
 
 
 def test_guided_privacy_audit_whitelist():
@@ -4539,7 +4647,9 @@ def run_all():
     test_parser_legacy_score_aliases()
     test_parser_phase2()
     test_self_lens_prompts()
+    test_line_phase2_uses_clock_fact_as_light_hint()
     test_time_zone_fact_labels_avoid_banned_stems()
+    test_light_context_physics_map_avoids_banned_stems()
     test_datetime_prefers_original_not_modify()
     test_phase_d_p02_uses_datetime_original_not_modify()
     test_log_manager_processed_filename()
@@ -4610,6 +4720,7 @@ def run_all():
     test_guided_stock_export_writes_files()
     test_guided_format_reflections_block()
     test_guided_privacy_prompts_exclude_identifying_metadata()
+    test_guided_prompts_translate_dusk_and_night_bands()
     test_guided_privacy_audit_whitelist()
     test_guided_critique_runner_uses_api_params()
     test_guided_selected_reflection_labels()
