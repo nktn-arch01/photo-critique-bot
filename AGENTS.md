@@ -28,7 +28,23 @@
 1. 規則1の3段階を、短い文章で残す（根本の不正状態 → 共通化 → 自動テスト）。
 2. `python3 test_offline_suite.py` が通る。
 3. 変更した経路について、**Cloud Agent の Linux ブラウザだけでは足りないもの** を [`docs/P2_2_GUIDED_MAC_CHECKLIST.md`](docs/P2_2_GUIDED_MAC_CHECKLIST.md) の該当番号で明示する。足りないならテストを足すか、未確認と書く。
-4. Mac でサーバーが古いまま残らない（`.app` / `scripts/run_guided_web.sh` が既存プロセスを止めて差し替える前提を壊さない）。
+4. Mac でサーバーが古いまま残らない（`.app` / `scripts/run_guided_web.sh` が既存プロセスを止めて差し替える前提を壊さない）。画面が無いのにサーバだけ残る状態も「直した」とは言わない。
+
+---
+
+## Guided Mac 起動でやらないこと（2026-08-30 のやり直しから）
+
+`.app` の前に、寿命を一文で書く。**誰が消えたらプロセスが終わるか。** Console は「窓＝プログラム」。Guided の画面はブラウザなので、画面が無ければサーバも止まる、が正本。Dock に出ることはシェル `.app` では約束しない。
+
+一度失敗した描画・Dock ホストを、別の種類に積み替えない。
+
+- WebKit / pywebview / Tk の常駐窓 / JXA / `osacompile` stay-open applet / `task.launch`
+- `NSPrincipalClass=NSApplication` を bash に付ける
+- オーナーにログ・強制終了・ダイアログ解読を頼んで次のホストを試す
+
+満たせないのは「bash が Cocoa アプリになること」。解けるのは arm64 の python3・ログイン殻・ポートの差し替え・画面の有無に合わせた寿命。Dock が必要なら、それは Mac 上で作る署名済みネイティブが別依頼。
+
+3段階レビューを文章で書いただけでは適用していない。提案が「本物のアプリに見せる別の方法」なら却下する。
 
 ---
 
