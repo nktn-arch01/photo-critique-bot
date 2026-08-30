@@ -54,6 +54,22 @@ PHASE_OUTPUT_TIME_BAN: tuple[str, ...] = (
     "早朝",
 )
 
+# 朝夕逆転（東なのに夕／西なのに朝）。時間帯禁止と重ねてよい。
+EVENING_REVERSAL_STEMS: tuple[str, ...] = (
+    "夕暮れ",
+    "夕刻",
+    "夕方",
+    "夕日",
+    "夕焼け",
+    "夕映え",
+    "夕景",
+    "黄昏",
+)
+MORNING_REVERSAL_STEMS: tuple[str, ...] = (
+    "朝日",
+    "早朝",
+)
+
 # Phase1 プロンプト追加分（「夜の」など）
 PHASE1_EXTRA_TIME_BAN: tuple[str, ...] = ("夜の",)
 
@@ -177,6 +193,40 @@ def check_output_time_ban(critique: str) -> dict:
     ban = tuple(PHASE_OUTPUT_TIME_BAN) + tuple(PHASE1_EXTRA_TIME_BAN)
     hits = find_forbidden_stems(text, ban)
     return {"pass": not hits, "hits": hits}
+
+
+def infer_light_side(light_hint: str) -> str | None:
+    """光ヒントから東側（一日の前半）／西側（一日の後半）を読む。否定の『西の空の光ではない』は西に数えない。"""
+    hint = light_hint or ""
+    east = "東の空から" in hint or "一日の前半" in hint
+    west = "西の空から" in hint or "一日の後半" in hint
+    if east and not west:
+        return "east"
+    if west and not east:
+        return "west"
+    return None
+
+
+def check_output_east_west_reversal(critique: str, light_hint: str) -> dict:
+    """東の事実なのに夕の語、西の事実なのに朝の語があれば FAIL（混在も逆転）。"""
+    side = infer_light_side(light_hint)
+    text = _phase1_text_for_ban(critique)
+    if side is None:
+        return {"pass": True, "side": None, "hits": [], "detail": "no east/west fact"}
+    stems = EVENING_REVERSAL_STEMS if side == "east" else MORNING_REVERSAL_STEMS
+    hits = find_forbidden_stems(text, stems)
+    excerpts: list[str] = []
+    for stem in hits:
+        idx = text.find(stem)
+        if idx >= 0:
+            start = max(0, idx - 12)
+            excerpts.append(text[start : idx + len(stem) + 12].replace("\n", " "))
+    return {
+        "pass": not hits,
+        "side": side,
+        "hits": hits,
+        "excerpts": excerpts,
+    }
 
 
 def check_output_person_present(critique: str) -> dict:

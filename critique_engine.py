@@ -48,6 +48,7 @@ def _run_two_phase_generation(
     build_phase1_prompt_fn: Callable[[], str] | None = None,
     build_phase2_prompt_fn: Callable[[str], str] | None = None,
     system_role_override: str | None = None,
+    phase1_temperature: float | None = None,
 ) -> str:
     lens_id = normalize_lens(lens)
     if build_phase1_prompt_fn:
@@ -60,7 +61,7 @@ def _run_two_phase_generation(
         prompt_phase1 = build_phase1_prompt(ctx, lens=lens_id)
 
     # Phase1 はカードの軸になるため温度を下げ、compact/full 間の揺れを抑える
-    phase1_temperature = 0.35
+    phase1_temperature = 0.35 if phase1_temperature is None else phase1_temperature
     phase2_temperature = 0.7
 
     phase1_output = ""
@@ -159,6 +160,7 @@ def generate_critique_with_prompts(
     lens: str = DEFAULT_LENS,
     phase1_override: str | None = None,
     system_role: str | None = None,
+    phase1_temperature: float | None = None,
 ) -> str:
     """カスタムプロンプトビルダーで講評を生成（Guided Web 等）。"""
     return _run_two_phase_generation(
@@ -175,6 +177,7 @@ def generate_critique_with_prompts(
         build_phase1_prompt_fn=build_phase1,
         build_phase2_prompt_fn=build_phase2,
         system_role_override=system_role,
+        phase1_temperature=phase1_temperature,
     )
 
 

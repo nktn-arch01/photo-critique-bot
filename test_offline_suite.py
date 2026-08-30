@@ -4,6 +4,8 @@ push 前: python3 test_offline_suite.py
 """
 
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 
 from PIL import Image
@@ -2320,6 +2322,75 @@ def test_prompt_contracts_judge_vocab_and_time_ban_alignment():
 
     q4_errors = check_phase1_critique_summary_contract(p1)
     assert not q4_errors, q4_errors
+
+
+def test_east_west_reversal_fixtures():
+    from prompt_contracts import check_output_east_west_reversal
+
+    root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
+    east_hint = (
+        "東の空からの低い自然光（一日の前半。"
+        "ガラスのオレンジや青い空があっても西の空の光ではない）"
+    )
+    west_hint = (
+        "西の空からの低い自然光（一日の後半。"
+        "ガラスのオレンジや青い空があっても東の空の光ではない）"
+    )
+    ok = (root / "east_pass_phase1.txt").read_text(encoding="utf-8")
+    mixed = (root / "east_fail_mix_dusk.txt").read_text(encoding="utf-8")
+    assert check_output_east_west_reversal(ok, east_hint)["pass"]
+    mixed_check = check_output_east_west_reversal(mixed, east_hint)
+    assert not mixed_check["pass"]
+    assert "夕暮れ" in mixed_check["hits"]
+    dawn_on_west = "■TITLE: 朝日の静けさ\n■SUMMARY: 早朝の街\n■SCORES:\n・眼差の輪郭 (Contours of the Eyes): ★★★☆☆ (3/5)\n■CRITIQUE_SUMMARY: 西の空の話。"
+    west_check = check_output_east_west_reversal(dawn_on_west, west_hint)
+    assert not west_check["pass"]
+    assert "朝日" in west_check["hits"] or "早朝" in west_check["hits"]
+
+
+def test_light_prompt_variant_default_strips_twilight_names():
+    from guided_web.guided_privacy import GuidedCritiqueContext, build_guided_phase1_prompt
+    from guided_web.light_prompt_variants import DEFAULT_VARIANT, present_light_hint
+
+    raw = (
+        "東の空からの低い自然光（一日の前半・ブルーアワー相当。"
+        "ガラスのオレンジや青い空があっても西の空の光ではない）"
+    )
+    shown = present_light_hint(raw, DEFAULT_VARIANT)
+    assert "ブルーアワー" not in shown
+    assert "東の空から" in shown
+    ctx = GuidedCritiqueContext.from_api_params(
+        {
+            "image": {
+                "image_id": "x",
+                "size": "1x1",
+                "shot_at": "2025-11-12T05:45:22+09:00",
+                "timezone": "Asia/Tokyo",
+                "region": "東京",
+                "time_band": "夜明け（六）",
+                "light_hint": raw,
+            },
+            "camera": {},
+        }
+    )
+    p1 = build_guided_phase1_prompt(ctx)
+    assert "ブルーアワー" not in p1
+    assert "TITLE と ■SUMMARY" in p1 or "TITLEと ■SUMMARY" in p1 or "■TITLE と ■SUMMARY" in p1
+    p1_old = build_guided_phase1_prompt(ctx, variant="azimuth_fact")
+    assert "ブルーアワー" in p1_old
+
+
+def test_prompt_eval_offline_script():
+    result = subprocess.run(
+        [sys.executable, "scripts/prompt_eval.py"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parent,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "fixture_east_pass" in result.stdout
+    assert "PASS" in result.stdout
 
 
 def test_phase_d_offline_fixtures_person_and_time():
@@ -4716,6 +4787,9 @@ def run_all():
     test_antenna_prompt_avoids_judge_vocabulary()
     test_console_ui_copy_phase1_labels()
     test_prompt_contracts_judge_vocab_and_time_ban_alignment()
+    test_east_west_reversal_fixtures()
+    test_light_prompt_variant_default_strips_twilight_names()
+    test_prompt_eval_offline_script()
     test_phase_d_offline_fixtures_person_and_time()
     test_q5_summarize_h3_and_reactions_scripts()
     test_p2_2_card_words_before_stars()

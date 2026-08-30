@@ -17,6 +17,7 @@ from typing import Any
 from ai_vision import DEFAULT_OPENAI_MODEL
 from critique_lens import CritiqueLens, get_lens, normalize_lens
 from critique_prompts import PROMPT_MISSING, _scores_format_block, _scores_meaning_block, get_system_role, sanitize_str
+from guided_web.light_prompt_variants import DEFAULT_VARIANT, extra_phase1_rules, present_light_hint
 
 _AUDIT_PATH = Path.home() / ".lumina_notes" / "guided_api_audit.jsonl"
 
@@ -118,12 +119,12 @@ def _light_azimuth_fact_rule(light_hint: str) -> str:
 事前確定の観察に禁止の時間帯語があっても踏襲せず、光の方位の事実に従う。"""
 
 
-def _environment_block(ctx: GuidedCritiqueContext) -> str:
+def _environment_block(ctx: GuidedCritiqueContext, light_hint: str) -> str:
     return f"""【撮影環境（抽象パラメータのみ）】
 - 撮影日時: {ctx.shot_at}
 - タイムゾーン: {ctx.timezone}
 - 地域（都市レベル）: {ctx.region}
-- 光の方位（事実）: {ctx.light_hint}
+- 光の方位（事実）: {light_hint}
 - 画像サイズ: {ctx.size}
 - 撮影設定: 絞り {ctx.aperture} | SS {ctx.shutter_speed} | ISO {ctx.iso} | 焦点距離 {ctx.focal_length} | 露出モード {ctx.mode} | 露出補正 {ctx.exposure_compensation}
 - 撮影者の一言: {ctx.user_intent}"""
@@ -138,17 +139,23 @@ def _resolve_lens(lens: str | CritiqueLens | None) -> CritiqueLens:
 def build_guided_phase1_prompt(
     ctx: GuidedCritiqueContext,
     lens: str | CritiqueLens | None = None,
+    *,
+    variant: str | None = None,
 ) -> str:
     """Phase1: 抽象パラメータのみ（機種名・IPTC・Rating 等は含めない）。"""
     L = _resolve_lens(lens)
+    vid = variant or DEFAULT_VARIANT
+    hint = present_light_hint(ctx.light_hint, vid)
+    extra = extra_phase1_rules(vid)
+    extra_block = f"\n{extra}\n" if extra else ""
     return f"""与えられた写真を観察し、カード画像生成に必要な以下の4項目（TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY）のみを即座に作成してください。
 
-{_environment_block(ctx)}
+{_environment_block(ctx, hint)}
 
 【講評作成の絶対ルール】
 1. {L.score_definition_rule}
-2. {_light_azimuth_fact_rule(ctx.light_hint)}
-描写は光の角度・質感・明暗・グラデーションだけにしてください。
+2. {_light_azimuth_fact_rule(hint)}
+描写は光の角度・質感・明暗・グラデーションだけにしてください。{extra_block}
 3. 人物の扱い（分岐・厳守）:
    - **判定**: まず画面に「人の姿」（顔・体・手・シルエット）があるかを確認する。看板のキャラクター絵は人物に数えない。
    - **人の姿がある**: 光や空間の話だけで終えるな。■CRITIQUE_SUMMARY の一文目は、写っているその人の「視線」「しぐさ」「佇まい」（または「佇む姿」）のいずれかで始めよ。
@@ -171,20 +178,24 @@ def build_guided_phase2_prompt(
     ctx: GuidedCritiqueContext,
     phase1_output: str,
     lens: str | CritiqueLens | None = None,
+    *,
+    variant: str | None = None,
 ) -> str:
     """Phase2: 抽象パラメータのみ（IPTC・機種タグ・Preset 等は含めない）。"""
     L = _resolve_lens(lens)
+    vid = variant or DEFAULT_VARIANT
+    hint = present_light_hint(ctx.light_hint, vid)
     return f"""与えられた写真、撮影環境（抽象パラメータ）、および既に確定した以下の観察スナップショット・要約を読み、撮影者の美意識に寄り添う対話本文（【1】〜【7】）を作成してください。
 
 【事前確定の観察結果・要約】
 {phase1_output}
 
-{_environment_block(ctx)}
+{_environment_block(ctx, hint)}
 
 【講評作成の絶対ルール】
 1. 【撮影意図への回答】: 撮影者の一言（「{ctx.user_intent}」）に触れ、写真への結びつきを述べてください（一言が「なし」のときは画面観察を主にしてください）。
 2. 【脱テンプレート化】: 安易な定型フレーズは使用厳禁です。各写真固有の観察から書いてください。
-3. {_light_azimuth_fact_rule(ctx.light_hint)}
+3. {_light_azimuth_fact_rule(hint)}
 描写は光の角度・明暗・グラデーションで行ってください。
 4. 【物語としての人物】: 人の姿がある場合のみしぐさ・視線・佇まいを用いる。ない場合は人物語を仮定しない。
 5. 【構図の心理学】: 配置・余白・光のリズムを分析する。
