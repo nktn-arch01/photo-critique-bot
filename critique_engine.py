@@ -24,6 +24,7 @@ from critique_prompts import (
 
 # デスクトップ等からの後方互換
 __all__ = [
+    "CritiqueContractError",
     "generate_critique",
     "generate_critique_openai",
     "generate_critique_gemini",
@@ -31,6 +32,10 @@ __all__ = [
     "generate_critique_with_prompts",
     "get_openai_client",
 ]
+
+
+class CritiqueContractError(ValueError):
+    """モデル出力がカード構造または光の方位の契約を満たさない。通信障害ではない。"""
 
 
 def _run_two_phase_generation(
@@ -111,11 +116,17 @@ def _run_two_phase_generation(
                 )
 
                 if attempt < max_retries:
-                    time.sleep(backoff_factor ** attempt)
-                elif not structure_ok:
-                    raise ValueError("Phase 1 API出力に必須構造が含まれませんでした。")
-                else:
-                    raise ValueError("Phase 1 出力が光の方位の事実と食い違っています。")
+                    # モデル文面の差し戻し。通信の指数バックオフは掛けない。
+                    continue
+                if not structure_ok:
+                    raise CritiqueContractError(
+                        "Phase 1 出力に必須構造（TITLE/SCORES）が含まれませんでした。"
+                    )
+                raise CritiqueContractError(
+                    "Phase 1 出力が光の方位の事実と食い違っています。"
+                )
+            except CritiqueContractError:
+                raise
             except Exception as e:
                 if is_quota_or_rate_limit_error(e):
                     raise
@@ -155,11 +166,12 @@ def _run_two_phase_generation(
             )
 
             if attempt < max_retries:
-                time.sleep(backoff_factor ** attempt)
-            elif not structure_ok:
-                raise ValueError("Phase 2 API出力に本文構造が含まれませんでした。")
-            else:
-                raise ValueError("Phase 2 出力が光の方位の事実と食い違っています。")
+                continue
+            if not structure_ok:
+                raise CritiqueContractError("Phase 2 出力に本文構造が含まれませんでした。")
+            raise CritiqueContractError("Phase 2 出力が光の方位の事実と食い違っています。")
+        except CritiqueContractError:
+            raise
         except Exception as e:
             if is_quota_or_rate_limit_error(e):
                 raise

@@ -20,6 +20,7 @@ from PIL import Image, UnidentifiedImageError
 
 from ai_vision import prepare_vision_image_bytes
 from guided_metadata import build_guided_api_parameters
+from guided_web.critique_errors import owner_critique_error
 from guided_web.critique_runner import run_phase1, run_phase2
 from guided_web.file_picker import pick_image_file
 from guided_web.folder_picker import pick_folder
@@ -194,7 +195,7 @@ async def _run_phase1_then_phase2_body(
             if is_current_epoch(sess, epoch) and session_id in _sessions:
                 sess["critique"] = {
                     "status": "error",
-                    "error": str(e),
+                    "error": owner_critique_error(e),
                     "lens": lens,
                 }
         return
@@ -264,7 +265,7 @@ async def _finish_phase2_body(
             if not is_current_epoch(sess, epoch):
                 return
             sess["critique"]["status"] = "error"
-            sess["critique"]["error"] = str(e)
+            sess["critique"]["error"] = owner_critique_error(e)
 
 
 @app.post("/api/shutdown")

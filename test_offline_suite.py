@@ -2412,7 +2412,7 @@ def test_phase1_rejects_after_retries_still_dusk():
 
     with patch("critique_engine.complete_with_image", fake_complete), patch(
         "critique_engine.time.sleep"
-    ):
+    ) as sleep_mock:
         try:
             generate_critique_with_prompts(
                 Path("dummy.jpg"),
@@ -2424,10 +2424,14 @@ def test_phase1_rejects_after_retries_still_dusk():
                 phase_retry_note=EAST_WEST_REWRITE_NOTE,
             )
         except ValueError as exc:
+            from critique_engine import CritiqueContractError
+
+            assert isinstance(exc, CritiqueContractError)
             assert "光の方位" in str(exc)
         else:
             raise AssertionError("dusk card must not be accepted after retries")
     assert calls["n"] == 3
+    assert sleep_mock.call_count == 0
 
 
 def test_phase1_accept_retries_card_dusk_then_passes():
@@ -2453,7 +2457,7 @@ def test_phase1_accept_retries_card_dusk_then_passes():
 
     with patch("critique_engine.complete_with_image", fake_complete), patch(
         "critique_engine.time.sleep"
-    ):
+    ) as sleep_mock:
         text = generate_critique_with_prompts(
             Path("dummy.jpg"),
             build_phase1=lambda: "phase1-base",
@@ -2467,6 +2471,7 @@ def test_phase1_accept_retries_card_dusk_then_passes():
     assert "夕暮れ" not in text
     assert "phase1-base" == calls["prompts"][0]
     assert EAST_WEST_REWRITE_NOTE in calls["prompts"][1]
+    assert sleep_mock.call_count == 0
 
 
 def test_phase2_accept_retries_body_coexist_then_passes():
@@ -2500,7 +2505,7 @@ def test_phase2_accept_retries_body_coexist_then_passes():
 
     with patch("critique_engine.complete_with_image", fake_complete), patch(
         "critique_engine.time.sleep"
-    ):
+    ) as sleep_mock:
         text = generate_critique_with_prompts(
             Path("dummy.jpg"),
             build_phase1=lambda: "phase1-base",
@@ -2513,6 +2518,7 @@ def test_phase2_accept_retries_body_coexist_then_passes():
     assert "夕暮れ" not in text
     assert "東の空からの低い自然光" in text
     assert any("【再生成】" in p for p in calls["prompts"])
+    assert sleep_mock.call_count == 0
 
 
 def test_generate_guided_critique_wires_east_west_accept():
@@ -2573,6 +2579,53 @@ def test_generate_guided_critique_wires_east_west_accept():
     assert captured.get("phase_accept") is None
     assert captured.get("phase_retry_note") is None
     assert captured.get("phase_repair") is None
+
+
+def test_owner_critique_error_does_not_say_api_conditions():
+    from critique_engine import CritiqueContractError
+    from guided_web.critique_errors import OWNER_AZIMUTH, OWNER_BUSY, OWNER_RETRY, owner_critique_error
+
+    azimuth = owner_critique_error(
+        CritiqueContractError("Phase 1 出力が光の方位の事実と食い違っています。")
+    )
+    assert azimuth == OWNER_AZIMUTH
+    assert "API" not in azimuth
+    busy = owner_critique_error(RuntimeError("Error code: 429 - Rate limit exceeded"))
+    assert busy == OWNER_BUSY
+    generic = owner_critique_error(RuntimeError("connection reset"))
+    assert generic == OWNER_RETRY
+    assert "API" not in generic
+    missing = owner_critique_error(RuntimeError("OpenAI APIキーが見つかりません。"))
+    assert "openai_api_key" in missing
+
+
+def test_phase1_transport_error_still_backs_off():
+    from unittest.mock import patch
+
+    from critique_engine import generate_critique_with_prompts
+
+    root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
+    ok = (root / "east_pass_phase1.txt").read_text(encoding="utf-8")
+    calls = {"n": 0}
+
+    def fake_complete(_provider, _image_path, _prompt, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("connection reset")
+        return ok
+
+    with patch("critique_engine.complete_with_image", fake_complete), patch(
+        "critique_engine.time.sleep"
+    ) as sleep_mock:
+        text = generate_critique_with_prompts(
+            Path("dummy.jpg"),
+            build_phase1=lambda: "phase1-base",
+            build_phase2=lambda _p1: "phase2-base",
+            mode="compact",
+            max_retries=3,
+        )
+    assert "東の空" in text
+    assert sleep_mock.call_count == 1
 
 
 def test_prompt_eval_offline_script():
@@ -4030,8 +4083,10 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "activeCritiqueEpoch" in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=30" in html
-    assert "guided.css?v=30" in html
+    assert "guided.js?v=31" in html
+    assert "guided.css?v=31" in html
+    assert "APIキーとネットワークを確認してください" not in js
+    assert "「もう一度」を押してください" in js
     assert 'id="btn-quit"' in html
     assert "終了" in html
     assert "function announceScreenLeaving" in js
@@ -4137,7 +4192,7 @@ def test_guided_index_html_is_not_cached():
     assert res.status_code == 200
     cache = (res.headers.get("cache-control") or "").lower()
     assert "no-store" in cache
-    assert "guided.js?v=30" in res.text
+    assert "guided.js?v=31" in res.text
     assert 'http-equiv="Cache-Control"' in res.text
 
 
@@ -4988,6 +5043,8 @@ def run_all():
     test_phase1_rejects_after_retries_still_dusk()
     test_phase2_accept_retries_body_coexist_then_passes()
     test_generate_guided_critique_wires_east_west_accept()
+    test_owner_critique_error_does_not_say_api_conditions()
+    test_phase1_transport_error_still_backs_off()
     test_prompt_eval_offline_script()
     test_phase_d_offline_fixtures_person_and_time()
     test_q5_summarize_h3_and_reactions_scripts()
