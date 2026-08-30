@@ -1,4 +1,5 @@
-*.pyc
+# Compiled on the owner's Mac; source is guided_web/mac_dock_host.swift
+LuminaNotesGuided.app/Contents/MacOS/GuidedDockHost
 __pycache__/
 .DS_Store
 .env

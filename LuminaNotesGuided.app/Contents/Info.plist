@@ -29,6 +29,10 @@
 		<string>arm64</string>
 		<string>x86_64</string>
 	</array>
+	<key>LSUIElement</key>
+	<false/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSSupportsAutomaticTermination</key>

@@ -1,0 +1,44 @@
+ObjC.import('Cocoa');
+
+// Dock に残る本体。ブラウザ部品は埋め込まない。画面はブラウザ。
+// 終了時に GUIDED_PY_PID のサーバを止める。
+
+function pythonPid() {
+  const raw = $.NSProcessInfo.processInfo.environment.objectForKey('GUIDED_PY_PID');
+  if (!raw) {
+    return 0;
+  }
+  const text = ObjC.unwrap(raw);
+  const pid = parseInt(text, 10);
+  return pid > 1 ? pid : 0;
+}
+
+function stopPython() {
+  const pid = pythonPid();
+  if (pid < 2) {
+    return;
+  }
+  const task = $.NSTask.alloc.init;
+  task.setLaunchPath('/bin/kill');
+  task.setArguments(['-TERM', String(pid)]);
+  task.launch;
+  task.waitUntilExit;
+}
+
+const app = $.NSApplication.sharedApplication;
+app.setActivationPolicy($.NSApplicationActivationPolicyRegular);
+
+const rect = $.NSMakeRect(0, 0, 1, 1);
+const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
+  rect,
+  0,
+  $.NSBackingStoreBuffered,
+  false
+);
+win.setTitle('Lumina Notes Guided');
+win.setReleasedWhenClosed(false);
+win.orderOut(null);
+
+app.activateIgnoringOtherApps(true);
+app.run();
+stopPython();

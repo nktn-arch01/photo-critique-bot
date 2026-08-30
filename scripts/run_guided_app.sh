@@ -83,10 +83,47 @@ fi
 export GUIDED_WEB_PORT="$PORT"
 
 echo "サーバを起動して画面を開きます（終了は Dock から）…"
-# bash を .app のプロセスとして残す。Dock 終了の SIGTERM を Python へ渡す。
 set +e
 bash "${ROOT}/scripts/guided_python.sh" -m guided_web.desktop_window &
 PY=$!
+
+healthy=0
+for _ in $(seq 1 48); do
+  if curl -sf "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
+    healthy=1
+    break
+  fi
+  if ! kill -0 "$PY" 2>/dev/null; then
+    break
+  fi
+  sleep 0.25
+done
+
+if [[ "$healthy" != "1" ]]; then
+  kill -TERM "$PY" 2>/dev/null || true
+  wait "$PY" 2>/dev/null || true
+  alert "Guided を起動できませんでした。保険の LuminaNotesGuided.command をダブルクリックしてください。"
+  exit 1
+fi
+
+export GUIDED_PY_PID="$PY"
+HOST="${ROOT}/LuminaNotesGuided.app/Contents/MacOS/GuidedDockHost"
+SRC="${ROOT}/guided_web/mac_dock_host.swift"
+if command -v swiftc >/dev/null 2>&1; then
+  if [[ ! -x "$HOST" || "$SRC" -nt "$HOST" ]]; then
+    echo "Dock 用の本体を用意しています…"
+    swiftc -O -o "$HOST" "$SRC" 2>&1 || true
+    chmod +x "$HOST" 2>/dev/null || true
+  fi
+fi
+# 束の中の実行ファイルへ置き換える。外の osascript だと Dock の名前が外れる。
+if [[ -x "$HOST" ]]; then
+  exec "$HOST"
+fi
+if command -v osascript >/dev/null 2>&1; then
+  exec osascript -l JavaScript "${ROOT}/guided_web/mac_dock_host.jxa"
+fi
+
 term() {
   kill -TERM "$PY" 2>/dev/null || true
   wait "$PY" 2>/dev/null || true

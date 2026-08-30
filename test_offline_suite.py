@@ -4180,16 +4180,32 @@ def test_guided_app_opens_page_like_command_without_webkit():
     launcher = Path("LuminaNotesGuided.app/Contents/MacOS/LuminaNotesGuided").read_text(encoding="utf-8")
     script = Path("scripts/run_guided_app.sh").read_text(encoding="utf-8")
     window = Path("guided_web/desktop_window.py").read_text(encoding="utf-8")
+    dock = Path("guided_web/mac_dock_host.jxa").read_text(encoding="utf-8")
     backup = Path("scripts/run_guided_web.sh").read_text(encoding="utf-8")
-    combined = window + script + launcher
+    combined = window + script + launcher + dock
     assert "notes.lumina.guided" in plist
     assert "NSAllowsLocalNetworking" in plist
+    assert "NSPrincipalClass" in plist
+    assert "NSApplication" in plist
     assert "run_guided_app.sh" in launcher
     assert "アプリケーションフォルダへコピー" in launcher
     assert "zsh -lc" in launcher
     assert ".zshrc" in launcher
     assert "guided_python.sh" in script
     assert "guided_web.desktop_window" in script
+    assert "mac_dock_host.jxa" in script
+    assert "mac_dock_host.swift" in script
+    assert "GuidedDockHost" in script
+    assert "exec osascript" in script
+    swift = Path("guided_web/mac_dock_host.swift").read_text(encoding="utf-8")
+    assert "NSApplication" in swift
+    assert "WebKit" not in swift
+    assert "WKWebView" not in swift
+    assert "GUIDED_PY_PID" in swift
+    assert "NSApplication" in dock
+    assert "WebKit" not in dock
+    assert "WKWebView" not in dock
+    assert "GUIDED_PY_PID" in dock
     assert "arch -arm64" in Path("scripts/guided_python.sh").read_text(encoding="utf-8")
     assert "hw.optional.arm64" in Path("scripts/guided_python.sh").read_text(encoding="utf-8")
     assert "LSRequiresNativeExecution" in plist
