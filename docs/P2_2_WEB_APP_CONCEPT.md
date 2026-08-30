@@ -30,7 +30,7 @@
 | 3 | 写真1枚（D&D） |
 | 4 | 気に入った応答を Mac ローカルにストック |
 | 5 | PC 内保存。クラウドをライブラリ正本にしない |
-| 6 | ブラウザで操作（`Guided.html` + `LuminaNotesGuided.command` 同梱） |
+| 6 | `.app` で起動（保険は `LuminaNotesGuided.command`）。3画面は既存 UI |
 | 7 | Console と同じ情報量。UI で段階開示（切り捨てない） |
 | 8 | 採点アプリにしない。Score・【1〜7】の中身見直しは別タスク |
 
@@ -152,27 +152,28 @@ flowchart TB
 
 ### 5.1 起動方式（確定）
 
-アプリ一式は **PC 内の1フォルダ**に置く（例: `~/Applications/LuminaNotesGuided/`）。
+アプリ一式は **PC 内の1フォルダ**に置く（例: `~/photo-critique-bot/`）。`LuminaNotesGuided.app` を **アプリケーションフォルダへコピーしない**（中のプログラムを探すため）。
 
 **起動手順（Mac）:** [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) — 全操作コピペ一発・PASS/FAIL 付き
 
-```bash
-cd ~/photo-critique-bot && bash scripts/run_guided_web.sh
-```
+日常は **`LuminaNotesGuided.app`**（Dock から起動・終了。ターミナルは出さない）。画面は `.command` と同じく `python3` が `127.0.0.1` で待ち、`/usr/bin/open` で開く。自前の WebView / pywebview は使わない。
 
 | ファイル | 役割 |
 |----------|------|
-| **`scripts/run_guided_web.sh`** | 依存確認・サーバ起動・ブラウザを開く（**ターミナル用本体**） |
-| **`LuminaNotesGuided.command`** | 上記を呼ぶ（ダブルクリック用） |
+| **`LuminaNotesGuided.app`** | Finder / Dock 用。中身は `scripts/run_guided_app.sh` |
+| **`scripts/run_guided_app.sh`** | 依存確認・サーバ起動・画面を開く（**.app 用本体**） |
+| **`scripts/run_guided_web.sh`** | 同じサーバをターミナル前面で起動（保険） |
+| **`LuminaNotesGuided.command`** | 保険のダブルクリック起動 |
 | **`Guided.html`** | ブラウザ入口の案内 |
 
 **起動の流れ（確定）:**
 
-1. ユーザーが **`LuminaNotesGuided.command`** を実行（または `Guided.html` から同梱ランチャーを呼ぶ）  
+1. ユーザーが **`photo-critique-bot` フォルダ内の `LuminaNotesGuided.app`** を開く  
 2. Python が `127.0.0.1` で待ち受け  
-3. ブラウザで **選ぶ** 画面が開く  
+3. 選ぶ画面が開く（既定のブラウザ）。Dock の終了でサーバも止まる  
 
-画像処理・API・カード生成は Python 必須。**HTML + `.command` 同梱**（オーナー Q1 確定）。
+演算中（言葉にする・カード・書き出し）だけ `caffeinate -i`。選ぶで待っているときは Mac は眠ってよい。  
+画像処理・API・カード生成は Python 必須。**他人の Mac へ Python なしで配る箱は今回やらない。**
 
 ### 5.2 レスポンシブ UI（PC／タブレット／携帯）
 

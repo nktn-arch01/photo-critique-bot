@@ -45,6 +45,8 @@ from guided_web.session_cleanup import (
     remove_tree,
     shutdown_sessions,
 )
+from guided_web.sleep_guard import busy as sleep_busy
+from guided_web.sleep_guard import force_release as sleep_force_release
 
 APP_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = APP_ROOT / "static"
@@ -93,6 +95,7 @@ async def lifespan(_app: FastAPI):
     finally:
         shutdown_sessions(_sessions)
         _shutdown_executors()
+        sleep_force_release()
 
 
 app = FastAPI(title="Lumina Notes Guided", version="0.3.0", lifespan=lifespan)
@@ -161,6 +164,19 @@ async def _run_phase1_then_phase2(
     sess = _sessions.get(session_id)
     if not sess or not is_current_epoch(sess, epoch):
         return
+    with sleep_busy():
+        await _run_phase1_then_phase2_body(session_id, lens, user_note, epoch)
+
+
+async def _run_phase1_then_phase2_body(
+    session_id: str,
+    lens: str,
+    user_note: str,
+    epoch: int,
+) -> None:
+    sess = _sessions.get(session_id)
+    if not sess or not is_current_epoch(sess, epoch):
+        return
     loop = asyncio.get_running_loop()
     try:
         phase1_text, phase1_parsed = await loop.run_in_executor(
@@ -196,6 +212,20 @@ async def _run_phase1_then_phase2(
 
 
 async def _finish_phase2(
+    session_id: str,
+    lens: str,
+    user_note: str,
+    phase1_text: str,
+    epoch: int,
+) -> None:
+    sess = _sessions.get(session_id)
+    if not sess or not is_current_epoch(sess, epoch):
+        return
+    with sleep_busy():
+        await _finish_phase2_body(session_id, lens, user_note, phase1_text, epoch)
+
+
+async def _finish_phase2_body(
     session_id: str,
     lens: str,
     user_note: str,
@@ -270,15 +300,16 @@ def _build_photo_session(
             dest = source_path
         _assert_readable_image(dest)
 
-        api_params, metadata, dop_info, meta_block = build_guided_api_parameters(
-            dest, image_id=session_id, geocode=True
-        )
-        preview_path = tmp_dir / "preview.jpg"
-        try:
-            preview_bytes, _ = prepare_vision_image_bytes(dest)
-            preview_path.write_bytes(preview_bytes)
-        except Exception:
-            preview_path = dest
+        with sleep_busy():
+            api_params, metadata, dop_info, meta_block = build_guided_api_parameters(
+                dest, image_id=session_id, geocode=True
+            )
+            preview_path = tmp_dir / "preview.jpg"
+            try:
+                preview_bytes, _ = prepare_vision_image_bytes(dest)
+                preview_path.write_bytes(preview_bytes)
+            except Exception:
+                preview_path = dest
 
         session = {
             "path": str(dest),
@@ -535,16 +566,17 @@ async def generate_card_preview(session_id: str, body: CardPreviewBody) -> JSONR
     card_path = tmp_dir / "card_preview.png"
     loop = asyncio.get_running_loop()
     try:
-        await loop.run_in_executor(
-            _get_critique_executor(),
-            lambda: render_card_preview(
-                sess,
-                card_path,
-                card_theme=body.card_theme,
-                user_stars=body.user_stars,
-                user_note=body.user_note,
-            ),
-        )
+        with sleep_busy():
+            await loop.run_in_executor(
+                _get_critique_executor(),
+                lambda: render_card_preview(
+                    sess,
+                    card_path,
+                    card_theme=body.card_theme,
+                    user_stars=body.user_stars,
+                    user_note=body.user_note,
+                ),
+            )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -586,17 +618,18 @@ async def export_session(session_id: str, body: ExportBody) -> JSONResponse:
     }
 
     try:
-        files = await loop.run_in_executor(
-            _get_critique_executor(),
-            lambda: export_guided_session(
-                sess,
-                save_dir=save_root,
-                user_stars=body.user_stars,
-                card_theme=body.card_theme,
-                user_note=body.user_note,
-                reflections=reflections,
-            ),
-        )
+        with sleep_busy():
+            files = await loop.run_in_executor(
+                _get_critique_executor(),
+                lambda: export_guided_session(
+                    sess,
+                    save_dir=save_root,
+                    user_stars=body.user_stars,
+                    card_theme=body.card_theme,
+                    user_note=body.user_note,
+                    reflections=reflections,
+                ),
+            )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

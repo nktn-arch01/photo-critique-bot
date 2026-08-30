@@ -1,6 +1,6 @@
 # P2-2 Guided Web — Mac 手動確認チェックリスト
 
-更新日: 2026-08-29  
+更新日: 2026-08-30  
 対象: **オーナー（コード未経験）**。ターミナルは **コピペ一発** のみ。編集不要。  
 ブランチ: `cursor/p2-2-web-concept-f193`  
 関連: [`START_NEXT_CONVERSATION.md`](START_NEXT_CONVERSATION.md) / [`P2_2_WEB_APP_CONCEPT.md`](P2_2_WEB_APP_CONCEPT.md) / [`ARCHITECTURE.md`](../ARCHITECTURE.md) / [`P2_2_GUIDED_WEB_REVIEW_TODO.md`](P2_2_GUIDED_WEB_REVIEW_TODO.md)
@@ -9,9 +9,69 @@ AI への続きの依頼は、このチェックリストではなく **新し�
 
 ---
 
-## この文書の使い方
+## 今回だけ — `.app` のやり直し確認（A1〜A3）
 
-1. 上から **ステップ0 → ステップ5** まで順に実行  
+以前の「アプリの窓」実装は破棄しました。いまは **`.command` と同じ python3** でサーバを立て、画面はいつものブラウザです。ターミナルは出ません。
+
+### ステップA0 — 最新コードを取る
+
+ターミナルに、次をまとめて貼り付けて Enter。
+
+```bash
+cd ~/photo-critique-bot
+git fetch origin
+git checkout cursor/p2-2-web-concept-f193
+git pull origin cursor/p2-2-web-concept-f193
+pwd
+git branch --show-current
+```
+
+最後の行が `cursor/p2-2-web-concept-f193` なら OK。
+
+| # | 結果 |
+|---|------|
+| A0 | PASS / FAIL |
+
+### A1 — `.app` で選ぶが開く
+
+1. すでに動いている **`LuminaNotesGuided.command` のターミナルは Control+C で止める**  
+2. Finder で `photo-critique-bot` フォルダを開く  
+3. **`LuminaNotesGuided.app`** をダブルクリック（**アプリケーションフォルダへコピーしない**）  
+   - 「開発元未確認」と出たら、そのアイコンを **右クリック → 開く**  
+4. ターミナルは出ない。数秒後、**選ぶ** 画面がブラウザで開く  
+
+Finder 上の `.app` が約 2KB なのは正常です（中身はリポジトリのプログラムを呼びます）。
+
+開かないときだけ、保険として **`LuminaNotesGuided.command`** をダブルクリック。
+
+| # | 結果 |
+|---|------|
+| A1 | PASS / FAIL |
+
+### A2 — Dock から終了する
+
+1. Dock に **Lumina Notes Guided** がある  
+2. Dock のアイコンを右クリック → **終了**  
+3. ブラウザを更新しても選ぶ画面は繋がらない  
+
+| # | 結果 |
+|---|------|
+| A2 | PASS / FAIL |
+
+### A3 — 演算中だけスリープしない（任意）
+
+選ぶ画面で待っているときは、これまで通り Mac は眠ってよいです。  
+**言葉にする** を押したあと（読み込み中）は、自動でスリープしない想定です。観察できなければスキップしてかまいません。
+
+| # | 結果 |
+|---|------|
+| A3 | PASS / FAIL / スキップ |
+
+---
+
+## この文書の使い方（従来の 0〜5）
+
+1. 上から **ステップ0 → ステップ5** まで順に実行（保険の `.command` 用）  
 2. 各ステップの **PASS / FAIL** を記入  
 3. FAIL があれば、その番号とターミナルに出た文字をそのまま共有  
 

@@ -28,7 +28,7 @@
 1. 規則1の3段階を、短い文章で残す（根本の不正状態 → 共通化 → 自動テスト）。
 2. `python3 test_offline_suite.py` が通る。
 3. 変更した経路について、**Cloud Agent の Linux ブラウザだけでは足りないもの** を [`docs/P2_2_GUIDED_MAC_CHECKLIST.md`](docs/P2_2_GUIDED_MAC_CHECKLIST.md) の該当番号で明示する。足りないならテストを足すか、未確認と書く。
-4. Mac でサーバーが古いまま残らない（`scripts/run_guided_web.sh` が既存プロセスを止めて差し替える前提を壊さない）。
+4. Mac でサーバーが古いまま残らない（`.app` / `scripts/run_guided_web.sh` が既存プロセスを止めて差し替える前提を壊さない）。
 
 ---
 
@@ -51,6 +51,6 @@ Guided の講評ライフサイクル（言葉にする／もう一度／タブ�
 ## テスト
 
 - オフライン必須: `python3 test_offline_suite.py`
-- Guided 起動（Mac）: `bash scripts/run_guided_web.sh`
+- Guided 起動（Mac）: Finder でリポジトリ内の `LuminaNotesGuided.app`（保険: `bash scripts/run_guided_web.sh`）
 - Console 日常: `LuminaNotesConsole.command`
 - OpenAI 実呼び出しは CI では行わない

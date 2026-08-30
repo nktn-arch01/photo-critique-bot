@@ -1,0 +1,27 @@
+#!/bin/bash
+# LuminaNotesGuided.app の入口。ターミナルは出さない。
+# この .app はリポジトリ（photo-critique-bot）フォルダの中で開く。
+export PATH="/usr/local/bin:/opt/homebrew/bin:${HOME}/.pyenv/shims:${PATH}"
+export PYTHONUNBUFFERED=1
+
+APP_BIN="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "${APP_BIN}/../../.." && pwd)"
+
+if [[ ! -f "${ROOT}/scripts/run_guided_app.sh" ]]; then
+  osascript -e 'display dialog "LuminaNotesGuided.app は photo-critique-bot フォルダの中で開いてください。アプリケーションフォルダへコピーすると動きません。" buttons {"OK"} default button 1 with title "Lumina Notes Guided"' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+cd "$ROOT" || exit 1
+
+xattr -dr com.apple.quarantine "${ROOT}/LuminaNotesGuided.app" 2>/dev/null || true
+
+mkdir -p "${HOME}/.lumina_notes"
+LOG="${HOME}/.lumina_notes/guided-app.log"
+{
+  echo "=== Lumina Notes Guided.app $(date) ==="
+  echo "ROOT=${ROOT}"
+} >>"${LOG}"
+
+exec >>"${LOG}" 2>&1
+exec bash "${ROOT}/scripts/run_guided_app.sh"

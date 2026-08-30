@@ -3982,6 +3982,266 @@ def test_guided_choose_screen_is_not_inert_when_visible():
     assert "inert" in reflect.split(">")[0]
 
 
+def test_guided_sleep_guard_refcount_spawns_once():
+    from guided_web.sleep_guard import reset_guard_for_tests, is_held, force_release
+
+    spawned = []
+
+    class FakeProc:
+        def __init__(self):
+            self.terminated = False
+            self._code = None
+
+        def poll(self):
+            return self._code
+
+        def terminate(self):
+            self.terminated = True
+            self._code = 0
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            self._code = 9
+
+    def spawn():
+        proc = FakeProc()
+        spawned.append(proc)
+        return proc
+
+    try:
+        guard = reset_guard_for_tests(enabled=True, spawn=spawn)
+        assert not is_held()
+        with guard.busy():
+            assert is_held()
+            assert len(spawned) == 1
+            with guard.busy():
+                assert is_held()
+                assert len(spawned) == 1
+            assert is_held()
+            assert not spawned[0].terminated
+        assert not is_held()
+        assert spawned[0].terminated
+    finally:
+        force_release()
+        reset_guard_for_tests(enabled=False)
+
+
+def test_guided_sleep_guard_disabled_does_not_spawn():
+    from guided_web.sleep_guard import reset_guard_for_tests, is_held, force_release
+
+    spawned = []
+
+    def spawn():
+        spawned.append("x")
+        return None
+
+    try:
+        guard = reset_guard_for_tests(enabled=False, spawn=spawn)
+        with guard.busy():
+            assert is_held()
+        assert spawned == []
+        assert not is_held()
+    finally:
+        force_release()
+        reset_guard_for_tests(enabled=False)
+
+
+def test_guided_sleep_guard_caffeinate_prevents_idle_only():
+    from unittest.mock import patch
+
+    from guided_web.sleep_guard import spawn_caffeinate
+
+    captured = {}
+
+    class FakePopen:
+        def __init__(self, args, **kwargs):
+            captured["args"] = list(args)
+
+    with patch("guided_web.sleep_guard.subprocess.Popen", FakePopen):
+        spawn_caffeinate()
+    assert captured["args"][0] == "caffeinate"
+    assert "-i" in captured["args"]
+    assert "-w" in captured["args"]
+    assert "-d" not in captured["args"]
+
+
+def test_guided_critique_holds_sleep_guard_during_phases():
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from PIL import Image
+    from fastapi.testclient import TestClient
+
+    from critique_parser import parse_critique_text
+    from guided_web import app as app_module
+    from guided_web.sleep_guard import is_held, force_release
+
+    held = {}
+
+    def fake_phase1(*_a, **_k):
+        held["p1"] = is_held()
+        return PHASE1_SAMPLE, parse_critique_text(PHASE1_SAMPLE)
+
+    def fake_phase2(*_a, **_k):
+        held["p2"] = is_held()
+        return (
+            PHASE1_SAMPLE + PHASE2_SAMPLE,
+            parse_critique_text(PHASE1_SAMPLE + PHASE2_SAMPLE),
+            [{"id": "1", "heading": "【1】", "text": "one"}],
+        )
+
+    client = TestClient(app_module.app)
+    td = Path(tempfile.mkdtemp())
+    jpeg = td / "sleep.jpg"
+    Image.new("RGB", (80, 60), (9, 10, 11)).save(jpeg, "JPEG")
+    try:
+        with jpeg.open("rb") as f:
+            res = client.post("/api/session/photo", files={"file": ("sleep.jpg", f, "image/jpeg")})
+        session_id = res.json()["session_id"]
+        assert not is_held()
+        with patch("guided_web.app.run_phase1", side_effect=fake_phase1), patch(
+            "guided_web.app.run_phase2", side_effect=fake_phase2
+        ):
+            started = client.post(
+                f"/api/session/{session_id}/critique",
+                json={"lens": "self"},
+            )
+        assert started.status_code == 200
+        assert held.get("p1") is True
+        assert held.get("p2") is True
+        assert not is_held()
+        assert client.get(f"/api/session/{session_id}/critique").json()["status"] == "complete"
+    finally:
+        force_release()
+
+
+def test_guided_export_sleep_guard_starts_after_folder_pick():
+    from pathlib import Path
+
+    text = Path("guided_web/app.py").read_text(encoding="utf-8")
+    export_fn = text.split("async def export_session")[1].split("@app.get")[0]
+    assert "pick_folder" in export_fn
+    assert export_fn.index("pick_folder") < export_fn.index("sleep_busy")
+    pick_fn = text.split("async def pick_photo")[1].split("def _release_session")[0]
+    assert "sleep_busy" not in pick_fn
+
+
+def test_guided_local_server_binds_localhost_and_stops():
+    from unittest.mock import MagicMock, patch
+
+    from guided_web.local_server import GuidedLocalServer
+
+    fake_server = MagicMock()
+    captured = {}
+
+    class FakeThread:
+        def __init__(self, target=None, name=None, daemon=None):
+            self.target = target
+
+        def start(self):
+            captured["started"] = True
+
+        def is_alive(self):
+            return True
+
+        def join(self, timeout=None):
+            captured["joined"] = True
+
+    def fake_config(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return MagicMock()
+
+    with patch("guided_web.local_server.uvicorn.Config", side_effect=fake_config), patch(
+        "guided_web.local_server.uvicorn.Server", return_value=fake_server
+    ), patch("guided_web.local_server.threading.Thread", FakeThread), patch(
+        "guided_web.local_server.stop_listeners"
+    ):
+        server = GuidedLocalServer(9876)
+        assert server.url == "http://127.0.0.1:9876/"
+        server.start(replace_existing=True)
+        assert captured["args"][0] == "guided_web.app:app"
+        assert captured["kwargs"]["host"] == "127.0.0.1"
+        assert captured["kwargs"]["port"] == 9876
+        assert captured.get("started") is True
+        server.stop()
+        assert fake_server.should_exit is True
+        assert captured.get("joined") is True
+
+
+def test_guided_app_opens_page_like_command_without_webkit():
+    """自前の描画ホストは使わない。.command と同じ open 経路。"""
+    from pathlib import Path
+
+    plist = Path("LuminaNotesGuided.app/Contents/Info.plist").read_text(encoding="utf-8")
+    launcher = Path("LuminaNotesGuided.app/Contents/MacOS/LuminaNotesGuided").read_text(encoding="utf-8")
+    script = Path("scripts/run_guided_app.sh").read_text(encoding="utf-8")
+    window = Path("guided_web/desktop_window.py").read_text(encoding="utf-8")
+    backup = Path("scripts/run_guided_web.sh").read_text(encoding="utf-8")
+    combined = window + script + launcher
+    assert "notes.lumina.guided" in plist
+    assert "NSAllowsLocalNetworking" in plist
+    assert "run_guided_app.sh" in launcher
+    assert "アプリケーションフォルダへコピー" in launcher
+    assert "exec python3 -m guided_web.desktop_window" in script
+    assert "arch -arm64" not in script
+    assert "pywebview" not in script
+    assert "import webview" not in window
+    assert "from WebKit" not in combined
+    assert "import WebKit" not in combined
+    assert "tkinter" not in combined.lower()
+    assert "/usr/bin/open" in window
+    assert "python3 -m guided_web.app" in backup
+    assert "ブラウザを開きます" in backup
+
+
+def test_guided_open_page_uses_system_open():
+    from unittest.mock import patch
+
+    from guided_web.desktop_window import open_guided_page
+
+    captured = {}
+
+    def fake_run(args, **_kwargs):
+        captured["args"] = list(args)
+
+    with patch("guided_web.desktop_window.platform.system", return_value="Darwin"), patch(
+        "guided_web.desktop_window.subprocess.run", side_effect=fake_run
+    ):
+        open_guided_page("http://127.0.0.1:8765/")
+    assert captured["args"] == ["/usr/bin/open", "http://127.0.0.1:8765/"]
+
+
+def test_guided_wait_until_quit_returns_when_server_stops():
+    from guided_web.desktop_window import wait_until_quit
+
+    class FakeServer:
+        def is_running(self):
+            return False
+
+    wait_until_quit(FakeServer(), poll_s=0.01)
+
+
+def test_guided_local_server_health_roundtrip():
+    from urllib.request import urlopen
+
+    from guided_web.local_server import GuidedLocalServer, unused_port
+
+    server = GuidedLocalServer(unused_port())
+    try:
+        server.start(replace_existing=True)
+        server.wait_healthy(timeout_s=15)
+        with urlopen(server.url + "api/health", timeout=2) as resp:
+            assert resp.status == 200
+        assert server.is_running()
+    finally:
+        server.stop()
+    assert not server.is_running()
+
+
 def run_all():
     test_parser_phase1()
     test_parser_legacy_score_aliases()
@@ -4092,6 +4352,16 @@ def run_all():
     test_guided_destroy_bumps_epoch_so_stale_phase2_cannot_complete()
     test_guided_photo_pick_cancel_keeps_existing_session()
     test_guided_choose_screen_is_not_inert_when_visible()
+    test_guided_sleep_guard_refcount_spawns_once()
+    test_guided_sleep_guard_disabled_does_not_spawn()
+    test_guided_sleep_guard_caffeinate_prevents_idle_only()
+    test_guided_critique_holds_sleep_guard_during_phases()
+    test_guided_export_sleep_guard_starts_after_folder_pick()
+    test_guided_local_server_binds_localhost_and_stops()
+    test_guided_app_opens_page_like_command_without_webkit()
+    test_guided_open_page_uses_system_open()
+    test_guided_wait_until_quit_returns_when_server_stops()
+    test_guided_local_server_health_roundtrip()
     print("test_offline_suite: OK")
 
 
