@@ -97,7 +97,7 @@ bash scripts/install_guided_app.sh
 
 | # | 結果 |
 |---|------|
-| A5 | PASS / FAIL |
+| A5 | PASS（2026-08-30）アプリケーションフォルダから起動 |
 
 ### A3 — 演算中だけスリープしない（任意）
 
