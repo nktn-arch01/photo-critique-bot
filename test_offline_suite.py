@@ -2370,6 +2370,8 @@ def test_light_prompt_variant_default_strips_twilight_names():
     extra = extra_phase1_rules(DEFAULT_VARIANT)
     assert "CRITIQUE_SUMMARY" in extra
     assert "夕暮れ" in extra
+    assert "キャッチコピー" in extra
+    assert "構図の批評" in extra
     ctx = GuidedCritiqueContext.from_api_params(
         {
             "image": {
@@ -2525,7 +2527,7 @@ def test_generate_guided_critique_wires_east_west_accept():
     from unittest.mock import patch
 
     from guided_web.guided_privacy import generate_guided_critique
-    from prompt_contracts import EAST_WEST_REWRITE_NOTE
+    from prompt_contracts import EAST_WEST_REWRITE_NOTE_PHASE1, EAST_WEST_REWRITE_NOTE_PHASE2
 
     root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
     dusk = (root / "east_fail_card_dusk.txt").read_text(encoding="utf-8")
@@ -2557,8 +2559,11 @@ def test_generate_guided_critique_wires_east_west_accept():
     assert accept is not None
     assert accept(dusk) is False
     assert accept(ok) is True
-    assert captured.get("phase_retry_note") == EAST_WEST_REWRITE_NOTE
-    assert "物語" in (captured.get("phase_retry_note") or "")
+    assert captured.get("phase1_retry_note") == EAST_WEST_REWRITE_NOTE_PHASE1
+    assert captured.get("phase2_retry_note") == EAST_WEST_REWRITE_NOTE_PHASE2
+    assert "【1】〜【7】は出さない" in (captured.get("phase1_retry_note") or "")
+    assert "構図の批評" in (captured.get("phase1_retry_note") or "")
+    assert captured.get("phase_retry_note") in (None, "")
     assert "phase_repair" not in captured or captured.get("phase_repair") is None
 
     south_params = {
@@ -2969,6 +2974,53 @@ def test_guided_prompts_use_light_hint_not_futei_label():
         assert "夕暮れ（六）" not in text
         assert "時間帯:" not in text
         assert "画面の光が手掛かりと食い違うときは画面を優先" not in text
+
+
+def test_guided_phase1_prompt_keeps_card_slots_not_phase2_technique():
+    """SUMMARY はキャッチ。構図批評・撮影設定は Phase1 に載せない。"""
+    from guided_web.guided_privacy import (
+        GuidedCritiqueContext,
+        build_guided_phase1_prompt,
+        build_guided_phase2_prompt,
+    )
+    from prompt_contracts import EAST_WEST_REWRITE_NOTE_PHASE1, check_phase1_critique_summary_contract
+
+    api_params = {
+        "image": {
+            "image_id": "p02",
+            "size": "7728x5152",
+            "shot_at": "2025-11-12T05:45:22+09:00",
+            "timezone": "Asia/Tokyo",
+            "region": "東京",
+            "time_band": "夜明け（六）",
+            "light_hint": "東の空からの低い自然光（一日の前半）",
+        },
+        "camera": {
+            "focal_length": "23mm",
+            "aperture": "f/5.6",
+            "shutter_speed": "1/34s",
+            "iso": "ISO 5000",
+            "mode": "絞り優先",
+            "exposure_compensation": "-1.7 EV",
+        },
+    }
+    ctx = GuidedCritiqueContext.from_api_params(api_params)
+    p1 = build_guided_phase1_prompt(ctx)
+    p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
+    assert "撮影設定:" not in p1
+    assert "撮影設定:" in p2
+    assert "キャッチコピー" in p1
+    assert "構図の批評" in p1
+    assert "専門的な技術的表現" in p1
+    assert "構図の心理学" not in p1
+    assert "構図の心理学" in p2
+    assert "【2. 視線誘導と構成の美学】" not in p1
+    assert "【2. 視線誘導と構成の美学】" in p2
+    assert "本文文章は一切出力しない" in p1
+    assert "【1】〜【7】は出さない" in EAST_WEST_REWRITE_NOTE_PHASE1
+    assert "構図の批評" in EAST_WEST_REWRITE_NOTE_PHASE1
+    q4 = check_phase1_critique_summary_contract(p1)
+    assert not q4, q4
 
 
 def test_guided_resolve_region_without_gps():
@@ -5060,6 +5112,7 @@ def run_all():
     test_guided_light_hint_evening_is_west_not_east()
     test_guided_light_hint_deep_night_has_no_banned_stems()
     test_guided_prompts_use_light_hint_not_futei_label()
+    test_guided_phase1_prompt_keeps_card_slots_not_phase2_technique()
     test_guided_resolve_region_without_gps()
     test_guided_api_parameters_shape()
     test_guided_parameter_display_rows()

@@ -16,9 +16,19 @@ from typing import Any
 
 from ai_vision import DEFAULT_OPENAI_MODEL
 from critique_lens import CritiqueLens, get_lens, normalize_lens
-from critique_prompts import PROMPT_MISSING, _scores_format_block, _scores_meaning_block, get_system_role, sanitize_str
+from critique_prompts import (
+    PROMPT_MISSING,
+    _scores_meaning_block,
+    get_system_role,
+    phase1_output_slots,
+    sanitize_str,
+)
 from guided_web.light_prompt_variants import DEFAULT_VARIANT, extra_phase1_rules, present_light_hint
-from prompt_contracts import EAST_WEST_REWRITE_NOTE, east_west_phase_accept
+from prompt_contracts import (
+    EAST_WEST_REWRITE_NOTE_PHASE1,
+    EAST_WEST_REWRITE_NOTE_PHASE2,
+    east_west_phase_accept,
+)
 
 _AUDIT_PATH = Path.home() / ".lumina_notes" / "guided_api_audit.jsonl"
 
@@ -120,15 +130,25 @@ def _light_azimuth_fact_rule(light_hint: str) -> str:
 事前確定の観察に禁止の時間帯語があっても踏襲せず、光の方位の事実に従う。"""
 
 
-def _environment_block(ctx: GuidedCritiqueContext, light_hint: str) -> str:
-    return f"""【撮影環境（抽象パラメータのみ）】
-- 撮影日時: {ctx.shot_at}
-- タイムゾーン: {ctx.timezone}
-- 地域（都市レベル）: {ctx.region}
-- 光の方位（事実）: {light_hint}
-- 画像サイズ: {ctx.size}
-- 撮影設定: 絞り {ctx.aperture} | SS {ctx.shutter_speed} | ISO {ctx.iso} | 焦点距離 {ctx.focal_length} | 露出モード {ctx.mode} | 露出補正 {ctx.exposure_compensation}
-- 撮影者の一言: {ctx.user_intent}"""
+def _environment_block(ctx: GuidedCritiqueContext, light_hint: str, *, phase: int) -> str:
+    """Phase1 には撮影設定を載せない（構図・露出の助言は本文【4】の仕事）。"""
+    lines = [
+        "【撮影環境（抽象パラメータのみ）】",
+        f"- 撮影日時: {ctx.shot_at}",
+        f"- タイムゾーン: {ctx.timezone}",
+        f"- 地域（都市レベル）: {ctx.region}",
+        f"- 光の方位（事実）: {light_hint}",
+        f"- 画像サイズ: {ctx.size}",
+    ]
+    if phase != 1:
+        lines.append(
+            "- 撮影設定: "
+            f"絞り {ctx.aperture} | SS {ctx.shutter_speed} | ISO {ctx.iso} | "
+            f"焦点距離 {ctx.focal_length} | 露出モード {ctx.mode} | "
+            f"露出補正 {ctx.exposure_compensation}"
+        )
+    lines.append(f"- 撮影者の一言: {ctx.user_intent}")
+    return "\n".join(lines)
 
 
 def _resolve_lens(lens: str | CritiqueLens | None) -> CritiqueLens:
@@ -151,7 +171,7 @@ def build_guided_phase1_prompt(
     extra_block = f"\n{extra}\n" if extra else ""
     return f"""与えられた写真を観察し、カード画像生成に必要な以下の4項目（TITLE, SUMMARY, SCORES, CRITIQUE_SUMMARY）のみを即座に作成してください。
 
-{_environment_block(ctx, hint)}
+{_environment_block(ctx, hint, phase=1)}
 
 【講評作成の絶対ルール】
 1. {L.score_definition_rule}
@@ -168,10 +188,7 @@ def build_guided_phase1_prompt(
 【出力フォーマット】
 以下の4項目のみを出力してください。
 
-■TITLE: 15文字以内。詩的・仮説的なタイトル（時間帯単語は使用不可）。
-■SUMMARY: 25文字以内のキャッチコピー。
-{_scores_format_block(L)}
-■CRITIQUE_SUMMARY: 70〜80文字程度。否定的コメント・数値・「意図せず」系の言葉は禁止。
+{phase1_output_slots(L)}
 """
 
 
@@ -191,7 +208,7 @@ def build_guided_phase2_prompt(
 【事前確定の観察結果・要約】
 {phase1_output}
 
-{_environment_block(ctx, hint)}
+{_environment_block(ctx, hint, phase=2)}
 
 【講評作成の絶対ルール】
 1. 【撮影意図への回答】: 撮影者の一言（「{ctx.user_intent}」）に触れ、写真への結びつきを述べてください（一言が「なし」のときは画面観察を主にしてください）。
@@ -297,7 +314,8 @@ def generate_guided_critique(
         build_phase1=lambda: build_guided_phase1_prompt(ctx, lens=lens_id),
         build_phase2=lambda phase1_text: build_guided_phase2_prompt(ctx, phase1_text, lens=lens_id),
         phase_accept=accept,
-        phase_retry_note=EAST_WEST_REWRITE_NOTE if accept is not None else None,
+        phase1_retry_note=EAST_WEST_REWRITE_NOTE_PHASE1 if accept is not None else None,
+        phase2_retry_note=EAST_WEST_REWRITE_NOTE_PHASE2 if accept is not None else None,
     )
 
 

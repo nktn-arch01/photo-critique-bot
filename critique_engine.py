@@ -56,6 +56,8 @@ def _run_two_phase_generation(
     phase1_temperature: float | None = None,
     phase_accept: Callable[[str], bool] | None = None,
     phase_retry_note: str | None = None,
+    phase1_retry_note: str | None = None,
+    phase2_retry_note: str | None = None,
 ) -> str:
     lens_id = normalize_lens(lens)
     if build_phase1_prompt_fn:
@@ -71,10 +73,16 @@ def _run_two_phase_generation(
     phase1_temperature = 0.35 if phase1_temperature is None else phase1_temperature
     phase2_temperature = 0.7
 
-    def _prompt_for_attempt(base: str, attempt: int) -> str:
-        if attempt == 1 or not phase_retry_note:
+    def _retry_note_for(phase: int) -> str | None:
+        if phase == 1:
+            return phase1_retry_note if phase1_retry_note is not None else phase_retry_note
+        return phase2_retry_note if phase2_retry_note is not None else phase_retry_note
+
+    def _prompt_for_attempt(base: str, attempt: int, phase: int) -> str:
+        note = _retry_note_for(phase)
+        if attempt == 1 or not note:
             return base
-        return f"{base}\n\n{phase_retry_note}"
+        return f"{base}\n\n{note}"
 
     def _accepts(content: str) -> bool:
         if phase_accept is None:
@@ -93,7 +101,7 @@ def _run_two_phase_generation(
                 content = complete_with_image(
                     provider,
                     image_path,
-                    _prompt_for_attempt(prompt_phase1, attempt),
+                    _prompt_for_attempt(prompt_phase1, attempt, 1),
                     model=model,
                     max_tokens=800,
                     temperature=phase1_temperature,
@@ -147,7 +155,7 @@ def _run_two_phase_generation(
             content = complete_with_image(
                 provider,
                 image_path,
-                _prompt_for_attempt(prompt_phase2, attempt),
+                _prompt_for_attempt(prompt_phase2, attempt, 2),
                 model=model,
                 max_tokens=2500,
                 temperature=phase2_temperature,
@@ -198,6 +206,8 @@ def generate_critique_with_prompts(
     phase1_temperature: float | None = None,
     phase_accept: Callable[[str], bool] | None = None,
     phase_retry_note: str | None = None,
+    phase1_retry_note: str | None = None,
+    phase2_retry_note: str | None = None,
 ) -> str:
     """カスタムプロンプトビルダーで講評を生成（Guided Web 等）。"""
     return _run_two_phase_generation(
@@ -217,6 +227,8 @@ def generate_critique_with_prompts(
         phase1_temperature=phase1_temperature,
         phase_accept=phase_accept,
         phase_retry_note=phase_retry_note,
+        phase1_retry_note=phase1_retry_note,
+        phase2_retry_note=phase2_retry_note,
     )
 
 
