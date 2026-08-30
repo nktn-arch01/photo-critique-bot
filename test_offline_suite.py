@@ -2568,9 +2568,11 @@ def test_guided_p02_dawn_is_east_blue_hour_not_night():
         band = classify_futei_band(shot, lat, lon, tz)
         hint = classify_light_hint(shot, lat, lon, tz)
         assert band == "夜明け（六）", band
-        assert "東寄り" in hint
+        assert "東の空" in hint
+        assert "一日の前半" in hint
         assert "ブルーアワー" in hint
-        assert "西寄り" not in hint
+        assert "西の空の光ではない" in hint
+        assert "一日の後半" not in hint
         for stem in TIME_ZONE_FACT_BANNED_STEMS:
             assert stem not in hint, (stem, hint)
 
@@ -2586,8 +2588,10 @@ def test_guided_light_hint_evening_is_west_not_east():
     lat, lon = 35.6812, 139.7671
     eve = datetime(2025, 11, 12, 16, 20, 0, tzinfo=tz)
     hint = classify_light_hint(eve, lat, lon, tz)
-    assert "西寄り" in hint
-    assert "東寄り" not in hint
+    assert "西の空" in hint
+    assert "一日の後半" in hint
+    assert "東の空の光ではない" in hint
+    assert "一日の前半" not in hint
     for stem in TIME_ZONE_FACT_BANNED_STEMS:
         assert stem not in hint, (stem, hint)
 
@@ -2624,7 +2628,7 @@ def test_guided_prompts_use_light_hint_not_futei_label():
             "timezone": "Asia/Tokyo",
             "region": "東京",
             "time_band": "夕暮れ（六）",
-            "light_hint": "東寄りの低い自然光（ブルーアワー相当）",
+            "light_hint": "東の空からの低い自然光（一日の前半・ブルーアワー相当。ガラスのオレンジや青い空があっても西の空の光ではない）",
         },
         "camera": {
             "focal_length": "23mm",
@@ -2639,9 +2643,13 @@ def test_guided_prompts_use_light_hint_not_futei_label():
     p1 = build_guided_phase1_prompt(ctx)
     p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
     for text in (p1, p2):
-        assert "東寄りの低い自然光（ブルーアワー相当）" in text
+        assert "東の空からの低い自然光" in text
+        assert "一日の前半" in text
+        assert "覆さない" in text
+        assert "光の方位（事実）" in text
         assert "夕暮れ（六）" not in text
         assert "時間帯:" not in text
+        assert "画面の光が手掛かりと食い違うときは画面を優先" not in text
 
 
 def test_guided_resolve_region_without_gps():
@@ -2968,7 +2976,8 @@ def test_guided_privacy_prompts_exclude_identifying_metadata():
     p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
     assert "東京" in p1
     assert "南寄りの高い自然光" in p1
-    assert "光の手掛かり" in p1
+    assert "光の方位（事実）" in p1
+    assert "覆さない" in p1
     assert "正午（九）" not in p1
     assert "正午（九）" not in p2
     assert "時間帯:" not in p1

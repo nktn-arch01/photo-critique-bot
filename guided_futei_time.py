@@ -399,8 +399,16 @@ def classify_light_hint(
 
     if el < GOLDEN_HOUR_HIGH_DEG:
         quality = "ブルーアワー相当" if el < GOLDEN_HOUR_LOW_DEG else "ゴールデンアワー相当"
-        if bearing in {"東寄り", "西寄り"}:
-            return f"{bearing}の低い自然光（{quality}）"
+        if bearing == "東寄り":
+            return (
+                f"東の空からの低い自然光（一日の前半・{quality}。"
+                "ガラスのオレンジや青い空があっても西の空の光ではない）"
+            )
+        if bearing == "西寄り":
+            return (
+                f"西の空からの低い自然光（一日の後半・{quality}。"
+                "ガラスのオレンジや青い空があっても東の空の光ではない）"
+            )
         return f"低い自然光（{quality}）"
 
     if bearing in {"南寄り", "北寄り"}:
