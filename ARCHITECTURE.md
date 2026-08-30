@@ -118,7 +118,7 @@
 - `log_manager.py`: `DesktopLogManager` クラス。ローカルファイル群（Markdown, txt）への構造化出力。Wave 2 以降の公式名は `{ym}Luminaノート/カード/ログ`（旧「写真分析*」「評価カード」は読込フォールバック）。
 - `PhotoAICritique.command`: レガシー講評バッチのダブルクリック起動（起動時に Console へ誘導。Gatekeeper属性の自動解除機能付き）。
 - `fix_dop_names.py`: DxO PhotoLab 用 `.dop` サイドカーファイル名補正ツール。
-- `guided_web/`: **【P2-2 Guided Web】** ローカル FastAPI＋3画面（選ぶ／読む／振り返る）。日常起動は `LuminaNotesGuided.app`（ターミナルなし。画面は `.command` と同じ `python3` + `/usr/bin/open`）。保険は `LuminaNotesGuided.command` / `scripts/run_guided_web.sh`。演算中だけ `caffeinate -i`。作業ルールは `AGENTS.md`。PR #21 の枝で開発中。
+- `guided_web/`: **【P2-2 Guided Web】** ローカル FastAPI＋3画面（選ぶ／読む／振り返る）。日常起動は `LuminaNotesGuided.app`（ターミナルなし。画面は `.command` と同じ `python3` + `/usr/bin/open`。終了は画面の「終了」。シェル `.app` は Dock に出ない）。保険は `LuminaNotesGuided.command` / `scripts/run_guided_web.sh`。演算中だけ `caffeinate -i`。作業ルールは `AGENTS.md`。PR #21 の枝で開発中。
 
 #### ③ LINE Bot クラウドコンポーネント (Cloud / Render Environment)
 - `main.py`: FastAPI Web サーバー。LINE Webhook ハンドリング、BackgroundTasks、`/health`。カード＋対話【1〜3】のあと反応 Quick Reply。

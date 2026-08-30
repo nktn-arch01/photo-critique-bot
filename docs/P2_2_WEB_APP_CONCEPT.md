@@ -156,11 +156,11 @@ flowchart TB
 
 **起動手順（Mac）:** [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) — 全操作コピペ一発・PASS/FAIL 付き
 
-日常は **`LuminaNotesGuided.app`**（Dock から起動・終了。ターミナルは出さない）。画面は `.command` と同じく `python3` が `127.0.0.1` で待ち、`/usr/bin/open` で開く。自前の WebView / pywebview は使わない。
+日常は **`LuminaNotesGuided.app`**（Finder から開く。ターミナルは出さない）。画面は `.command` と同じく `python3` が `127.0.0.1` で待ち、`/usr/bin/open` で開く。自前の WebView / pywebview / JXA applet は使わない。**シェル `.app` は Dock に出ない**（macOS が Dock に残すのは、束の中の本物の Cocoa 実行ファイルだけ）。終了は画面右上の **「終了」**。
 
 | ファイル | 役割 |
 |----------|------|
-| **`LuminaNotesGuided.app`** | Finder / Dock 用。中身は `scripts/run_guided_app.sh` |
+| **`LuminaNotesGuided.app`** | Finder 用の入口。中身は `scripts/run_guided_app.sh`。Dock には出ない |
 | **`scripts/run_guided_app.sh`** | 依存確認・サーバ起動・画面を開く（**.app 用本体**） |
 | **`scripts/run_guided_web.sh`** | 同じサーバをターミナル前面で起動（保険） |
 | **`LuminaNotesGuided.command`** | 保険のダブルクリック起動 |
@@ -170,7 +170,7 @@ flowchart TB
 
 1. ユーザーが **`photo-critique-bot` フォルダ内の `LuminaNotesGuided.app`** を開く  
 2. Python が `127.0.0.1` で待ち受け  
-3. 選ぶ画面が開く（既定のブラウザ）。Dock の終了でサーバも止まる  
+3. 選ぶ画面が開く（既定のブラウザ）。画面の「終了」でサーバも止まる  
 
 演算中（言葉にする・カード・書き出し）だけ `caffeinate -i`。選ぶで待っているときは Mac は眠ってよい。  
 画像処理・API・カード生成は Python 必須。**他人の Mac へ Python なしで配る箱は今回やらない。**

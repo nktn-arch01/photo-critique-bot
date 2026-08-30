@@ -15,6 +15,7 @@ from urllib.request import urlopen
 
 import uvicorn
 
+from guided_web.shutdown import clear_shutdown
 from guided_web.sleep_guard import force_release
 
 DEFAULT_HOST = "127.0.0.1"
@@ -82,6 +83,7 @@ class GuidedLocalServer:
         return self._thread is not None and self._thread.is_alive()
 
     def start(self, *, replace_existing: bool = True) -> None:
+        clear_shutdown()
         if replace_existing:
             stop_listeners(self.port)
         config = uvicorn.Config(

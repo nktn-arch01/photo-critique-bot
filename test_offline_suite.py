@@ -3640,8 +3640,13 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "activeCritiqueEpoch" in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=28" in html
-    assert "guided.css?v=28" in html
+    assert "guided.js?v=29" in html
+    assert "guided.css?v=29" in html
+    assert 'id="btn-quit"' in html
+    assert "終了" in html
+    assert "function quitApp" in js
+    assert "/api/shutdown" in js
+    assert "/critique/cancel" not in js
     assert "data.cancelled" in js
     pick_fn = js.split("async function handleNativePhotoPick()")[1].split("function resetReflectionFields")[0]
     assert pick_fn.index("pickPhotoNative") < pick_fn.index("adoptPhotoSession")
@@ -3701,6 +3706,9 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "[hidden]" in css
     assert "display: none !important" in css
     assert "inert" in html
+    assert ".header-title-row" in css
+    assert ".header-quit" in css
+    assert ".quit-done" in css
     assert ".reflect-checklist-column" in css
     assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in css
     assert "repeat(2, minmax(0, 1fr))" not in css
@@ -3731,7 +3739,7 @@ def test_guided_index_html_is_not_cached():
     assert res.status_code == 200
     cache = (res.headers.get("cache-control") or "").lower()
     assert "no-store" in cache
-    assert "guided.js?v=28" in res.text
+    assert "guided.js?v=29" in res.text
     assert 'http-equiv="Cache-Control"' in res.text
 
 
@@ -4173,31 +4181,32 @@ def test_guided_local_server_binds_localhost_and_stops():
 
 
 def test_guided_app_opens_page_like_command_without_webkit():
-    """自前の描画ホストは使わない。.command と同じ open 経路。"""
+    """自前の描画ホストは使わない。.command と同じ open 経路。Dock 偽装もしない。"""
     from pathlib import Path
 
     plist = Path("LuminaNotesGuided.app/Contents/Info.plist").read_text(encoding="utf-8")
     launcher = Path("LuminaNotesGuided.app/Contents/MacOS/LuminaNotesGuided").read_text(encoding="utf-8")
     script = Path("scripts/run_guided_app.sh").read_text(encoding="utf-8")
     window = Path("guided_web/desktop_window.py").read_text(encoding="utf-8")
-    dock = Path("guided_web/mac_dock_host.jxa").read_text(encoding="utf-8")
     backup = Path("scripts/run_guided_web.sh").read_text(encoding="utf-8")
-    combined = window + script + launcher + dock
+    combined = window + script + launcher
     assert "notes.lumina.guided" in plist
     assert "NSAllowsLocalNetworking" in plist
     assert "run_guided_app.sh" in launcher
     assert "アプリケーションフォルダへコピー" in launcher
     assert "guided_python.sh" in script
     assert "guided_web.desktop_window" in script
-    assert "--server-only" in script
-    assert "osacompile" in script
-    assert "Contents/MacOS/applet" in script
+    assert "--server-only" not in script
+    assert "osacompile" not in script
+    assert "Contents/MacOS/applet" not in script
     assert "exec osascript" not in script
-    assert "function run()" in dock
-    assert "function quit()" in dock
-    assert "--server-only" in dock
-    assert "WKWebView" not in dock
-    assert "WebKit" not in dock
+    assert "mac_dock_host" not in combined
+    assert not Path("guided_web/mac_dock_host.jxa").exists()
+    assert not Path("LuminaNotesGuided.app/Contents/MacOS/applet").exists()
+    assert "NSPrincipalClass" not in plist
+    assert "<key>LSUIElement</key>" in plist
+    lsui = plist.split("<key>LSUIElement</key>", 1)[1]
+    assert "<true/>" in lsui.split("<key>", 1)[0]
     assert "arch -arm64" in Path("scripts/guided_python.sh").read_text(encoding="utf-8")
     assert "hw.optional.arm64" in Path("scripts/guided_python.sh").read_text(encoding="utf-8")
     assert "LSRequiresNativeExecution" in plist
@@ -4208,8 +4217,67 @@ def test_guided_app_opens_page_like_command_without_webkit():
     assert "import WebKit" not in combined
     assert "tkinter" not in combined.lower()
     assert "/usr/bin/open" in window
+    assert "is_shutdown_requested" in window
     assert "python3 -m guided_web.app" in backup
     assert "ブラウザを開きます" in backup
+
+
+def test_guided_api_shutdown_sets_event_without_killing_process():
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.shutdown import clear_shutdown, is_shutdown_requested
+
+    clear_shutdown()
+    client = TestClient(app_module.app)
+    res = client.post("/api/shutdown")
+    assert res.status_code == 200
+    assert res.json() == {"status": "stopping"}
+    assert is_shutdown_requested()
+    health = client.get("/api/health")
+    assert health.status_code == 200
+    clear_shutdown()
+
+
+def test_guided_wait_until_quit_returns_on_ui_shutdown():
+    import threading
+
+    from guided_web.desktop_window import wait_until_quit
+    from guided_web.shutdown import clear_shutdown, request_shutdown
+
+    class FakeServer:
+        def is_running(self):
+            return True
+
+    clear_shutdown()
+    threading.Timer(0.05, request_shutdown).start()
+    wait_until_quit(FakeServer(), poll_s=0.01)
+    clear_shutdown()
+
+
+def test_guided_ui_shutdown_stops_local_server():
+    from urllib.error import URLError
+    from urllib.request import Request, urlopen
+
+    from guided_web.desktop_window import wait_until_quit
+    from guided_web.local_server import GuidedLocalServer, unused_port
+
+    server = GuidedLocalServer(unused_port())
+    try:
+        server.start(replace_existing=True)
+        server.wait_healthy(timeout_s=15)
+        req = Request(server.url + "api/shutdown", method="POST")
+        with urlopen(req, timeout=2) as resp:
+            assert resp.status == 200
+        wait_until_quit(server, poll_s=0.05)
+    finally:
+        server.stop()
+    assert not server.is_running()
+    try:
+        urlopen(server.url + "api/health", timeout=1)
+        raise AssertionError("server should be down after shutdown")
+    except (URLError, OSError):
+        pass
 
 
 def test_guided_python_wrapper_runs_current_interpreter():
@@ -4388,9 +4456,12 @@ def run_all():
     test_guided_export_sleep_guard_starts_after_folder_pick()
     test_guided_local_server_binds_localhost_and_stops()
     test_guided_app_opens_page_like_command_without_webkit()
+    test_guided_api_shutdown_sets_event_without_killing_process()
     test_guided_python_wrapper_runs_current_interpreter()
     test_guided_open_page_uses_system_open()
     test_guided_wait_until_quit_returns_when_server_stops()
+    test_guided_wait_until_quit_returns_on_ui_shutdown()
+    test_guided_ui_shutdown_stops_local_server()
     test_guided_local_server_health_roundtrip()
     print("test_offline_suite: OK")
 

@@ -267,6 +267,15 @@ async def _finish_phase2_body(
             sess["critique"]["error"] = str(e)
 
 
+@app.post("/api/shutdown")
+def api_shutdown() -> dict[str, str]:
+    """画面の「終了」。イベントだけ立てる（TestClient でプロセスを殺さない）。"""
+    from guided_web.shutdown import request_shutdown
+
+    request_shutdown()
+    return {"status": "stopping"}
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -660,9 +669,29 @@ if STATIC_DIR.is_dir():
 
 
 def main() -> None:
+    import threading
+    import time
+
     import uvicorn
 
-    uvicorn.run("guided_web.app:app", host="127.0.0.1", port=DEFAULT_PORT, reload=False)
+    from guided_web.shutdown import clear_shutdown, is_shutdown_requested
+
+    clear_shutdown()
+    config = uvicorn.Config(
+        "guided_web.app:app",
+        host="127.0.0.1",
+        port=DEFAULT_PORT,
+        reload=False,
+    )
+    server = uvicorn.Server(config)
+
+    def _watch_ui_shutdown() -> None:
+        while not is_shutdown_requested():
+            time.sleep(0.25)
+        server.should_exit = True
+
+    threading.Thread(target=_watch_ui_shutdown, daemon=True, name="guided-ui-shutdown").start()
+    server.run()
 
 
 if __name__ == "__main__":

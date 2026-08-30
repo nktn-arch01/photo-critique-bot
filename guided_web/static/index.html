@@ -5,11 +5,14 @@
   <meta http-equiv="Cache-Control" content="no-store" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Lumina Notes — Guided</title>
-  <link rel="stylesheet" href="/static/guided.css?v=28" />
+  <link rel="stylesheet" href="/static/guided.css?v=29" />
 </head>
 <body>
   <header class="app-header">
-    <h1>Lumina Notes</h1>
+    <div class="header-title-row">
+      <h1>Lumina Notes</h1>
+      <button type="button" id="btn-quit" class="header-quit">終了</button>
+    </div>
     <nav class="screen-nav" aria-label="画面">
       <button type="button" class="active" data-screen="choose">選ぶ</button>
       <button type="button" data-screen="read">読む</button>
@@ -120,6 +123,6 @@
 
   <div id="toast-region" class="toast-region" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="/static/guided.js?v=28"></script>
+  <script src="/static/guided.js?v=29"></script>
 </body>
 </html>

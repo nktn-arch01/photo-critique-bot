@@ -1,8 +1,8 @@
 """Guided を Mac の .app から起動する。
 
-pywebview / Tk / 署名なしの描画ホストは使わない。
+pywebview / Tk / 署名なしの描画ホスト / JXA applet は使わない。
 `.command` と同じ python3 でサーバを立て、`/usr/bin/open` で選ぶ画面を開く。
-Dock の終了（SIGTERM）でサーバを止める。
+終了は画面の「終了」（POST /api/shutdown）。シェル .app は Dock に出ない。
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from guided_web.local_server import DEFAULT_PORT, GuidedLocalServer
+from guided_web.shutdown import is_shutdown_requested
 
 
 def show_alert(message: str, *, title: str = "Lumina Notes Guided") -> None:
@@ -60,7 +61,7 @@ def open_guided_page(url: str) -> None:
 
 
 def wait_until_quit(server: GuidedLocalServer, *, poll_s: float = 0.4) -> None:
-    """Dock 終了またはサーバ停止まで待つ。Tk は使わない。"""
+    """画面の「終了」、SIGTERM、またはサーバ停止まで待つ。Tk は使わない。"""
     done = threading.Event()
     previous_int = signal.getsignal(signal.SIGINT)
     previous_term = signal.getsignal(signal.SIGTERM)
@@ -72,7 +73,7 @@ def wait_until_quit(server: GuidedLocalServer, *, poll_s: float = 0.4) -> None:
     signal.signal(signal.SIGTERM, _stop)
     try:
         while not done.is_set():
-            if not server.is_running():
+            if is_shutdown_requested() or not server.is_running():
                 break
             done.wait(poll_s)
     finally:

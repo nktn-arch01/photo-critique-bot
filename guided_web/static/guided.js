@@ -1036,3 +1036,31 @@ syncSpeakButton();
 loadReflectItems();
 window.addEventListener("beforeunload", releaseSessionOnUnload);
 window.addEventListener("pagehide", releaseSessionOnUnload);
+
+async function quitApp() {
+  const btn = document.getElementById("btn-quit");
+  if (btn) btn.disabled = true;
+  try {
+    await fetch("/api/shutdown", { method: "POST" });
+  } catch (_err) {
+    /* server already gone */
+  }
+  document.querySelectorAll("main.screen").forEach((el) => {
+    el.hidden = true;
+    el.inert = true;
+  });
+  const header = document.querySelector(".app-header");
+  if (header) header.hidden = true;
+  let done = document.getElementById("quit-done");
+  if (!done) {
+    done = document.createElement("p");
+    done.id = "quit-done";
+    done.className = "quit-done";
+    document.body.appendChild(done);
+  }
+  done.textContent = "終了しました。このタブを閉じてください。";
+}
+
+document.getElementById("btn-quit")?.addEventListener("click", () => {
+  void quitApp();
+});
