@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from critique_lens import DEFAULT_LENS, CritiqueLens, get_lens, normalize_lens
+from light_context import LIGHT_HINT_USAGE_RULE, format_place_and_light_facts
 
 
 PROMPT_MISSING = "なし"
@@ -57,6 +58,9 @@ class CritiquePromptContext:
     preset_name: str
     # Works / ``_dev.jpg`` 痕跡: 画を一次ソース、EXIF は撮影記録（T8）
     pixel_priority: bool = False
+    timezone: str = PROMPT_MISSING
+    region: str = PROMPT_MISSING
+    time_band: str = PROMPT_MISSING
 
     @classmethod
     def from_metadata(
@@ -81,6 +85,9 @@ class CritiquePromptContext:
             focal_length=sanitize_str(metadata.get("focal_length")),
             date_time=sanitize_str(metadata.get("date_time")),
             time_zone_fact=sanitize_str(metadata.get("time_zone_fact")),
+            timezone=sanitize_str(metadata.get("timezone")),
+            region=sanitize_str(metadata.get("region")),
+            time_band=sanitize_str(metadata.get("time_band")),
             content_headline=coalesce_prompt_text(
                 metadata.get("content_headline"), dop_info.get("content_headline")
             ),
@@ -202,6 +209,12 @@ def build_phase2_prompt(
 ) -> str:
     """Phase 2: 長文対話本文（【1】〜【7】）。"""
     L = _resolve_lens(lens)
+    light_facts = format_place_and_light_facts(
+        timezone=ctx.timezone,
+        region=ctx.region,
+        time_band=ctx.time_band,
+        time_zone_fact=ctx.time_zone_fact,
+    )
     return f"""与えられた写真、撮影環境・メタデータ、および既に確定した以下の観察スナップショット・要約を読み、撮影者の美意識に寄り添う情熱的で具体的な対話本文（【1】〜【7】）を作成してください。
 
 【事前確定の観察結果・要約】
@@ -209,7 +222,7 @@ def build_phase2_prompt(
 
 【撮影環境ファクトデータ】
 - 撮影日時（EXIF DateTimeOriginal＝シャッターを切った時刻。現像・書出の ModifyDate ではない）: {ctx.date_time}
-- 時計帯ヒント（視覚ラベルではない）: {ctx.time_zone_fact}
+{light_facts}
 - カメラ: {ctx.camera_model} / レンズ: {ctx.lens_model}
 - 撮影設定: {ctx.f_number} | {ctx.shutter_speed} | {ctx.iso} | 焦点距離: {ctx.focal_length}
 - Rating（JPEG 正）: {ctx.rating_str} | Preset（参考・必須ではない）: {ctx.preset_name}
@@ -223,7 +236,7 @@ def build_phase2_prompt(
 【講評作成の絶対ルール】
 1. 【撮影意図への回答】: 撮影者の意図・悩み（「{ctx.user_intent}」）に直接触れ、それがどう写真に結実しているか、またはどうすればより意図が際立つか回答してください。
 2. 【脱テンプレート化】: 『三分割法』『柔らかい光』『季節感あふれる』『光と影の物語』『静けさを映す』といった安易で一般的な定型フレーズは使用厳禁です。各写真固有の観察から文章を始めてください。
-3. 【光と陰影の具象的描写】: 時計帯ヒント（{ctx.time_zone_fact}）は「いつ撮ったか」の背景知識です。画面が暗く見えても、ヒントと矛盾する『夜』『夕景』などのラベルで上書きしないでください。『朝日』『夕日』『夕焼け』『夕暮れ』『夕映え』『夕景』『夜景』『黄昏』『早朝』の単語は使用厳禁。描写は「光の差し込む角度」「明暗のコントラスト」「グラデーションの推移」「シャドウの深度」など具体的な光と色彩のみで行ってください。
+3. 【光と陰影の具象的描写】: {LIGHT_HINT_USAGE_RULE} 描写は「光の差し込む角度」「明暗のコントラスト」「グラデーションの推移」「シャドウの深度」など具体的な光と色彩のみで行ってください。
 4. 【物語としての人物】: 人の姿がある場合は必ずその人の「しぐさ」「視線」「佇まい」から前後の時間を推論する。人の姿がない場合は「しぐさ／佇まい／人物」を建物・花に転用するな（禁止例:「花の佇まい」「建物のしぐさ」）。不在の人物を仮定する文も禁止。
 5. 【構図の心理学】: 人の姿がある場合は配置が生む距離感を分析する。ない場合は形・線・余白・光のリズムだけを述べ、「観る者の視線」以外で「視線／しぐさ／佇まい」を使うな。
 6. 【曖昧さの肯定】: 露出の過不足やブレが「当時の心の揺れ」を表現しているなら、それを技術的ミスとせず、ブランド原則「曖昧さに意味があるなら、それを残す」に基づき肯定してください。「修正」「改善」「失敗」など欠陥を示唆する言葉は使用厳禁です。
