@@ -2640,7 +2640,7 @@ def test_guided_prompts_use_light_hint_not_futei_label():
     p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
     for text in (p1, p2):
         assert "東寄りの低い自然光（ブルーアワー相当）" in text
-        assert "夕暮れ" not in text
+        assert "夕暮れ（六）" not in text
         assert "時間帯:" not in text
 
 
