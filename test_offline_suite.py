@@ -4188,9 +4188,12 @@ def test_guided_app_opens_page_like_command_without_webkit():
     assert "アプリケーションフォルダへコピー" in launcher
     assert "zsh -lc" in launcher
     assert ".zshrc" in launcher
-    assert "python3 -m guided_web.desktop_window" in script
-    assert "arch -arm64" not in script
-    assert "arch -arm64" not in launcher
+    assert "guided_python.sh" in script
+    assert "guided_web.desktop_window" in script
+    assert "arch -arm64" in Path("scripts/guided_python.sh").read_text(encoding="utf-8")
+    assert "hw.optional.arm64" in Path("scripts/guided_python.sh").read_text(encoding="utf-8")
+    assert "LSRequiresNativeExecution" in plist
+    assert "arm64" in plist
     assert "pywebview" not in script
     assert "import webview" not in window
     assert "from WebKit" not in combined
@@ -4199,6 +4202,19 @@ def test_guided_app_opens_page_like_command_without_webkit():
     assert "/usr/bin/open" in window
     assert "python3 -m guided_web.app" in backup
     assert "ブラウザを開きます" in backup
+
+
+def test_guided_python_wrapper_runs_current_interpreter():
+    import subprocess
+
+    result = subprocess.run(
+        ["bash", "scripts/guided_python.sh", "-c", "print('guided-python-ok')"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "guided-python-ok" in result.stdout
 
 
 def test_guided_open_page_uses_system_open():
@@ -4364,6 +4380,7 @@ def run_all():
     test_guided_export_sleep_guard_starts_after_folder_pick()
     test_guided_local_server_binds_localhost_and_stops()
     test_guided_app_opens_page_like_command_without_webkit()
+    test_guided_python_wrapper_runs_current_interpreter()
     test_guided_open_page_uses_system_open()
     test_guided_wait_until_quit_returns_when_server_stops()
     test_guided_local_server_health_roundtrip()

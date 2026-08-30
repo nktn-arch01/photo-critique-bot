@@ -37,13 +37,15 @@ fi
 echo "=== Lumina Notes Guided.app ==="
 echo "フォルダ: $ROOT"
 echo "python3: $(command -v python3)"
-python3 --version 2>&1 || true
+GUIDED_PY=(bash "${ROOT}/scripts/guided_python.sh")
+"${GUIDED_PY[@]}" --version 2>&1 || true
+"${GUIDED_PY[@]}" -c "import platform; print('python_machine', platform.machine())" 2>&1 || true
 
-if ! python3 -c "import fastapi, uvicorn, PIL" >/dev/null 2>&1; then
+if ! "${GUIDED_PY[@]}" -c "import fastapi, uvicorn, PIL"; then
   echo "依存パッケージを入れています…"
-  python3 -m pip install python-multipart fastapi uvicorn pillow || true
+  "${GUIDED_PY[@]}" -m pip install python-multipart fastapi uvicorn pillow || true
 fi
-if ! python3 -c "import fastapi, uvicorn, PIL" >/dev/null 2>&1; then
+if ! "${GUIDED_PY[@]}" -c "import fastapi, uvicorn, PIL"; then
   alert "必要な部品を入れられませんでした。保険の LuminaNotesGuided.command をダブルクリックしてください。"
   exit 1
 fi
@@ -83,7 +85,7 @@ export GUIDED_WEB_PORT="$PORT"
 echo "サーバを起動して画面を開きます（終了は Dock から）…"
 # bash を .app のプロセスとして残す。Dock 終了の SIGTERM を Python へ渡す。
 set +e
-python3 -m guided_web.desktop_window &
+bash "${ROOT}/scripts/guided_python.sh" -m guided_web.desktop_window &
 PY=$!
 term() {
   kill -TERM "$PY" 2>/dev/null || true
