@@ -1,11 +1,14 @@
 #!/bin/bash
 # LuminaNotesGuided.app の入口。ターミナルは出さない。
 # この .app はリポジトリ（photo-critique-bot）フォルダの中で開く。
-export PATH="/usr/local/bin:/opt/homebrew/bin:${HOME}/.pyenv/shims:${PATH}"
+# Finder 起動は Terminal/.command と違い .zshrc を読まないので、ログイン殻で本体を呼ぶ。
+export PATH="/Library/Frameworks/Python.framework/Versions/Current/bin:/usr/local/bin:/opt/homebrew/bin:${HOME}/.pyenv/shims:${PATH}"
 export PYTHONUNBUFFERED=1
 
 APP_BIN="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "${APP_BIN}/../../.." && pwd)"
+export GUIDED_APP_ROOT="$ROOT"
+export GUIDED_APP_LOGIN=1
 
 if [[ ! -f "${ROOT}/scripts/run_guided_app.sh" ]]; then
   osascript -e 'display dialog "LuminaNotesGuided.app は photo-critique-bot フォルダの中で開いてください。アプリケーションフォルダへコピーすると動きません。" buttons {"OK"} default button 1 with title "Lumina Notes Guided"' >/dev/null 2>&1 || true
@@ -21,7 +24,15 @@ LOG="${HOME}/.lumina_notes/guided-app.log"
 {
   echo "=== Lumina Notes Guided.app $(date) ==="
   echo "ROOT=${ROOT}"
+  echo "PATH=${PATH}"
 } >>"${LOG}"
 
+osascript -e 'display notification "起動しています。数秒待ってください。" with title "Lumina Notes Guided"' >/dev/null 2>&1 || true
+
 exec >>"${LOG}" 2>&1
+export ZSH_DISABLE_COMPFIX=true
+if command -v zsh >/dev/null 2>&1; then
+  # 対話モードにしない（確認プロンプトで止まるのを防ぐ）。.zprofile / .zshrc は明示的に読む。
+  exec zsh -lc 'source "$HOME/.zprofile" >/dev/null 2>&1 || true; source "$HOME/.zshrc" >/dev/null 2>&1 || true; cd "$GUIDED_APP_ROOT" && exec bash "$GUIDED_APP_ROOT/scripts/run_guided_app.sh"'
+fi
 exec bash "${ROOT}/scripts/run_guided_app.sh"

@@ -4186,8 +4186,11 @@ def test_guided_app_opens_page_like_command_without_webkit():
     assert "NSAllowsLocalNetworking" in plist
     assert "run_guided_app.sh" in launcher
     assert "アプリケーションフォルダへコピー" in launcher
-    assert "exec python3 -m guided_web.desktop_window" in script
+    assert "zsh -lc" in launcher
+    assert ".zshrc" in launcher
+    assert "python3 -m guided_web.desktop_window" in script
     assert "arch -arm64" not in script
+    assert "arch -arm64" not in launcher
     assert "pywebview" not in script
     assert "import webview" not in window
     assert "from WebKit" not in combined
@@ -4212,7 +4215,9 @@ def test_guided_open_page_uses_system_open():
         "guided_web.desktop_window.subprocess.run", side_effect=fake_run
     ):
         open_guided_page("http://127.0.0.1:8765/")
-    assert captured["args"] == ["/usr/bin/open", "http://127.0.0.1:8765/"]
+    assert captured["args"][0] == "/usr/bin/open"
+    assert captured["args"][1].startswith("http://127.0.0.1:8765/")
+    assert "v=" in captured["args"][1]
 
 
 def test_guided_wait_until_quit_returns_when_server_stops():

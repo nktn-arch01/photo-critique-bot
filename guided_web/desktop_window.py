@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 from guided_web.local_server import DEFAULT_PORT, GuidedLocalServer
@@ -53,7 +54,9 @@ def open_guided_page(url: str) -> None:
     if platform.system() != "Darwin":
         return
     opener = os.environ.get("GUIDED_WEB_OPENER", "/usr/bin/open")
-    subprocess.run([opener, url], check=False)
+    stamp = str(int(time.time()))
+    sep = "&" if "?" in url else "?"
+    subprocess.run([opener, f"{url}{sep}v={stamp}"], check=False)
 
 
 def wait_until_quit(server: GuidedLocalServer, *, poll_s: float = 0.4) -> None:

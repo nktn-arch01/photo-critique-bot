@@ -3,11 +3,12 @@
 # サーバは .command と同じ python3。画面は /usr/bin/open（自前の描画ホストは使わない）。
 set -euo pipefail
 
-export PATH="/usr/local/bin:/opt/homebrew/bin:${HOME}/.pyenv/shims:${PATH}"
+export PATH="/Library/Frameworks/Python.framework/Versions/Current/bin:/usr/local/bin:/opt/homebrew/bin:${HOME}/.pyenv/shims:${PATH}"
 export PYTHONUNBUFFERED=1
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="${GUIDED_APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT"
+export GUIDED_APP_ROOT="$ROOT"
 
 PORT="${GUIDED_WEB_PORT:-8765}"
 
@@ -26,7 +27,6 @@ fi
 
 if [[ -z "${OPENAI_API_KEY:-}" && ! -f "${HOME}/.openai_api_key" ]]; then
   if command -v zsh >/dev/null 2>&1; then
-    # Finder 起動は .zshrc を読まないので、ログイン殻からキーだけ拾う
     _k="$(zsh -lic 'printenv OPENAI_API_KEY' 2>/dev/null || true)"
     if [[ -n "${_k}" ]]; then
       export OPENAI_API_KEY="${_k}"
@@ -37,10 +37,16 @@ fi
 echo "=== Lumina Notes Guided.app ==="
 echo "フォルダ: $ROOT"
 echo "python3: $(command -v python3)"
+python3 --version 2>&1 || true
 
-echo "依存パッケージを確認しています…"
-python3 -m pip install -q python-multipart fastapi uvicorn pillow 2>/dev/null || \
-  python3 -m pip install python-multipart fastapi uvicorn pillow
+if ! python3 -c "import fastapi, uvicorn, PIL" >/dev/null 2>&1; then
+  echo "依存パッケージを入れています…"
+  python3 -m pip install python-multipart fastapi uvicorn pillow || true
+fi
+if ! python3 -c "import fastapi, uvicorn, PIL" >/dev/null 2>&1; then
+  alert "必要な部品を入れられませんでした。保険の LuminaNotesGuided.command をダブルクリックしてください。"
+  exit 1
+fi
 
 listening_pids() {
   lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN -t 2>/dev/null || true
@@ -75,5 +81,22 @@ fi
 export GUIDED_WEB_PORT="$PORT"
 
 echo "サーバを起動して画面を開きます（終了は Dock から）…"
-# Python をこのプロセスに置き換える。Dock 終了の SIGTERM がサーバ掃除まで届く。
-exec python3 -m guided_web.desktop_window
+# bash を .app のプロセスとして残す。Dock 終了の SIGTERM を Python へ渡す。
+set +e
+python3 -m guided_web.desktop_window &
+PY=$!
+term() {
+  kill -TERM "$PY" 2>/dev/null || true
+  wait "$PY" 2>/dev/null || true
+}
+trap term INT TERM
+wait "$PY"
+status=$?
+trap - INT TERM
+set -e
+
+if [[ "$status" -ne 0 && "$status" -ne 130 && "$status" -ne 143 ]]; then
+  alert "Guided を起動できませんでした。保険の LuminaNotesGuided.command をダブルクリックしてください。"
+  exit 1
+fi
+exit "$status"
