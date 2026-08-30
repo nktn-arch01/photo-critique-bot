@@ -2350,15 +2350,6 @@ def test_east_west_reversal_fixtures():
     body_check = check_output_east_west_reversal(body, east_hint)
     assert not body_check["pass"]
     assert "夕暮れ" in body_check["hits"]
-    from prompt_contracts import neutralize_east_west_reversal
-
-    repaired_card = neutralize_east_west_reversal(card, east_hint)
-    assert "夕暮れ" not in repaired_card
-    assert check_output_east_west_reversal(repaired_card, east_hint)["pass"]
-    repaired_body = neutralize_east_west_reversal(body, east_hint)
-    assert "夕暮れ" not in repaired_body
-    assert "東の空からの低い自然光" in repaired_body
-    assert check_output_east_west_reversal(repaired_body, east_hint)["pass"]
     dawn_on_west = "■TITLE: 朝日の静けさ\n■SUMMARY: 早朝の街\n■SCORES:\n・眼差の輪郭 (Contours of the Eyes): ★★★☆☆ (3/5)\n■CRITIQUE_SUMMARY: 西の空の話。"
     west_check = check_output_east_west_reversal(dawn_on_west, west_hint)
     assert not west_check["pass"]
@@ -2400,16 +2391,12 @@ def test_light_prompt_variant_default_strips_twilight_names():
     assert "ブルーアワー" in p1_old
 
 
-def test_phase1_repair_after_retries_still_dusk():
-    """差し戻し後も夕暮れなら、アプリが朝夕語を『低い光』へ置き換える。"""
+def test_phase1_rejects_after_retries_still_dusk():
+    """差し戻し後も夕暮れなら出さない。単語置換で夕の物語を残さない。"""
     from unittest.mock import patch
 
     from critique_engine import generate_critique_with_prompts
-    from prompt_contracts import (
-        EAST_WEST_REWRITE_NOTE,
-        check_output_east_west_reversal,
-        neutralize_east_west_reversal,
-    )
+    from prompt_contracts import EAST_WEST_REWRITE_NOTE, check_output_east_west_reversal
 
     root = Path(__file__).resolve().parent / "eval" / "prompt_eval" / "fixtures"
     dusk = (root / "east_fail_card_dusk.txt").read_text(encoding="utf-8")
@@ -2419,26 +2406,28 @@ def test_phase1_repair_after_retries_still_dusk():
     )
     calls = {"n": 0}
 
-    def fake_complete(_provider, _image_path, _prompt, **_kwargs):
+    def fake_complete(_provider, _image_path, prompt, **_kwargs):
         calls["n"] += 1
         return dusk
 
     with patch("critique_engine.complete_with_image", fake_complete), patch(
         "critique_engine.time.sleep"
     ):
-        text = generate_critique_with_prompts(
-            Path("dummy.jpg"),
-            build_phase1=lambda: "phase1-base",
-            build_phase2=lambda _p1: "phase2-base",
-            mode="compact",
-            max_retries=3,
-            phase_accept=lambda t: check_output_east_west_reversal(t, east_hint)["pass"],
-            phase_retry_note=EAST_WEST_REWRITE_NOTE,
-            phase_repair=lambda t: neutralize_east_west_reversal(t, east_hint),
-        )
+        try:
+            generate_critique_with_prompts(
+                Path("dummy.jpg"),
+                build_phase1=lambda: "phase1-base",
+                build_phase2=lambda _p1: "phase2-base",
+                mode="compact",
+                max_retries=3,
+                phase_accept=lambda t: check_output_east_west_reversal(t, east_hint)["pass"],
+                phase_retry_note=EAST_WEST_REWRITE_NOTE,
+            )
+        except ValueError as exc:
+            assert "光の方位" in str(exc)
+        else:
+            raise AssertionError("dusk card must not be accepted after retries")
     assert calls["n"] == 3
-    assert "夕暮れ" not in text
-    assert "低い光の静けさが漂う" in text
 
 
 def test_phase1_accept_retries_card_dusk_then_passes():
@@ -2563,10 +2552,8 @@ def test_generate_guided_critique_wires_east_west_accept():
     assert accept(dusk) is False
     assert accept(ok) is True
     assert captured.get("phase_retry_note") == EAST_WEST_REWRITE_NOTE
-    repair = captured.get("phase_repair")
-    assert repair is not None
-    assert "夕暮れ" not in repair(dusk)
-    assert "低い光" in repair(dusk)
+    assert "物語" in (captured.get("phase_retry_note") or "")
+    assert "phase_repair" not in captured or captured.get("phase_repair") is None
 
     south_params = {
         "image": {
@@ -4998,7 +4985,7 @@ def run_all():
     test_east_west_reversal_fixtures()
     test_light_prompt_variant_default_strips_twilight_names()
     test_phase1_accept_retries_card_dusk_then_passes()
-    test_phase1_repair_after_retries_still_dusk()
+    test_phase1_rejects_after_retries_still_dusk()
     test_phase2_accept_retries_body_coexist_then_passes()
     test_generate_guided_critique_wires_east_west_accept()
     test_prompt_eval_offline_script()

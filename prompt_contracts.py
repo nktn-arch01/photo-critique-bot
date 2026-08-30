@@ -72,11 +72,14 @@ MORNING_REVERSAL_STEMS: tuple[str, ...] = (
 )
 
 # Guided が Phase1/Phase2 を差し戻すときの一文。既存 max_retries の中で使う。
+# 単語の置換では夕の物語が残るので、観察そのものを書き直させる。
 EAST_WEST_REWRITE_NOTE = (
     "【再生成】直前の出力は光の方位の事実と食い違っています。"
+    "単語だけ言い換えて夕（または朝）の物語を残してはいけない。"
+    "情景・空気感・撮影者の意図の読みも、光の方位の事実に合わせて書き直す。"
     "カード（TITLE / SUMMARY / CRITIQUE_SUMMARY）にも本文（【1】〜【7】）にも、"
     "『夕暮れ』『夕方』『夕刻』『夕景』『夕映え』『朝日』『早朝』を書かない。"
-    "東の空／一日の前半の光を、西の空や一日の後半として書かない。"
+    "東の空／一日の前半なら、一日の終わりや西の空の光としては書かない。"
 )
 
 # Phase1 プロンプト追加分（「夜の」など）
@@ -252,18 +255,6 @@ def check_output_east_west_reversal(critique: str, light_hint: str) -> dict:
     }
 
 
-def neutralize_east_west_reversal(text: str, light_hint: str) -> str:
-    """方位事実と食い違う朝夕語を、方位を名乗らない『低い光』へ置き換える。"""
-    side = infer_light_side(light_hint)
-    if side is None or not text:
-        return text
-    stems = EVENING_REVERSAL_STEMS if side == "east" else MORNING_REVERSAL_STEMS
-    out = text
-    for stem in sorted(stems, key=len, reverse=True):
-        out = out.replace(stem, "低い光")
-    return out
-
-
 def east_west_phase_accept(light_hint: str) -> Callable[[str], bool] | None:
     """方位事実があるときだけ受理関数を返す。南寄りの高い光などでは None。"""
     if infer_light_side(light_hint) is None:
@@ -273,17 +264,6 @@ def east_west_phase_accept(light_hint: str) -> Callable[[str], bool] | None:
         return bool(check_output_east_west_reversal(text, light_hint)["pass"])
 
     return accept
-
-
-def east_west_phase_repair(light_hint: str) -> Callable[[str], str] | None:
-    """再試行しても朝夕語が残るときの最後の安全網。API は増やさない。"""
-    if infer_light_side(light_hint) is None:
-        return None
-
-    def repair(text: str) -> str:
-        return neutralize_east_west_reversal(text, light_hint)
-
-    return repair
 
 
 def check_output_person_present(critique: str) -> dict:

@@ -22,7 +22,7 @@ DEFAULT_VARIANT: LightPromptVariant = "title_slot_ban"
 _TWILIGHT_NAME_BITS = ("・ブルーアワー相当", "・ゴールデンアワー相当")
 
 _TITLE_SLOT_RULE = """
-■TITLE・■SUMMARY・■CRITIQUE_SUMMARY は光の方位の事実に合わせる。読む画面のカード（TITLE / SUMMARY / CRITIQUE_SUMMARY）に出す。東の空／一日の前半のとき、『夕』で始まる語（夕暮れ・夕刻・夕方・夕景・夕映え）を TITLE・SUMMARY・CRITIQUE_SUMMARY・タグに出さない。西の空／一日の後半のとき、『朝日』『早朝』を出さない。
+■TITLE・■SUMMARY・■CRITIQUE_SUMMARY は光の方位の事実に合わせる。読む画面のカード（TITLE / SUMMARY / CRITIQUE_SUMMARY）に出す。東の空／一日の前半のとき、『夕』で始まる語（夕暮れ・夕刻・夕方・夕景・夕映え）を TITLE・SUMMARY・CRITIQUE_SUMMARY・タグに出さない。西の空／一日の後半のとき、『朝日』『早朝』を出さない。単語を避けるだけでなく、情景の読み（一日の終わり／始まり、帰り際／これから）も方位の事実に合わせる。
 """
 
 

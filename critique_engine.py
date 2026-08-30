@@ -51,7 +51,6 @@ def _run_two_phase_generation(
     phase1_temperature: float | None = None,
     phase_accept: Callable[[str], bool] | None = None,
     phase_retry_note: str | None = None,
-    phase_repair: Callable[[str], str] | None = None,
 ) -> str:
     lens_id = normalize_lens(lens)
     if build_phase1_prompt_fn:
@@ -76,14 +75,6 @@ def _run_two_phase_generation(
         if phase_accept is None:
             return True
         return bool(phase_accept(content))
-
-    def _repair_last(content: str, structure_ok: bool) -> str | None:
-        if phase_repair is None or not structure_ok:
-            return None
-        repaired = phase_repair(content)
-        if repaired != content and _accepts(repaired):
-            return repaired
-        return None
 
     phase1_output = ""
     if phase1_override and phase1_override.strip():
@@ -121,18 +112,9 @@ def _run_two_phase_generation(
 
                 if attempt < max_retries:
                     time.sleep(backoff_factor ** attempt)
+                elif not structure_ok:
+                    raise ValueError("Phase 1 API出力に必須構造が含まれませんでした。")
                 else:
-                    repaired = _repair_last(content, structure_ok)
-                    if repaired is not None:
-                        print(
-                            f"[Phase1 repair] provider={provider} "
-                            f"preview={repaired[:200]!r}",
-                            flush=True,
-                        )
-                        phase1_output = repaired
-                        break
-                    if not structure_ok:
-                        raise ValueError("Phase 1 API出力に必須構造が含まれませんでした。")
                     raise ValueError("Phase 1 出力が光の方位の事実と食い違っています。")
             except Exception as e:
                 if is_quota_or_rate_limit_error(e):
@@ -174,18 +156,9 @@ def _run_two_phase_generation(
 
             if attempt < max_retries:
                 time.sleep(backoff_factor ** attempt)
+            elif not structure_ok:
+                raise ValueError("Phase 2 API出力に本文構造が含まれませんでした。")
             else:
-                repaired = _repair_last(content, structure_ok)
-                if repaired is not None:
-                    print(
-                        f"[Phase2 repair] provider={provider} "
-                        f"preview={repaired[:200]!r}",
-                        flush=True,
-                    )
-                    phase2_output = repaired
-                    break
-                if not structure_ok:
-                    raise ValueError("Phase 2 API出力に本文構造が含まれませんでした。")
                 raise ValueError("Phase 2 出力が光の方位の事実と食い違っています。")
         except Exception as e:
             if is_quota_or_rate_limit_error(e):
@@ -213,7 +186,6 @@ def generate_critique_with_prompts(
     phase1_temperature: float | None = None,
     phase_accept: Callable[[str], bool] | None = None,
     phase_retry_note: str | None = None,
-    phase_repair: Callable[[str], str] | None = None,
 ) -> str:
     """カスタムプロンプトビルダーで講評を生成（Guided Web 等）。"""
     return _run_two_phase_generation(
@@ -233,7 +205,6 @@ def generate_critique_with_prompts(
         phase1_temperature=phase1_temperature,
         phase_accept=phase_accept,
         phase_retry_note=phase_retry_note,
-        phase_repair=phase_repair,
     )
 
 
