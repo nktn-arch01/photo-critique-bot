@@ -82,6 +82,34 @@ function releaseSessionOnUnload(event) {
   }
 }
 
+function announceScreenLeaving(event) {
+  if (event && event.type === "pagehide" && event.persisted) return;
+  const url = "/api/presence/unload";
+  const sent = typeof navigator.sendBeacon === "function" && navigator.sendBeacon(url);
+  if (!sent) {
+    fetch(url, { method: "POST", keepalive: true }).catch(() => {});
+  }
+}
+
+const HEARTBEAT_MS = 8000;
+let heartbeatTimer = null;
+
+function pingHeartbeat() {
+  fetch("/api/heartbeat", { method: "POST", keepalive: true }).catch(() => {});
+}
+
+function startHeartbeat() {
+  if (heartbeatTimer != null) return;
+  pingHeartbeat();
+  heartbeatTimer = window.setInterval(pingHeartbeat, HEARTBEAT_MS);
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer == null) return;
+  window.clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
 const TOAST_MS = 4200;
 
 function showToast(message, tone = "info") {
@@ -1034,12 +1062,15 @@ bindReadDropdownGuards();
 syncScreenGuides();
 syncSpeakButton();
 loadReflectItems();
+startHeartbeat();
 window.addEventListener("beforeunload", releaseSessionOnUnload);
 window.addEventListener("pagehide", releaseSessionOnUnload);
+window.addEventListener("pagehide", announceScreenLeaving);
 
 async function quitApp() {
   const btn = document.getElementById("btn-quit");
   if (btn) btn.disabled = true;
+  stopHeartbeat();
   try {
     await fetch("/api/shutdown", { method: "POST" });
   } catch (_err) {

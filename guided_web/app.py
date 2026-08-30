@@ -276,6 +276,22 @@ def api_shutdown() -> dict[str, str]:
     return {"status": "stopping"}
 
 
+@app.post("/api/heartbeat")
+def api_heartbeat() -> dict[str, str]:
+    from guided_web.presence import ping
+
+    ping()
+    return {"status": "ok"}
+
+
+@app.post("/api/presence/unload")
+def api_presence_unload() -> dict[str, str]:
+    from guided_web.presence import mark_unload
+
+    mark_unload()
+    return {"status": "leaving"}
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -674,9 +690,12 @@ def main() -> None:
 
     import uvicorn
 
-    from guided_web.shutdown import clear_shutdown, is_shutdown_requested
+    from guided_web.presence import is_gone as presence_is_gone
+    from guided_web.presence import reset as reset_presence
+    from guided_web.shutdown import clear_shutdown, is_shutdown_requested, request_shutdown
 
     clear_shutdown()
+    reset_presence()
     config = uvicorn.Config(
         "guided_web.app:app",
         host="127.0.0.1",
@@ -686,9 +705,13 @@ def main() -> None:
     server = uvicorn.Server(config)
 
     def _watch_ui_shutdown() -> None:
-        while not is_shutdown_requested():
+        while True:
+            if presence_is_gone() and not is_shutdown_requested():
+                request_shutdown()
+            if is_shutdown_requested():
+                server.should_exit = True
+                return
             time.sleep(0.25)
-        server.should_exit = True
 
     threading.Thread(target=_watch_ui_shutdown, daemon=True, name="guided-ui-shutdown").start()
     server.run()

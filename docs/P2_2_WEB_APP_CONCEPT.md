@@ -156,7 +156,7 @@ flowchart TB
 
 **起動手順（Mac）:** [`P2_2_GUIDED_MAC_CHECKLIST.md`](P2_2_GUIDED_MAC_CHECKLIST.md) — 全操作コピペ一発・PASS/FAIL 付き
 
-日常は **`LuminaNotesGuided.app`**（Finder から開く。ターミナルは出さない）。画面は `.command` と同じく `python3` が `127.0.0.1` で待ち、`/usr/bin/open` で開く。自前の WebView / pywebview / JXA applet は使わない。**シェル `.app` は Dock に出ない**（macOS が Dock に残すのは、束の中の本物の Cocoa 実行ファイルだけ）。終了は画面右上の **「終了」**。
+日常は **`LuminaNotesGuided.app`**（Finder から開く。ターミナルは出さない）。画面は `.command` と同じく `python3` が `127.0.0.1` で待ち、`/usr/bin/open` で開く。自前の WebView / pywebview / JXA applet は使わない。**シェル `.app` は Dock に出ない**。終了は画面右上の **「終了」**。タブを閉じる／ブラウザを終了しても、画面が無ければサーバは止まる。Finder の `.app` プロセスはサーバを待たない（待ると再起動が跳ね続ける）。
 
 | ファイル | 役割 |
 |----------|------|
@@ -170,7 +170,7 @@ flowchart TB
 
 1. ユーザーが **`photo-critique-bot` フォルダ内の `LuminaNotesGuided.app`** を開く  
 2. Python が `127.0.0.1` で待ち受け  
-3. 選ぶ画面が開く（既定のブラウザ）。画面の「終了」でサーバも止まる  
+3. 選ぶ画面が開く（既定のブラウザ）。画面の「終了」、またはタブ／ブラウザを閉じるとサーバも止まる  
 
 演算中（言葉にする・カード・書き出し）だけ `caffeinate -i`。選ぶで待っているときは Mac は眠ってよい。  
 画像処理・API・カード生成は Python 必須。**他人の Mac へ Python なしで配る箱は今回やらない。**

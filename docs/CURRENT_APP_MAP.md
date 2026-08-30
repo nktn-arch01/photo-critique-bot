@@ -26,7 +26,8 @@ Wave C で決まった核:
 | `PhotoAICritique.command` | 旧・一括講評 GUI（起動時に Console へ誘導） | レガシー |
 | LINE Bot（Render / `main.py`） | 写真1枚 → カード＋対話【1〜3】→ 反応 QR | 本番チャネル |
 
-Console を `.command` から起動して閉じると、Terminal ウィンドウも閉じます。  
+Console を `.command` から起動して閉じると、Terminal ウィンドウも閉じます（Tk の窓がプログラム本体。窓を閉じると Python が終わり、起動スクリプトが Terminal を閉じます）。  
+Guided の画面はブラウザですが、**画面が無ければサーバも止まる**（タブ閉じ／「終了」）。  
 旧 `LuminaShortlist.command` / `run_shortlist.py` / `run_trace_works.py` は削除済み（公式名のみ）。
 
 ---

@@ -3640,10 +3640,14 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     assert "activeCritiqueEpoch" in js
     assert "pendingCritiqueCancel" not in js
     assert "function pollCritique" in js
-    assert "guided.js?v=29" in html
-    assert "guided.css?v=29" in html
+    assert "guided.js?v=30" in html
+    assert "guided.css?v=30" in html
     assert 'id="btn-quit"' in html
     assert "終了" in html
+    assert "function announceScreenLeaving" in js
+    assert "function startHeartbeat" in js
+    assert "/api/heartbeat" in js
+    assert "/api/presence/unload" in js
     assert "function quitApp" in js
     assert "/api/shutdown" in js
     assert "/critique/cancel" not in js
@@ -3690,10 +3694,14 @@ def test_guided_ui_uses_toast_empty_guides_and_export_navigation():
     speak_fn = js.split("async function startCritique")[1].split("async function applyCritiqueProgress")[0]
     assert "force_restart: true" in speak_fn
     assert "/critique/cancel" not in speak_fn
-    unload_fn = js.split("function releaseSessionOnUnload")[1].split("const TOAST_MS")[0]
+    unload_fn = js.split("function releaseSessionOnUnload")[1].split("function announceScreenLeaving")[0]
     assert "event.persisted" in unload_fn
     assert "/release" in unload_fn
     assert "/critique/cancel" not in unload_fn
+    assert "/api/shutdown" not in unload_fn
+    leave_fn = js.split("function announceScreenLeaving")[1].split("const HEARTBEAT_MS")[0]
+    assert "/api/presence/unload" in leave_fn
+    assert "/api/shutdown" not in leave_fn
     export_fn = js.split("function afterExportSuccess")[1].split("function ")[0]
     assert "showToast" in export_fn
     assert "navigateToScreen" not in export_fn
@@ -3739,7 +3747,7 @@ def test_guided_index_html_is_not_cached():
     assert res.status_code == 200
     cache = (res.headers.get("cache-control") or "").lower()
     assert "no-store" in cache
-    assert "guided.js?v=29" in res.text
+    assert "guided.js?v=30" in res.text
     assert 'http-equiv="Cache-Control"' in res.text
 
 
@@ -4218,6 +4226,10 @@ def test_guided_app_opens_page_like_command_without_webkit():
     assert "tkinter" not in combined.lower()
     assert "/usr/bin/open" in window
     assert "is_shutdown_requested" in window
+    assert "should_detach" in window
+    assert "start_new_session" in window
+    assert "GUIDED_DAEMON" in window
+    assert "presence_is_gone" in window
     assert "python3 -m guided_web.app" in backup
     assert "ブラウザを開きます" in backup
 
@@ -4243,6 +4255,7 @@ def test_guided_wait_until_quit_returns_on_ui_shutdown():
     import threading
 
     from guided_web.desktop_window import wait_until_quit
+    from guided_web.presence import reset as reset_presence
     from guided_web.shutdown import clear_shutdown, request_shutdown
 
     class FakeServer:
@@ -4250,6 +4263,7 @@ def test_guided_wait_until_quit_returns_on_ui_shutdown():
             return True
 
     clear_shutdown()
+    reset_presence()
     threading.Timer(0.05, request_shutdown).start()
     wait_until_quit(FakeServer(), poll_s=0.01)
     clear_shutdown()
@@ -4278,6 +4292,113 @@ def test_guided_ui_shutdown_stops_local_server():
         raise AssertionError("server should be down after shutdown")
     except (URLError, OSError):
         pass
+
+
+def test_guided_presence_refresh_keeps_server_alive():
+    from guided_web.presence import Presence
+
+    clock = [0.0]
+    presence = Presence(now=lambda: clock[0], unload_grace_s=0.8, idle_grace_s=90.0)
+    presence.reset()
+    presence.mark_unload()
+    clock[0] = 0.2
+    presence.ping()
+    clock[0] = 1.0
+    assert presence.is_gone() is False
+
+
+def test_guided_presence_tab_close_is_gone_after_grace():
+    from guided_web.presence import Presence
+
+    clock = [0.0]
+    presence = Presence(now=lambda: clock[0], unload_grace_s=0.8, idle_grace_s=90.0)
+    presence.reset()
+    presence.mark_unload()
+    clock[0] = 0.79
+    assert presence.is_gone() is False
+    clock[0] = 0.81
+    assert presence.is_gone() is True
+
+
+def test_guided_api_heartbeat_and_unload_do_not_kill_process():
+    from fastapi.testclient import TestClient
+
+    from guided_web import app as app_module
+    from guided_web.presence import reset as reset_presence
+    from guided_web.shutdown import clear_shutdown, is_shutdown_requested
+
+    clear_shutdown()
+    reset_presence()
+    client = TestClient(app_module.app)
+    beat = client.post("/api/heartbeat")
+    assert beat.status_code == 200
+    leaving = client.post("/api/presence/unload")
+    assert leaving.status_code == 200
+    assert leaving.json() == {"status": "leaving"}
+    assert is_shutdown_requested() is False
+    health = client.get("/api/health")
+    assert health.status_code == 200
+    clear_shutdown()
+    reset_presence()
+
+
+def test_guided_tab_close_stops_local_server():
+    import os
+    from urllib.error import URLError
+    from urllib.request import Request, urlopen
+
+    from guided_web.desktop_window import wait_until_quit
+    from guided_web.local_server import GuidedLocalServer, unused_port
+    from guided_web.presence import reset as reset_presence
+    from guided_web.shutdown import clear_shutdown
+
+    previous = os.environ.get("GUIDED_UNLOAD_GRACE_S")
+    os.environ["GUIDED_UNLOAD_GRACE_S"] = "0.25"
+    server = GuidedLocalServer(unused_port())
+    try:
+        server.start(replace_existing=True)
+        server.wait_healthy(timeout_s=15)
+        req = Request(server.url + "api/presence/unload", method="POST")
+        with urlopen(req, timeout=2) as resp:
+            assert resp.status == 200
+        wait_until_quit(server, poll_s=0.05)
+    finally:
+        server.stop()
+        if previous is None:
+            os.environ.pop("GUIDED_UNLOAD_GRACE_S", None)
+        else:
+            os.environ["GUIDED_UNLOAD_GRACE_S"] = previous
+        clear_shutdown()
+        reset_presence()
+    assert not server.is_running()
+    try:
+        urlopen(server.url + "api/health", timeout=1)
+        raise AssertionError("server should be down after tab close")
+    except (URLError, OSError):
+        pass
+
+
+def test_guided_detach_only_for_darwin_app_launcher():
+    import os
+    from unittest.mock import patch
+
+    from guided_web.desktop_window import should_detach
+
+    with patch("guided_web.desktop_window.platform.system", return_value="Linux"):
+        assert should_detach() is False
+    with patch("guided_web.desktop_window.platform.system", return_value="Darwin"), patch.dict(
+        os.environ, {"GUIDED_DAEMON": "1"}, clear=False
+    ):
+        assert should_detach() is False
+    with patch("guided_web.desktop_window.platform.system", return_value="Darwin"), patch.dict(
+        os.environ, {"GUIDED_KEEP_FOREGROUND": "1"}, clear=False
+    ):
+        assert should_detach() is False
+    env = {key: value for key, value in os.environ.items() if key not in {"GUIDED_DAEMON", "GUIDED_KEEP_FOREGROUND"}}
+    with patch("guided_web.desktop_window.platform.system", return_value="Darwin"), patch.dict(
+        os.environ, env, clear=True
+    ):
+        assert should_detach() is True
 
 
 def test_guided_python_wrapper_runs_current_interpreter():
@@ -4457,6 +4578,11 @@ def run_all():
     test_guided_local_server_binds_localhost_and_stops()
     test_guided_app_opens_page_like_command_without_webkit()
     test_guided_api_shutdown_sets_event_without_killing_process()
+    test_guided_presence_refresh_keeps_server_alive()
+    test_guided_presence_tab_close_is_gone_after_grace()
+    test_guided_api_heartbeat_and_unload_do_not_kill_process()
+    test_guided_tab_close_stops_local_server()
+    test_guided_detach_only_for_darwin_app_launcher()
     test_guided_python_wrapper_runs_current_interpreter()
     test_guided_open_page_uses_system_open()
     test_guided_wait_until_quit_returns_when_server_stops()

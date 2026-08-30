@@ -25,7 +25,7 @@ git reset --hard origin/cursor/p2-2-web-concept-f193
 git log -1 --oneline
 ```
 
-最後の行に `quit from the Guided screen` と出ていれば OK。
+最後の行に `stop the server when the Guided tab closes` と出ていれば OK。
 
 | # | 結果 |
 |---|------|
@@ -62,7 +62,21 @@ Dock に **Lumina Notes Guided** は出ません。これは不具合ではな�
 
 | # | 結果 |
 |---|------|
-| A2 | PASS / FAIL |
+| A2 | PASS（2026-08-30）画面の「終了」 |
+
+### A4 — タブを閉じたあと、もう一度開ける
+
+「終了」を押さずにタブやブラウザを閉じても、裏でサーバが残って次の起動が跳ね続ける、は不具合です。画面が無ければサーバも止まります。
+
+1. `.app` で **選ぶ** が開く  
+2. **終了は押さない**。ブラウザのタブを閉じる（またはブラウザを終了する）  
+3. 約10秒待つ  
+4. もう一度 **`LuminaNotesGuided.app`** を開く  
+5. **選ぶ** が開く。Dock で跳ね続けない。強制終了は不要  
+
+| # | 結果 |
+|---|------|
+| A4 | PASS / FAIL |
 
 ### A3 — 演算中だけスリープしない（任意）
 

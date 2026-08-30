@@ -15,6 +15,7 @@ from urllib.request import urlopen
 
 import uvicorn
 
+from guided_web.presence import reset as reset_presence
 from guided_web.shutdown import clear_shutdown
 from guided_web.sleep_guard import force_release
 
@@ -84,6 +85,7 @@ class GuidedLocalServer:
 
     def start(self, *, replace_existing: bool = True) -> None:
         clear_shutdown()
+        reset_presence()
         if replace_existing:
             stop_listeners(self.port)
         config = uvicorn.Config(
