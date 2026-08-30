@@ -1,44 +1,36 @@
-ObjC.import('Cocoa');
+// Stay-open applet. Dock に残る。画面はブラウザ。埋め込み描画はしない。
 
-// Dock に残る本体。ブラウザ部品は埋め込まない。画面はブラウザ。
-// 終了時に GUIDED_PY_PID のサーバを止める。
+ObjC.import('Foundation');
 
-function pythonPid() {
-  const raw = $.NSProcessInfo.processInfo.environment.objectForKey('GUIDED_PY_PID');
-  if (!raw) {
-    return 0;
-  }
-  const text = ObjC.unwrap(raw);
-  const pid = parseInt(text, 10);
-  return pid > 1 ? pid : 0;
+var gServer = null;
+
+function repoRoot() {
+  var bundlePath = ObjC.unwrap($.NSBundle.mainBundle.bundlePath);
+  return bundlePath.replace(/\/[^/]+\.app\/?$/, '');
 }
 
-function stopPython() {
-  const pid = pythonPid();
-  if (pid < 2) {
-    return;
-  }
-  const task = $.NSTask.alloc.init;
-  task.setLaunchPath('/bin/kill');
-  task.setArguments(['-TERM', String(pid)]);
-  task.launch;
-  task.waitUntilExit;
+function run() {
+  var root = repoRoot();
+  var script = root + '/scripts/run_guided_app.sh';
+  var task = $.NSTask.alloc.init;
+  task.setLaunchPath('/bin/bash');
+  task.setArguments($.NSArray.arrayWithArray([script, '--server-only']));
+  task.setCurrentDirectoryPath(root);
+  var env = $.NSMutableDictionary.dictionaryWithDictionary(
+    $.NSProcessInfo.processInfo.environment
+  );
+  env.setObjectForKey('1', 'GUIDED_SERVER_ONLY');
+  env.setObjectForKey(root, 'GUIDED_APP_ROOT');
+  env.removeObjectForKey('GUIDED_APP_LOGIN');
+  task.setEnvironment(env);
+  task.launch();
+  gServer = task;
 }
 
-const app = $.NSApplication.sharedApplication;
-app.setActivationPolicy($.NSApplicationActivationPolicyRegular);
-
-const rect = $.NSMakeRect(0, 0, 1, 1);
-const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
-  rect,
-  0,
-  $.NSBackingStoreBuffered,
-  false
-);
-win.setTitle('Lumina Notes Guided');
-win.setReleasedWhenClosed(false);
-win.orderOut(null);
-
-app.activateIgnoringOtherApps(true);
-app.run();
-stopPython();
+function quit() {
+  try {
+    if (gServer) {
+      gServer.terminate();
+    }
+  } catch (e) {}
+}
