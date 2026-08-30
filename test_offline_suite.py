@@ -2536,6 +2536,114 @@ def test_guided_futei_band_without_gps_uses_timezone_anchor():
     assert band in {"正午（九）", "午後（八）", "午前（四）"}
 
 
+def test_guided_solar_clock_tokyo_not_akashi():
+    """太陽時を日本時間と見なさない。東京の日出は明石より早い。"""
+    from datetime import date
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import solar_sun_times
+
+    tz = ZoneInfo("Asia/Tokyo")
+    day = date(2025, 11, 12)
+    tokyo = solar_sun_times(day, 35.6812, 139.7671, tz)
+    akashi = solar_sun_times(day, 34.65, 135.0, tz)
+    assert tokyo is not None and akashi is not None
+    delta_min = (akashi.sunrise - tokyo.sunrise).total_seconds() / 60
+    assert 12 <= delta_min <= 25, delta_min
+    assert tokyo.sunrise.hour == 6
+    assert 8 <= tokyo.sunrise.minute <= 20
+
+
+def test_guided_p02_dawn_is_east_blue_hour_not_night():
+    """P02: 2025-11-12 05:45 横浜／東京代表は夜ではなく夜明け＋東のブルーアワー。"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band, classify_light_hint
+    from scanner import TIME_ZONE_FACT_BANNED_STEMS
+
+    tz = ZoneInfo("Asia/Tokyo")
+    shot = datetime(2025, 11, 12, 5, 45, 22, tzinfo=tz)
+    for lat, lon in ((35.457, 139.632), (35.6812, 139.7671)):
+        band = classify_futei_band(shot, lat, lon, tz)
+        hint = classify_light_hint(shot, lat, lon, tz)
+        assert band == "夜明け（六）", band
+        assert "東寄り" in hint
+        assert "ブルーアワー" in hint
+        assert "西寄り" not in hint
+        for stem in TIME_ZONE_FACT_BANNED_STEMS:
+            assert stem not in hint, (stem, hint)
+
+
+def test_guided_light_hint_evening_is_west_not_east():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_light_hint
+    from scanner import TIME_ZONE_FACT_BANNED_STEMS
+
+    tz = ZoneInfo("Asia/Tokyo")
+    lat, lon = 35.6812, 139.7671
+    eve = datetime(2025, 11, 12, 16, 20, 0, tzinfo=tz)
+    hint = classify_light_hint(eve, lat, lon, tz)
+    assert "西寄り" in hint
+    assert "東寄り" not in hint
+    for stem in TIME_ZONE_FACT_BANNED_STEMS:
+        assert stem not in hint, (stem, hint)
+
+
+def test_guided_light_hint_deep_night_has_no_banned_stems():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from guided_futei_time import classify_futei_band, classify_light_hint
+    from scanner import TIME_ZONE_FACT_BANNED_STEMS
+
+    tz = ZoneInfo("Asia/Tokyo")
+    night = datetime(2026, 6, 21, 2, 0, 0, tzinfo=tz)
+    lat, lon = 35.68, 139.76
+    assert classify_futei_band(night, lat, lon, tz) == "夜"
+    hint = classify_light_hint(night, lat, lon, tz)
+    assert "地平線" in hint
+    for stem in TIME_ZONE_FACT_BANNED_STEMS:
+        assert stem not in hint, (stem, hint)
+
+
+def test_guided_prompts_use_light_hint_not_futei_label():
+    from guided_web.guided_privacy import (
+        GuidedCritiqueContext,
+        build_guided_phase1_prompt,
+        build_guided_phase2_prompt,
+    )
+
+    api_params = {
+        "image": {
+            "image_id": "p02",
+            "size": "7728x5152",
+            "shot_at": "2025-11-12T05:45:22+09:00",
+            "timezone": "Asia/Tokyo",
+            "region": "東京",
+            "time_band": "夕暮れ（六）",
+            "light_hint": "東寄りの低い自然光（ブルーアワー相当）",
+        },
+        "camera": {
+            "focal_length": "23mm",
+            "aperture": "f/5.6",
+            "shutter_speed": "1/34s",
+            "iso": "ISO 5000",
+            "mode": "絞り優先",
+            "exposure_compensation": "-1.7 EV",
+        },
+    }
+    ctx = GuidedCritiqueContext.from_api_params(api_params)
+    p1 = build_guided_phase1_prompt(ctx)
+    p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
+    for text in (p1, p2):
+        assert "東寄りの低い自然光（ブルーアワー相当）" in text
+        assert "夕暮れ" not in text
+        assert "時間帯:" not in text
+
+
 def test_guided_resolve_region_without_gps():
     from zoneinfo import ZoneInfo
 
@@ -2556,6 +2664,7 @@ def test_guided_api_parameters_shape():
             timezone="Asia/Tokyo",
             region="東京",
             time_band="正午（九）",
+            light_hint="南寄りの高い自然光",
         ),
         camera=GuidedCameraSettings(
             focal_length="50mm",
@@ -2570,6 +2679,7 @@ def test_guided_api_parameters_shape():
     assert d["image"]["image_id"] == "abc"
     assert d["camera"]["shutter_speed"] == "1/125s"
     assert "time_band" in d["image"]
+    assert d["image"]["light_hint"] == "南寄りの高い自然光"
 
 
 def test_guided_parameter_display_rows():
@@ -2842,6 +2952,7 @@ def test_guided_privacy_prompts_exclude_identifying_metadata():
             "timezone": "Asia/Tokyo",
             "region": "東京",
             "time_band": "正午（九）",
+            "light_hint": "南寄りの高い自然光",
         },
         "camera": {
             "focal_length": "50mm",
@@ -2856,7 +2967,11 @@ def test_guided_privacy_prompts_exclude_identifying_metadata():
     p1 = build_guided_phase1_prompt(ctx)
     p2 = build_guided_phase2_prompt(ctx, "■TITLE: テスト")
     assert "東京" in p1
-    assert "正午（九）" in p1
+    assert "南寄りの高い自然光" in p1
+    assert "光の手掛かり" in p1
+    assert "正午（九）" not in p1
+    assert "正午（九）" not in p2
+    assert "時間帯:" not in p1
     assert "静かな午後" in p2
     assert "抽象パラメータ" in p1
     assert_prompt_is_privacy_safe(p1)
@@ -4599,6 +4714,14 @@ def run_all():
     test_dry_run_session_rejects_record_post_h3()
     test_guided_futei_band_tokyo_summer_day()
     test_guided_futei_band_night()
+    test_guided_timezone_anchor_tokyo()
+    test_guided_futei_band_without_gps_uses_timezone_anchor()
+    test_guided_solar_clock_tokyo_not_akashi()
+    test_guided_p02_dawn_is_east_blue_hour_not_night()
+    test_guided_light_hint_evening_is_west_not_east()
+    test_guided_light_hint_deep_night_has_no_banned_stems()
+    test_guided_prompts_use_light_hint_not_futei_label()
+    test_guided_resolve_region_without_gps()
     test_guided_api_parameters_shape()
     test_guided_parameter_display_rows()
     test_guided_upload_returns_parameter_display()

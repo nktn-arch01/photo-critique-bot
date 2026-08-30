@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from guided_futei_time import FuteiBandLabel, classify_futei_band, timezone_anchor
+from guided_futei_time import FuteiBandLabel, classify_futei_band, classify_light_hint, timezone_anchor
 from scanner import ensure_heif_support, extract_file_metadata
 
 DEFAULT_TZ = ZoneInfo("Asia/Tokyo")
@@ -29,7 +29,8 @@ class GuidedImageInfo:
     shot_at: str  # ISO 8601
     timezone: str  # IANA または UTC オフセット
     region: str  # 都市レベル
-    time_band: FuteiBandLabel  # 不定時法インスパイア7段階 + 夜
+    time_band: FuteiBandLabel  # 不定時法インスパイア7段階 + 夜（画面用）
+    light_hint: str  # 太陽の方位・高度からの光の手掛かり（講評用。禁止語なし）
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,7 @@ def build_guided_api_parameters(
 
     region = resolve_city_region(lat, lon, merged, geocode=geocode, tz=tz)
     band = classify_futei_band(shot_dt, eff_lat, eff_lon, tz) if shot_dt else "不明"
+    hint = classify_light_hint(shot_dt, eff_lat, eff_lon, tz)
 
     shot_at_iso = shot_dt.isoformat() if shot_dt else "不明"
 
@@ -102,6 +104,7 @@ def build_guided_api_parameters(
             timezone=str(tz.key) if hasattr(tz, "key") else str(tz),
             region=region,
             time_band=band,
+            light_hint=hint,
         ),
         camera=GuidedCameraSettings(
             focal_length=_nz(merged.get("focal_length")),
