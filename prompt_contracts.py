@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Iterable
 
 from critique_parser import parse_critique_text
@@ -68,6 +69,14 @@ EVENING_REVERSAL_STEMS: tuple[str, ...] = (
 MORNING_REVERSAL_STEMS: tuple[str, ...] = (
     "朝日",
     "早朝",
+)
+
+# Guided が Phase1/Phase2 を差し戻すときの一文。既存 max_retries の中で使う。
+EAST_WEST_REWRITE_NOTE = (
+    "【再生成】直前の出力は光の方位の事実と食い違っています。"
+    "カード（TITLE / SUMMARY / CRITIQUE_SUMMARY）にも本文（【1】〜【7】）にも、"
+    "『夕暮れ』『夕方』『夕刻』『夕景』『夕映え』『朝日』『早朝』を書かない。"
+    "東の空／一日の前半の光を、西の空や一日の後半として書かない。"
 )
 
 # Phase1 プロンプト追加分（「夜の」など）
@@ -207,10 +216,24 @@ def infer_light_side(light_hint: str) -> str | None:
     return None
 
 
+def _text_for_east_west_check(critique: str) -> str:
+    """カード欄（TITLE/SUMMARY/CRITIQUE_SUMMARY）と本文を同じ契約で見る。"""
+    parsed = parse_critique_text(critique, lens=DEFAULT_LENS)
+    return "\n".join(
+        [
+            parsed.get("title") or "",
+            parsed.get("summary") or "",
+            parsed.get("point_text") or "",
+            parsed.get("body") or "",
+            critique or "",
+        ]
+    )
+
+
 def check_output_east_west_reversal(critique: str, light_hint: str) -> dict:
-    """東の事実なのに夕の語、西の事実なのに朝の語があれば FAIL（混在も逆転）。"""
+    """東の事実なのに夕の語、西の事実なのに朝の語があれば FAIL（カードも本文も、混在も逆転）。"""
     side = infer_light_side(light_hint)
-    text = _phase1_text_for_ban(critique)
+    text = _text_for_east_west_check(critique)
     if side is None:
         return {"pass": True, "side": None, "hits": [], "detail": "no east/west fact"}
     stems = EVENING_REVERSAL_STEMS if side == "east" else MORNING_REVERSAL_STEMS
@@ -227,6 +250,40 @@ def check_output_east_west_reversal(critique: str, light_hint: str) -> dict:
         "hits": hits,
         "excerpts": excerpts,
     }
+
+
+def neutralize_east_west_reversal(text: str, light_hint: str) -> str:
+    """方位事実と食い違う朝夕語を、方位を名乗らない『低い光』へ置き換える。"""
+    side = infer_light_side(light_hint)
+    if side is None or not text:
+        return text
+    stems = EVENING_REVERSAL_STEMS if side == "east" else MORNING_REVERSAL_STEMS
+    out = text
+    for stem in sorted(stems, key=len, reverse=True):
+        out = out.replace(stem, "低い光")
+    return out
+
+
+def east_west_phase_accept(light_hint: str) -> Callable[[str], bool] | None:
+    """方位事実があるときだけ受理関数を返す。南寄りの高い光などでは None。"""
+    if infer_light_side(light_hint) is None:
+        return None
+
+    def accept(text: str) -> bool:
+        return bool(check_output_east_west_reversal(text, light_hint)["pass"])
+
+    return accept
+
+
+def east_west_phase_repair(light_hint: str) -> Callable[[str], str] | None:
+    """再試行しても朝夕語が残るときの最後の安全網。API は増やさない。"""
+    if infer_light_side(light_hint) is None:
+        return None
+
+    def repair(text: str) -> str:
+        return neutralize_east_west_reversal(text, light_hint)
+
+    return repair
 
 
 def check_output_person_present(critique: str) -> dict:

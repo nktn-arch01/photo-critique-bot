@@ -9,7 +9,8 @@ python3 test_offline_suite.py
 python3 scripts/prompt_eval.py
 ```
 
-見本: `eval/prompt_eval/fixtures/`（東なのに夕暮れが混ざる文は FAIL）。
+見本: `eval/prompt_eval/fixtures/`（東なのにカードや【1】に夕暮れが混ざる文は FAIL）。
+生成時はプロンプト禁止だけでなく、同じ判定で Phase1 / Phase2 を既存の再試行回数まで差し戻す。
 
 ## 実 API（任意・最大3回）
 

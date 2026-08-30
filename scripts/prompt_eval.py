@@ -64,8 +64,12 @@ _P02_CTX = {
 def _offline_rows() -> list[dict]:
     east_pass = (FIXTURES / "east_pass_phase1.txt").read_text(encoding="utf-8")
     east_fail = (FIXTURES / "east_fail_mix_dusk.txt").read_text(encoding="utf-8")
+    card_fail = (FIXTURES / "east_fail_card_dusk.txt").read_text(encoding="utf-8")
+    body_fail = (FIXTURES / "east_fail_body_coexist.txt").read_text(encoding="utf-8")
     ok = check_output_east_west_reversal(east_pass, EAST_HINT)
     bad = check_output_east_west_reversal(east_fail, EAST_HINT)
+    card = check_output_east_west_reversal(card_fail, EAST_HINT)
+    body = check_output_east_west_reversal(body_fail, EAST_HINT)
     return [
         {
             "id": "fixture_east_pass",
@@ -85,6 +89,26 @@ def _offline_rows() -> list[dict]:
             "api_calls": 0,
             "cached": False,
             "detail": "mixed dusk must be detected as reversal",
+        },
+        {
+            "id": "fixture_east_fail_card_dusk_detected",
+            "variant": "fixture",
+            "pass": not card["pass"] and "夕暮れ" in (card.get("hits") or []),
+            "hits": card.get("hits", []),
+            "excerpts": card.get("excerpts", []),
+            "api_calls": 0,
+            "cached": False,
+            "detail": "SUMMARY 夕暮れ is a card reversal",
+        },
+        {
+            "id": "fixture_east_fail_body_coexist_detected",
+            "variant": "fixture",
+            "pass": not body["pass"] and "夕暮れ" in (body.get("hits") or []),
+            "hits": body.get("hits", []),
+            "excerpts": body.get("excerpts", []),
+            "api_calls": 0,
+            "cached": False,
+            "detail": "【1】 dusk + east fact coexistence is a reversal",
         },
     ]
 

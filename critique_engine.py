@@ -49,6 +49,9 @@ def _run_two_phase_generation(
     build_phase2_prompt_fn: Callable[[str], str] | None = None,
     system_role_override: str | None = None,
     phase1_temperature: float | None = None,
+    phase_accept: Callable[[str], bool] | None = None,
+    phase_retry_note: str | None = None,
+    phase_repair: Callable[[str], str] | None = None,
 ) -> str:
     lens_id = normalize_lens(lens)
     if build_phase1_prompt_fn:
@@ -64,6 +67,24 @@ def _run_two_phase_generation(
     phase1_temperature = 0.35 if phase1_temperature is None else phase1_temperature
     phase2_temperature = 0.7
 
+    def _prompt_for_attempt(base: str, attempt: int) -> str:
+        if attempt == 1 or not phase_retry_note:
+            return base
+        return f"{base}\n\n{phase_retry_note}"
+
+    def _accepts(content: str) -> bool:
+        if phase_accept is None:
+            return True
+        return bool(phase_accept(content))
+
+    def _repair_last(content: str, structure_ok: bool) -> str | None:
+        if phase_repair is None or not structure_ok:
+            return None
+        repaired = phase_repair(content)
+        if repaired != content and _accepts(repaired):
+            return repaired
+        return None
+
     phase1_output = ""
     if phase1_override and phase1_override.strip():
         parsed_override = parse_critique_text(phase1_override, lens=lens_id)
@@ -76,27 +97,43 @@ def _run_two_phase_generation(
                 content = complete_with_image(
                     provider,
                     image_path,
-                    prompt_phase1,
+                    _prompt_for_attempt(prompt_phase1, attempt),
                     model=model,
                     max_tokens=800,
                     temperature=phase1_temperature,
                     system_prompt=system_role,
                 )
                 parsed_check = parse_critique_text(content, lens=lens_id)
-                if parsed_check["has_valid_phase1"] and "申し訳ありません" not in content:
+                structure_ok = (
+                    parsed_check["has_valid_phase1"] and "申し訳ありません" not in content
+                )
+                accept_ok = _accepts(content)
+                if structure_ok and accept_ok:
                     phase1_output = content
                     break
 
                 print(
                     f"[Phase1 retry {attempt}/{max_retries}] provider={provider} "
-                    f"valid={parsed_check['has_valid_phase1']} preview={content[:200]!r}",
+                    f"valid={parsed_check['has_valid_phase1']} accept={accept_ok} "
+                    f"preview={content[:200]!r}",
                     flush=True,
                 )
 
                 if attempt < max_retries:
                     time.sleep(backoff_factor ** attempt)
                 else:
-                    raise ValueError("Phase 1 API出力に必須構造が含まれませんでした。")
+                    repaired = _repair_last(content, structure_ok)
+                    if repaired is not None:
+                        print(
+                            f"[Phase1 repair] provider={provider} "
+                            f"preview={repaired[:200]!r}",
+                            flush=True,
+                        )
+                        phase1_output = repaired
+                        break
+                    if not structure_ok:
+                        raise ValueError("Phase 1 API出力に必須構造が含まれませんでした。")
+                    raise ValueError("Phase 1 出力が光の方位の事実と食い違っています。")
             except Exception as e:
                 if is_quota_or_rate_limit_error(e):
                     raise
@@ -117,26 +154,39 @@ def _run_two_phase_generation(
             content = complete_with_image(
                 provider,
                 image_path,
-                prompt_phase2,
+                _prompt_for_attempt(prompt_phase2, attempt),
                 model=model,
                 max_tokens=2500,
                 temperature=phase2_temperature,
                 system_prompt=system_role,
             )
-            if is_valid_phase2_content(content):
+            structure_ok = is_valid_phase2_content(content)
+            accept_ok = _accepts(content)
+            if structure_ok and accept_ok:
                 phase2_output = content
                 break
 
             print(
                 f"[Phase2 retry {attempt}/{max_retries}] provider={provider} "
-                f"valid=False preview={content[:200]!r}",
+                f"valid={structure_ok} accept={accept_ok} preview={content[:200]!r}",
                 flush=True,
             )
 
             if attempt < max_retries:
                 time.sleep(backoff_factor ** attempt)
             else:
-                raise ValueError("Phase 2 API出力に本文構造が含まれませんでした。")
+                repaired = _repair_last(content, structure_ok)
+                if repaired is not None:
+                    print(
+                        f"[Phase2 repair] provider={provider} "
+                        f"preview={repaired[:200]!r}",
+                        flush=True,
+                    )
+                    phase2_output = repaired
+                    break
+                if not structure_ok:
+                    raise ValueError("Phase 2 API出力に本文構造が含まれませんでした。")
+                raise ValueError("Phase 2 出力が光の方位の事実と食い違っています。")
         except Exception as e:
             if is_quota_or_rate_limit_error(e):
                 raise
@@ -161,6 +211,9 @@ def generate_critique_with_prompts(
     phase1_override: str | None = None,
     system_role: str | None = None,
     phase1_temperature: float | None = None,
+    phase_accept: Callable[[str], bool] | None = None,
+    phase_retry_note: str | None = None,
+    phase_repair: Callable[[str], str] | None = None,
 ) -> str:
     """カスタムプロンプトビルダーで講評を生成（Guided Web 等）。"""
     return _run_two_phase_generation(
@@ -178,6 +231,9 @@ def generate_critique_with_prompts(
         build_phase2_prompt_fn=build_phase2,
         system_role_override=system_role,
         phase1_temperature=phase1_temperature,
+        phase_accept=phase_accept,
+        phase_retry_note=phase_retry_note,
+        phase_repair=phase_repair,
     )
 
 

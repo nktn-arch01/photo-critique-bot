@@ -18,6 +18,11 @@ from ai_vision import DEFAULT_OPENAI_MODEL
 from critique_lens import CritiqueLens, get_lens, normalize_lens
 from critique_prompts import PROMPT_MISSING, _scores_format_block, _scores_meaning_block, get_system_role, sanitize_str
 from guided_web.light_prompt_variants import DEFAULT_VARIANT, extra_phase1_rules, present_light_hint
+from prompt_contracts import (
+    EAST_WEST_REWRITE_NOTE,
+    east_west_phase_accept,
+    east_west_phase_repair,
+)
 
 _AUDIT_PATH = Path.home() / ".lumina_notes" / "guided_api_audit.jsonl"
 
@@ -286,6 +291,8 @@ def generate_guided_critique(
         user_note=user_note,
         phase="phase1" if mode == "compact" and not phase1_override else "full",
     )
+    accept = east_west_phase_accept(ctx.light_hint)
+    repair = east_west_phase_repair(ctx.light_hint)
     return generate_critique_with_prompts(
         image_path,
         mode=mode,
@@ -294,6 +301,9 @@ def generate_guided_critique(
         system_role=get_system_role(lens_id),
         build_phase1=lambda: build_guided_phase1_prompt(ctx, lens=lens_id),
         build_phase2=lambda phase1_text: build_guided_phase2_prompt(ctx, phase1_text, lens=lens_id),
+        phase_accept=accept,
+        phase_retry_note=EAST_WEST_REWRITE_NOTE if accept is not None else None,
+        phase_repair=repair,
     )
 
 
