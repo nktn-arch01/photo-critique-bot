@@ -21,12 +21,11 @@ AI への続きの依頼は、このチェックリストではなく **新し�
 cd ~/photo-critique-bot
 git fetch origin
 git checkout cursor/p2-2-web-concept-f193
-git pull origin cursor/p2-2-web-concept-f193
-pwd
-git branch --show-current
+git reset --hard origin/cursor/p2-2-web-concept-f193
+git log -1 --oneline
 ```
 
-最後の行が `cursor/p2-2-web-concept-f193` なら OK。
+最後の行に `relaunch as Mac .app` と出ていれば OK。
 
 | # | 結果 |
 |---|------|
@@ -101,15 +100,14 @@ Finder 上の `.app` が約 2KB なのは正常です（中身はリポジトリ
 cd ~/photo-critique-bot
 git fetch origin
 git checkout cursor/p2-2-web-concept-f193
-git pull origin cursor/p2-2-web-concept-f193
-pwd
-git branch --show-current
+git reset --hard origin/cursor/p2-2-web-concept-f193
+git log -1 --oneline
 ```
 
 **見てほしいこと**
 
 - エラーが出ない  
-- 最後の行が `cursor/p2-2-web-concept-f193`  
+- 最後の行にこの枝の最新コミットが出る  
 
 | # | 結果 |
 |---|------|
@@ -291,7 +289,7 @@ cd ~/photo-critique-bot && GUIDED_WEB_PORT=8766 bash scripts/run_guided_web.sh
 cd ~/photo-critique-bot
 git fetch origin
 git checkout cursor/p2-2-web-concept-f193
-git pull origin cursor/p2-2-web-concept-f193
+git reset --hard origin/cursor/p2-2-web-concept-f193
 bash scripts/run_guided_web.sh
 ```
 
